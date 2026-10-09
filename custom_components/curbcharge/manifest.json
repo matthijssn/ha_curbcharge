@@ -5,8 +5,8 @@
   "config_flow": true,
   "documentation": "https://docs.ndw.nu/data-uitwisseling/interface-beschrijvingen/dafne-api/",
   "integration_type": "service",
-  "issue_tracker": "https://github.com/matthijssn/ha_curbcharge/issues",
   "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/matthijssn/ha_curbcharge/issues",
   "requirements": [],
   "version": "0.1.0"
 }
