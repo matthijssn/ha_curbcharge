@@ -101,11 +101,18 @@ def setup_dynamic_station_entities(
                     if entity.entity_id is not None:
                         await platform.async_remove_entity(entity.entity_id)
 
-                identifiers = {
-                    station_device_identifier(coordinator.provider_id, station_id)
-                }
-                device = device_registry.async_get_device_by_identifier(
-                    next(iter(identifiers)), entry.entry_id
+                identifier = station_device_identifier(
+                    coordinator.provider_id, station_id
+                )
+                device = next(
+                    (
+                        candidate
+                        for candidate in dr.async_entries_for_config_entry(
+                            device_registry, entry.entry_id
+                        )
+                        if identifier in candidate.identifiers
+                    ),
+                    None,
                 )
                 if device is None:
                     known_station_ids.discard(station_id)

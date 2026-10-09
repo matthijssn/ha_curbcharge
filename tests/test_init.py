@@ -36,6 +36,13 @@ def _entry() -> MockConfigEntry:
     )
 
 
+def _has_device(device_registry, entry_id: str, identifier: tuple[str, str]) -> bool:
+    return any(
+        identifier in device.identifiers
+        for device in dr.async_entries_for_config_entry(device_registry, entry_id)
+    )
+
+
 @pytest.mark.asyncio
 async def test_setup_unload_and_reload_keep_stable_entities(
     hass, monkeypatch, sample_stations
@@ -87,21 +94,14 @@ async def test_new_stations_are_added_and_removed_after_three_successful_polls(
 
     await coordinator.async_refresh()
     await hass.async_block_till_done()
-    device = device_registry.async_get_device_by_identifier(identifier, entry.entry_id)
-    assert device is not None
+    assert _has_device(device_registry, entry.entry_id, identifier)
 
     await coordinator.async_refresh()
     await coordinator.async_refresh()
     await hass.async_block_till_done()
-    assert (
-        device_registry.async_get_device_by_identifier(identifier, entry.entry_id)
-        is not None
-    )
+    assert _has_device(device_registry, entry.entry_id, identifier)
 
     await coordinator.async_refresh()
     await hass.async_block_till_done()
 
-    assert (
-        device_registry.async_get_device_by_identifier(identifier, entry.entry_id)
-        is None
-    )
+    assert not _has_device(device_registry, entry.entry_id, identifier)
