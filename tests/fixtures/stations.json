@@ -1,0 +1,82 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "NL-TEST-001",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [5.0, 52.0]
+      },
+      "properties": {
+        "address": "Teststraat 1",
+        "last_updated": "2026-10-09T12:00:00Z",
+        "open": true,
+        "cpo_id": "TEST",
+        "operator_name": "Example Operator",
+        "availabilities": [
+          {
+            "available": 2,
+            "connector_format": "SOCKET",
+            "connector_type": "IEC_62196_T2",
+            "power_max": 22000.0,
+            "power_type": "AC3",
+            "total": 3,
+            "tariff_ids": ["tariff-eur-022"]
+          },
+          {
+            "available": 0,
+            "connector_format": "CABLE",
+            "connector_type": "CHADEMO",
+            "power_max": 50000.0,
+            "power_type": "DC",
+            "total": 1,
+            "tariff_ids": []
+          }
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "NL-TEST-002",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [5.001, 52.0]
+      },
+      "properties": {
+        "address": "Teststraat 2",
+        "last_updated": "2026-10-09T12:01:00Z",
+        "open": true,
+        "cpo_id": "TEST",
+        "operator_name": null,
+        "availabilities": [
+          {
+            "available": 0,
+            "connector_format": "SOCKET",
+            "connector_type": "IEC_62196_T2",
+            "power_max": 11000.0,
+            "power_type": "AC3",
+            "total": 2,
+            "tariff_ids": []
+          }
+        ]
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "NL-TEST-003",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [5.002, 52.0]
+      },
+      "properties": {
+        "address": "Teststraat 3",
+        "last_updated": "2026-10-09T12:02:00Z",
+        "open": false,
+        "cpo_id": "TEST",
+        "operator_name": "Example Operator",
+        "availabilities": null
+      }
+    }
+  ]
+}

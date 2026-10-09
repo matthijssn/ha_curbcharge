@@ -1,0 +1,111 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Set up CurbCharge",
+        "description": "Choose how CurbCharge finds your search location.",
+        "data": {
+          "location_source": "Location source"
+        }
+      },
+      "manual_location": {
+        "title": "Enter a search location",
+        "description": "Coordinates are stored only when you choose a manual location.",
+        "data": {
+          "latitude": "Latitude",
+          "longitude": "Longitude"
+        }
+      },
+      "station_options": {
+        "title": "Choose nearby stations",
+        "description": "CurbCharge checks provider connectivity before creating the entry.",
+        "data": {
+          "search_radius": "Search radius (m)",
+          "max_stations": "Maximum stations",
+          "provider": "Provider"
+        }
+      }
+    },
+    "error": {
+      "auth": "The provider rejected authentication.",
+      "cannot_connect": "Could not connect to the charging provider.",
+      "invalid_location": "Enter valid coordinates and a supported search area.",
+      "invalid_response": "The provider returned data in an unexpected format.",
+      "location_not_configured": "Home coordinates are not configured in Home Assistant.",
+      "rate_limited": "The provider is rate limiting requests. Try again later.",
+      "unsupported_provider": "The selected provider is not supported."
+    },
+    "abort": {
+      "already_configured": "This provider and search area are already configured.",
+      "location_not_configured": "The search location is not configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "CurbCharge options",
+        "data": {
+          "scan_interval": "Polling interval (minutes)",
+          "search_radius": "Search radius (m)",
+          "max_stations": "Maximum stations",
+          "provider": "Provider",
+          "include_unknown": "Include stations without availability data"
+        }
+      }
+    }
+  },
+  "selector": {
+    "location_source": {
+      "options": {
+        "home": "Home Assistant home coordinates",
+        "manual": "Manual latitude and longitude"
+      }
+    },
+    "provider": {
+      "options": {
+        "ndw_dot_nl": "NDW DOT-NL"
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "available": {
+        "name": "Available"
+      }
+    },
+    "sensor": {
+      "available_connectors": {
+        "name": "Available connectors"
+      },
+      "occupied_connectors": {
+        "name": "Occupied connectors"
+      },
+      "unavailable_connectors": {
+        "name": "Unavailable connectors"
+      },
+      "total_connectors": {
+        "name": "Total connectors"
+      },
+      "maximum_charging_power": {
+        "name": "Maximum charging power"
+      },
+      "price_per_kwh": {
+        "name": "Price per kWh"
+      },
+      "distance": {
+        "name": "Distance"
+      },
+      "status_summary": {
+        "name": "Status summary",
+        "state": {
+          "available": "Available",
+          "none_available": "None available",
+          "unknown": "Unknown"
+        }
+      },
+      "best_nearby_charger": {
+        "name": "Best nearby charger"
+      }
+    }
+  }
+}

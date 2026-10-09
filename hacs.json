@@ -1,0 +1,5 @@
+{
+  "homeassistant": "2024.12.0",
+  "name": "CurbCharge",
+  "render_readme": true
+}

@@ -1,0 +1,111 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "CurbCharge instellen",
+        "description": "Kies hoe CurbCharge de zoeklocatie bepaalt.",
+        "data": {
+          "location_source": "Locatiebron"
+        }
+      },
+      "manual_location": {
+        "title": "Zoeklocatie invoeren",
+        "description": "Coördinaten worden alleen opgeslagen als u een handmatige locatie kiest.",
+        "data": {
+          "latitude": "Breedtegraad",
+          "longitude": "Lengtegraad"
+        }
+      },
+      "station_options": {
+        "title": "Laadpunten in de buurt kiezen",
+        "description": "CurbCharge controleert de verbinding met de provider voordat de integratie wordt toegevoegd.",
+        "data": {
+          "search_radius": "Zoekradius (m)",
+          "max_stations": "Maximumaantal laadpunten",
+          "provider": "Provider"
+        }
+      }
+    },
+    "error": {
+      "auth": "De provider heeft de authenticatie geweigerd.",
+      "cannot_connect": "Kan geen verbinding maken met de laadprovider.",
+      "invalid_location": "Voer geldige coördinaten en een ondersteund zoekgebied in.",
+      "invalid_response": "De provider heeft gegevens in een onverwacht formaat geretourneerd.",
+      "location_not_configured": "De thuiscoördinaten zijn niet ingesteld in Home Assistant.",
+      "rate_limited": "De provider beperkt het aantal verzoeken. Probeer het later opnieuw.",
+      "unsupported_provider": "De geselecteerde provider wordt niet ondersteund."
+    },
+    "abort": {
+      "already_configured": "Deze provider en zoeklocatie zijn al ingesteld.",
+      "location_not_configured": "De zoeklocatie is niet ingesteld."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "CurbCharge-opties",
+        "data": {
+          "scan_interval": "Bijwerkinterval (minuten)",
+          "search_radius": "Zoekradius (m)",
+          "max_stations": "Maximumaantal laadpunten",
+          "provider": "Provider",
+          "include_unknown": "Laadpunten zonder beschikbaarheidsgegevens opnemen"
+        }
+      }
+    }
+  },
+  "selector": {
+    "location_source": {
+      "options": {
+        "home": "Thuiscoördinaten van Home Assistant",
+        "manual": "Breedte- en lengtegraad handmatig invoeren"
+      }
+    },
+    "provider": {
+      "options": {
+        "ndw_dot_nl": "NDW DOT-NL"
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "available": {
+        "name": "Beschikbaar"
+      }
+    },
+    "sensor": {
+      "available_connectors": {
+        "name": "Beschikbare connectoren"
+      },
+      "occupied_connectors": {
+        "name": "Bezettingsconnectoren"
+      },
+      "unavailable_connectors": {
+        "name": "Niet-beschikbare connectoren"
+      },
+      "total_connectors": {
+        "name": "Totaal aantal connectoren"
+      },
+      "maximum_charging_power": {
+        "name": "Maximaal laadvermogen"
+      },
+      "price_per_kwh": {
+        "name": "Prijs per kWh"
+      },
+      "distance": {
+        "name": "Afstand"
+      },
+      "status_summary": {
+        "name": "Statusoverzicht",
+        "state": {
+          "available": "Beschikbaar",
+          "none_available": "Geen beschikbaar",
+          "unknown": "Onbekend"
+        }
+      },
+      "best_nearby_charger": {
+        "name": "Beste laadpunt in de buurt"
+      }
+    }
+  }
+}
