@@ -118,6 +118,10 @@ pytest
 ruff check .
 ```
 
+## Support
+
+[Support CurbCharge on Ko-fi](https://ko-fi.com/matthijssn).
+
 [dotnl]: https://english.ndw.nu/dataportals/dot-nl
 [geojson-api]: https://docs.ndw.nu/data-uitwisseling/interface-beschrijvingen/dafne-api/dafne_api_consumer_pull/
 [tariffs]: https://opendata.ndw.nu/charging_point_tariffs_ocpi.json.gz
