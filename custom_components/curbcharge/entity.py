@@ -38,7 +38,7 @@ class CurbChargeStationEntity(CoordinatorEntity[CurbChargeCoordinator]):
             identifiers={
                 station_device_identifier(station.provider, station.provider_id)
             },
-            name=station.name,
+            name=f"{station.name} ({station.provider}:{station.provider_id})",
             manufacturer=station.operator,
             model=PROVIDER_NAME,
             serial_number=station.provider_id,
