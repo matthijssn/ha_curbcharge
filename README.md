@@ -118,6 +118,18 @@ pytest
 ruff check .
 ```
 
+## Preparing a release
+
+Home Assistant and HACS require a concrete version in `manifest.json`; do not
+replace it with a template placeholder. To prepare a release, run the
+**Release version** workflow from `main` and enter the intended GitHub tag,
+such as `v0.1.2`. The workflow validates the tag, updates the manifest on a
+`release/vX.Y.Z` branch, and provides a compare link for a pull request.
+
+Review and merge that PR before creating the GitHub release from the same tag
+on `main`. When the release is published, the workflow verifies that the tag
+matches the manifest version and points to a commit on `main`.
+
 ## Support
 
 [Support CurbCharge on Ko-fi](https://ko-fi.com/matthijssn).
