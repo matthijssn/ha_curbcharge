@@ -1,5 +1,7 @@
 """Tests for setup, unloading, and dynamically discovered stations."""
 
+from dataclasses import replace
+
 import pytest
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
 from homeassistant.helpers import device_registry as dr
@@ -105,3 +107,28 @@ async def test_new_stations_are_added_and_removed_after_three_successful_polls(
     await hass.async_block_till_done()
 
     assert not _has_device(device_registry, entry.entry_id, identifier)
+
+
+@pytest.mark.asyncio
+async def test_stations_with_the_same_address_get_unique_device_names(
+    hass, monkeypatch, sample_stations
+):
+    first, second = sample_stations[:2]
+    second = replace(second, name=first.name, address=first.address)
+    provider = FakeProvider([(first, second)])
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    entry = _entry()
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    devices = dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
+    names = [device.name for device in devices]
+
+    assert len(devices) == 2
+    assert len(set(names)) == 2
+    assert set(names) == {
+        f"{station.name} ({station.provider}:{station.provider_id})"
+        for station in (first, second)
+    }
