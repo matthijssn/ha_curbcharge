@@ -1,0 +1,187 @@
+name: Release version
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Stable release tag to prepare (for example, v0.1.2)
+        required: true
+        type: string
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Validate release tag
+        id: version
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          git fetch --tags --force origin
+          python3 - "$RELEASE_TAG" <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          tag = sys.argv[1]
+          match = re.fullmatch(
+              r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)",
+              tag,
+          )
+          if match is None:
+              raise SystemExit("Enter a stable SemVer tag such as v0.1.2")
+
+          target_version = tuple(map(int, match.groups()))
+          manifest_path = Path("custom_components/curbcharge/manifest.json")
+          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+          current_match = re.fullmatch(
+              r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)",
+              manifest["version"],
+          )
+          if current_match is None:
+              raise SystemExit("The manifest version is not stable SemVer")
+
+          existing_versions = [
+              tuple(map(int, match.groups()))
+              for existing_tag in subprocess.check_output(
+                  ["git", "tag", "--list"], text=True
+              ).splitlines()
+              if (
+                  match := re.fullmatch(
+                      r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)",
+                      existing_tag,
+                  )
+              )
+          ]
+          current_version = tuple(map(int, current_match.groups()))
+          latest_version = max([current_version, *existing_versions])
+          if target_version <= latest_version:
+              raise SystemExit(
+                  f"{tag} must be newer than the manifest and all existing release tags"
+              )
+
+          branch = f"release/{tag}"
+          existing_branch = subprocess.check_output(
+              [
+                  "git",
+                  "ls-remote",
+                  "--heads",
+                  "origin",
+                  f"refs/heads/{branch}",
+              ],
+              text=True,
+          )
+          if existing_branch.strip():
+              raise SystemExit(f"Branch {branch} already exists")
+
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
+              output.write(f"tag={tag}\n")
+              output.write(f"version={'.'.join(map(str, target_version))}\n")
+              output.write(f"branch={branch}\n")
+          PY
+
+      - name: Create manifest version branch
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          RELEASE_BRANCH: ${{ steps.version.outputs.branch }}
+        run: |
+          set -euo pipefail
+          git switch --create "$RELEASE_BRANCH"
+          python3 - "$RELEASE_VERSION" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          path = Path("custom_components/curbcharge/manifest.json")
+          manifest = json.loads(path.read_text(encoding="utf-8"))
+          manifest["version"] = sys.argv[1]
+          path.write_text(
+              json.dumps(manifest, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add custom_components/curbcharge/manifest.json
+          git commit -m "chore: prepare release $RELEASE_TAG"
+          git push --set-upstream origin "$RELEASE_BRANCH"
+          compare_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/compare/main...${RELEASE_BRANCH}?expand=1"
+          {
+            echo "## Release manifest prepared"
+            echo
+            echo "- Requested tag: \`$RELEASE_TAG\`"
+            echo "- Manifest version: \`$RELEASE_VERSION\`"
+            echo
+            echo "Review and merge the release PR: [$compare_url]($compare_url)"
+            echo "After merging, create the GitHub release using tag \`$RELEASE_TAG\` from \`main\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  verify_published:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.event.release.tag_name }}
+          fetch-depth: 0
+
+      - name: Verify tag matches manifest and main
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+
+          tag = os.environ["RELEASE_TAG"]
+          match = re.fullmatch(
+              r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)",
+              tag,
+          )
+          if match is None:
+              raise SystemExit(f"Published tag {tag!r} is not stable SemVer")
+
+          expected_version = ".".join(match.groups())
+          manifest = json.loads(
+              Path("custom_components/curbcharge/manifest.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          if manifest["version"] != expected_version:
+              raise SystemExit(
+                  f"Tag {tag} does not match manifest version {manifest['version']}"
+              )
+
+          subprocess.run(
+              ["git", "fetch", "origin", "main"],
+              check=True,
+          )
+          subprocess.run(
+              ["git", "merge-base", "--is-ancestor", "HEAD", "FETCH_HEAD"],
+              check=True,
+          )
+          print(f"Verified {tag}, manifest {expected_version}, and main ancestry.")
+          PY
