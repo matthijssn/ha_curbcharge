@@ -244,6 +244,9 @@ class StatusSummarySensor(CurbChargeStationEntity, SensorEntity):
             ),
             "is_open": station.is_open,
             "availability_reported": station.availability_reported,
+            "evse_status": (
+                station.evse_status.value if station.evse_status is not None else None
+            ),
         }
 
 

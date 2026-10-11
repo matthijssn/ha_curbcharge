@@ -63,6 +63,12 @@ async def async_get_config_entry_diagnostics(
                     else None
                 ),
                 "availability_reported": station.availability_reported,
+                "connector_count_reported": station.connector_count_reported,
+                "evse_status": (
+                    station.evse_status.value
+                    if station.evse_status is not None
+                    else None
+                ),
                 "available_connectors": station.available_connectors,
                 "unavailable_connectors": station.unavailable_connectors,
                 "occupied_connectors": station.occupied_connectors,
