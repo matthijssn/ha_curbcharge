@@ -15,9 +15,11 @@ from typing import TypedDict, cast
 from urllib.parse import quote
 
 import aiohttp
+from homeassistant.core import HomeAssistant
 
 from .const import (
     COUNTRY_BE,
+    DOMAIN,
     MAX_SEARCH_RADIUS_M,
     MIN_SEARCH_RADIUS_M,
     PROVIDER_ECO_MOVEMENT_BE,
@@ -48,6 +50,7 @@ _LOCATION_CACHE_SECONDS = 23 * 60 * 60
 _IP_REQUEST_INTERVAL = 10
 _LOCATION_REQUEST_INTERVAL = 120
 _EVSE_STATUS_INTERVAL = 30
+_REQUEST_LIMITER_DATA_KEY = "belgium_request_limiter"
 
 
 class BelgiumDatexDocument(TypedDict, total=False):
@@ -96,6 +99,18 @@ class BelgiumRequestLimiter:
                 self._last_locations[token_key] = requested_at
             else:
                 self._last_evse_status[(token_key, evse_id)] = requested_at
+
+
+def _shared_request_limiter(hass: HomeAssistant) -> BelgiumRequestLimiter:
+    """Return the one request limiter shared by Belgium clients in this HA instance."""
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    limiter = domain_data.get(_REQUEST_LIMITER_DATA_KEY)
+    if limiter is None:
+        limiter = BelgiumRequestLimiter()
+        domain_data[_REQUEST_LIMITER_DATA_KEY] = limiter
+    if not isinstance(limiter, BelgiumRequestLimiter):
+        raise RuntimeError("CurbCharge Belgium request limiter has an invalid type")
+    return limiter
 
 
 class BelgiumDatexClient:
@@ -284,6 +299,16 @@ class BelgiumChargingProvider(BaseChargingProvider):
                 )
             )
         return tuple(updated)
+
+
+def create_belgium_provider(
+    hass: HomeAssistant,
+    session: aiohttp.ClientSession,
+    token: str,
+) -> BelgiumChargingProvider:
+    """Create a provider using the limiter shared by this Home Assistant instance."""
+    client = BelgiumDatexClient(session, token, _shared_request_limiter(hass))
+    return BelgiumChargingProvider(client)
 
 
 def _parse_static_stations(
