@@ -1,6 +1,9 @@
 """Provider interface and errors."""
 
+import math
 from abc import ABC, abstractmethod
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 
 from .models import ChargingStation
 
@@ -38,8 +41,39 @@ class UnsupportedLocationError(ChargingProviderError):
     """The provider cannot represent the requested search area."""
 
 
+def retry_after_seconds(value: str | None) -> int | None:
+    """Parse an HTTP Retry-After delta or date into non-negative seconds."""
+    if value is None:
+        return None
+    try:
+        return max(0, int(value))
+    except ValueError:
+        try:
+            retry_at = parsedate_to_datetime(value)
+        except (TypeError, ValueError):
+            return None
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=UTC)
+        return max(0, math.ceil((retry_at - datetime.now(UTC)).total_seconds()))
+
+
 class BaseChargingProvider(ABC):
     """Interface implemented by each upstream charging-data provider."""
+
+    @property
+    @abstractmethod
+    def provider_name(self) -> str:
+        """Return the display name of the provider."""
+
+    @property
+    @abstractmethod
+    def provider_id(self) -> str:
+        """Return the stable provider identifier used in entity identities."""
+
+    @property
+    @abstractmethod
+    def country_code(self) -> str:
+        """Return the provider's ISO 3166-1 alpha-2 country code."""
 
     @abstractmethod
     async def async_get_stations(

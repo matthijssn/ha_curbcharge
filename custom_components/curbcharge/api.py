@@ -11,13 +11,13 @@ import zlib
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from email.utils import parsedate_to_datetime
 from typing import Literal, TypedDict, cast
 from urllib.parse import urljoin, urlsplit
 
 import aiohttp
 
 from .const import (
+    COUNTRY_NL,
     GEOJSON_REQUEST_TIMEOUT,
     MAX_BBOX_AREA_DEG2,
     PROVIDER_API_URL,
@@ -27,7 +27,14 @@ from .const import (
     TARIFF_FEED_URL,
     TARIFF_REQUEST_TIMEOUT,
 )
-from .models import ChargingConnector, ChargingStation, ChargingTariff, ConnectorStatus
+from .geography import distance_m
+from .models import (
+    ChargingConnector,
+    ChargingLocation,
+    ChargingStation,
+    ChargingTariff,
+    ConnectorStatus,
+)
 from .provider import (
     AuthenticationError,
     BaseChargingProvider,
@@ -36,6 +43,7 @@ from .provider import (
     ProviderRateLimitError,
     UnsupportedLocationError,
     UnsupportedProviderError,
+    retry_after_seconds,
 )
 
 _EARTH_RADIUS_M = 6_371_000
@@ -96,6 +104,21 @@ class NdwDotNlProvider(BaseChargingProvider):
         self._tariff_cache: dict[str, ChargingTariff | None] = {}
         self._cached_tariff_ids: set[str] = set()
         self._tariff_cache_updated: datetime | None = None
+
+    @property
+    def provider_name(self) -> str:
+        """Return the display name of the provider."""
+        return PROVIDER_NAME
+
+    @property
+    def provider_id(self) -> str:
+        """Return the stable NDW DOT-NL provider identifier."""
+        return PROVIDER_NDW_DOT_NL
+
+    @property
+    def country_code(self) -> str:
+        """Return the country served by NDW DOT-NL."""
+        return COUNTRY_NL
 
     async def async_validate_connection(
         self, latitude: float, longitude: float, radius_m: int
@@ -288,7 +311,7 @@ class NdwDotNlProvider(BaseChargingProvider):
                 if response.status == 429:
                     raise ProviderRateLimitError(
                         "NDW DOT-NL rate limit reached",
-                        _retry_after_seconds(response.headers.get("Retry-After")),
+                        retry_after_seconds(response.headers.get("Retry-After")),
                     )
                 if response.status < 200 or response.status >= 300:
                     raise ProviderConnectionError(
@@ -385,22 +408,36 @@ def _station_from_feature(
             "NDW DOT-NL returned invalid connector availability"
         )
 
-    return ChargingStation(
+    location = ChargingLocation(
         provider_id=station_id,
         provider=PROVIDER_NDW_DOT_NL,
+        provider_name=PROVIDER_NAME,
+        country_code=COUNTRY_NL,
         name=address or station_id,
         latitude=station_latitude,
         longitude=station_longitude,
         address=address,
         operator=operator,
-        distance_m=_distance_m(
-            latitude, longitude, station_latitude, station_longitude
-        ),
+        last_updated=last_updated,
+    )
+    return ChargingStation(
+        provider_id=station_id,
+        provider=PROVIDER_NDW_DOT_NL,
+        name=location.name,
+        latitude=station_latitude,
+        longitude=station_longitude,
+        address=address,
+        operator=operator,
+        distance_m=distance_m(latitude, longitude, station_latitude, station_longitude),
         connectors=connectors,
         tariff=None,
         last_updated=last_updated,
         availability_reported=availability_reported,
         is_open=is_open,
+        country_code=COUNTRY_NL,
+        location=location,
+        provider_name=PROVIDER_NAME,
+        connector_count_reported=availability_reported,
     )
 
 
@@ -737,20 +774,6 @@ def _bounding_box(latitude: float, longitude: float, radius_m: int) -> str:
     )
 
 
-def _distance_m(
-    latitude: float, longitude: float, other_latitude: float, other_longitude: float
-) -> int:
-    """Calculate distance using the haversine formula."""
-    lat1, lat2 = math.radians(latitude), math.radians(other_latitude)
-    delta_lat = lat2 - lat1
-    delta_lon = math.radians(other_longitude - longitude)
-    haversine = (
-        math.sin(delta_lat / 2) ** 2
-        + math.cos(lat1) * math.cos(lat2) * math.sin(delta_lon / 2) ** 2
-    )
-    return round(2 * _EARTH_RADIUS_M * math.asin(math.sqrt(haversine)))
-
-
 def _parse_datetime(value: object) -> datetime:
     if not isinstance(value, str):
         raise InvalidProviderResponseError("NDW DOT-NL returned an invalid timestamp")
@@ -810,21 +833,6 @@ def _string_mapping(value: object, field: str) -> dict[str, object]:
             raise InvalidProviderResponseError(f"NDW DOT-NL returned invalid {field}")
         result[key] = item
     return result
-
-
-def _retry_after_seconds(value: str | None) -> int | None:
-    if value is None:
-        return None
-    try:
-        return max(0, int(value))
-    except ValueError:
-        try:
-            retry_at = parsedate_to_datetime(value)
-        except (TypeError, ValueError):
-            return None
-        if retry_at.tzinfo is None:
-            retry_at = retry_at.replace(tzinfo=UTC)
-        return max(0, math.ceil((retry_at - datetime.now(UTC)).total_seconds()))
 
 
 def _next_page_url(link_header: str | None, current_url: str) -> str | None:

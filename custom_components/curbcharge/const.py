@@ -18,7 +18,11 @@ LOCATION_HOME = "home"
 LOCATION_MANUAL = "manual"
 
 PROVIDER_NDW_DOT_NL = "ndw_dot_nl"
+COUNTRY_NL = "NL"
 PROVIDER_NAME = "NDW DOT-NL"
+PROVIDER_ECO_MOVEMENT_BE = "eco_movement_be"
+PROVIDER_ECO_MOVEMENT_BE_NAME = "Eco-Movement Belgium"
+COUNTRY_BE = "BE"
 PROVIDER_API_URL = (
     "https://dotnl.ndw.nu/api/rest/geojson/dynamic-road-status/"
     "charge-point-data/v1/features"

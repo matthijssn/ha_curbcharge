@@ -43,6 +43,23 @@ normalizes values above 1000 as watts; values at or below 1000 are treated as
 kW. This follows the observed feed while accommodating the published unit
 description.
 
+### Belgium DATEX II (development only)
+
+The Belgium adapter targets Eco-Movement's [DATEX II API][belgium-datex-api],
+but Belgium is not selectable in the current config flow and is not yet
+supported for user setup. The API publishes a daily static location snapshot
+and separate status requests for each EVSE. Its documented limits are one
+request per 10 seconds per source IP, 30 location requests per hour per token,
+and two status requests per minute per EVSE per token. The provider uses a
+shared Home Assistant request limiter; a refresh can therefore take several
+minutes when many EVSEs need status updates.
+
+Belgian access approval, licensing terms, quotas, and live payload compatibility
+have not been verified. Treat them as release blockers; do not enable Belgium
+for users until they are confirmed. When status is missing, rate-limited, or
+unavailable, CurbCharge keeps availability unknown rather than inferring it.
+See the [Transportdata.be dataset][belgium-dataset].
+
 ## Installation
 
 ### HACS custom repository
@@ -184,6 +201,10 @@ configuration directory and restart Home Assistant.
 
 ## Development
 
+The protected `main` branch requires the `test` and `hassfest` check contexts.
+The Hassfest workflow uses its own job context so it can block merges
+independently of HACS validation.
+
 Install the test tools and run:
 
 ```bash
@@ -213,3 +234,5 @@ matches the manifest version and points to a commit on `main`.
 [dotnl]: https://english.ndw.nu/dataportals/dot-nl
 [geojson-api]: https://docs.ndw.nu/data-uitwisseling/interface-beschrijvingen/dafne-api/dafne_api_consumer_pull/
 [tariffs]: https://opendata.ndw.nu/charging_point_tariffs_ocpi.json.gz
+[belgium-datex-api]: https://developers.eco-movement.com/docs/belgium-datex-ii-api
+[belgium-dataset]: https://transportdata.be/en/dataset/public-charging-infrastructure-static-dataset-selected-cpos-datex-ii

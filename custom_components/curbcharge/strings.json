@@ -1,8 +1,5 @@
 {
   "config": {
-    "initiate_flow": {
-      "reconfigure": "Change search location"
-    },
     "step": {
       "user": {
         "title": "Set up CurbCharge",

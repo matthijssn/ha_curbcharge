@@ -36,6 +36,10 @@ async def test_coordinator_updates_and_adds_new_stations(hass, sample_stations):
     )
     coordinator = _coordinator(hass, provider)
 
+    assert coordinator.provider_id == "ndw_dot_nl"
+    assert coordinator.provider_name == "NDW DOT-NL"
+    assert coordinator.country_code == "NL"
+
     await coordinator.async_refresh()
     assert set(coordinator.data) == {sample_stations[0].provider_id}
 

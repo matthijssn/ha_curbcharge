@@ -29,6 +29,7 @@ from custom_components.curbcharge.provider import (
     ProviderRateLimitError,
     UnsupportedLocationError,
     UnsupportedProviderError,
+    retry_after_seconds,
 )
 
 
@@ -101,6 +102,9 @@ async def test_get_stations_filters_by_radius_and_limit(sample_geojson):
     assert stations[0].max_power_kw == 50
     assert stations[0].connectors[0].status is ConnectorStatus.UNKNOWN
     assert stations[0].tariff is None
+    assert stations[0].country_code == "NL"
+    assert stations[0].location is not None
+    assert stations[0].location.provider_id == stations[0].provider_id
     assert len(session.requests) == 1
 
 
@@ -110,6 +114,13 @@ async def test_valid_empty_response_is_empty(sample_geojson):
     provider = NdwDotNlProvider(session)
 
     assert await provider.async_get_stations(52.0, 5.0, 500, 10) == ()
+
+
+def test_ndw_provider_exposes_stable_country_identity():
+    provider = NdwDotNlProvider(FakeSession([]))
+
+    assert provider.provider_id == "ndw_dot_nl"
+    assert provider.country_code == "NL"
 
 
 @pytest.mark.asyncio
@@ -484,7 +495,7 @@ def test_bounding_box_rejects_out_of_bounds_searches():
     ],
 )
 def test_retry_after_accepts_delta_seconds_or_http_dates(value, expected):
-    assert api._retry_after_seconds(value) == expected
+    assert retry_after_seconds(value) == expected
 
 
 def test_pagination_links_must_remain_on_the_provider_endpoint():

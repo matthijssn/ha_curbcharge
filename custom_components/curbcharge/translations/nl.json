@@ -1,8 +1,5 @@
 {
   "config": {
-    "initiate_flow": {
-      "reconfigure": "Zoeklocatie wijzigen"
-    },
     "step": {
       "user": {
         "title": "CurbCharge instellen",

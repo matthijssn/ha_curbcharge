@@ -16,6 +16,20 @@ class ConnectorStatus(StrEnum):
     UNKNOWN = "UNKNOWN"
 
 
+class EVSEStatus(StrEnum):
+    """Known operating states for an EVSE, distinct from connector states."""
+
+    AVAILABLE = "AVAILABLE"
+    BLOCKED = "BLOCKED"
+    CHARGING = "CHARGING"
+    INOPERATIVE = "INOPERATIVE"
+    OUT_OF_ORDER = "OUT_OF_ORDER"
+    PLANNED = "PLANNED"
+    REMOVED = "REMOVED"
+    RESERVED = "RESERVED"
+    UNKNOWN = "UNKNOWN"
+
+
 @dataclass(frozen=True, slots=True)
 class ChargingConnector:
     """A connector or provider-reported group of equivalent connectors."""
@@ -45,8 +59,24 @@ class ChargingTariff:
 
 
 @dataclass(frozen=True, slots=True)
+class ChargingLocation:
+    """A provider-identified physical charging site."""
+
+    provider_id: str
+    provider: str
+    provider_name: str
+    country_code: str
+    name: str
+    latitude: float
+    longitude: float
+    address: str | None
+    operator: str | None
+    last_updated: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
 class ChargingStation:
-    """A charging point and the information currently reported for it."""
+    """A charging unit with country-neutral location and connector data."""
 
     provider_id: str
     name: str
@@ -62,11 +92,17 @@ class ChargingStation:
     availability_reported: bool = True
     is_open: bool | None = None
     is_stale: bool = False
+    country_code: str = "NL"
+    location: ChargingLocation | None = None
+    provider_name: str = "NDW DOT-NL"
+    evse_id: str | None = None
+    evse_status: EVSEStatus | None = None
+    connector_count_reported: bool = True
 
     @property
     def available_connectors(self) -> int | None:
         """Return the exact available count, or None when not reported."""
-        if not self.availability_reported:
+        if not self.availability_reported or not self.connector_count_reported:
             return None
         total = 0
         for connector in self.connectors:
@@ -81,7 +117,7 @@ class ChargingStation:
     @property
     def total_connectors(self) -> int | None:
         """Return the exact total count, or None when not reported."""
-        if not self.availability_reported:
+        if not self.connector_count_reported:
             return None
         return sum(connector.count for connector in self.connectors)
 
@@ -90,6 +126,11 @@ class ChargingStation:
         """Report whether availability is known to be positive."""
         if not self.availability_reported:
             return None
+        if self.evse_status is not None:
+            if self.evse_status is not EVSEStatus.UNKNOWN:
+                return self.evse_status is EVSEStatus.AVAILABLE
+            if not self.connector_count_reported:
+                return None
         if any(
             connector.available_count is not None
             and connector.available_count > 0
@@ -158,7 +199,7 @@ class ChargingStation:
     @property
     def unknown_connectors(self) -> int | None:
         """Count connector states the provider did not distinguish."""
-        if not self.availability_reported:
+        if not self.availability_reported or not self.connector_count_reported:
             return None
         return sum(
             connector.count

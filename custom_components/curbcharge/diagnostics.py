@@ -12,7 +12,6 @@ from .const import (
     CONF_LOCATION_SOURCE,
     CONF_PROVIDER,
     CONF_SEARCH_RADIUS,
-    PROVIDER_NAME,
 )
 from .coordinator import CurbChargeCoordinator
 
@@ -30,8 +29,12 @@ async def async_get_config_entry_diagnostics(
     return {
         "entry_data": async_redact_data(entry.data, TO_REDACT),
         "options": async_redact_data(entry.options, TO_REDACT),
-        "provider": PROVIDER_NAME,
-        "provider_id": entry.options.get(CONF_PROVIDER, entry.data.get(CONF_PROVIDER)),
+        "provider": coordinator.provider_name,
+        "provider_id": coordinator.provider_id,
+        "country_code": coordinator.country_code,
+        "configured_provider": entry.options.get(
+            CONF_PROVIDER, entry.data.get(CONF_PROVIDER)
+        ),
         "location_source": entry.data.get(CONF_LOCATION_SOURCE),
         "radius_m": entry.options.get(
             CONF_SEARCH_RADIUS, entry.data.get(CONF_SEARCH_RADIUS)
@@ -50,6 +53,9 @@ async def async_get_config_entry_diagnostics(
         "stations": [
             {
                 "provider_station_id": station.provider_id,
+                "provider": station.provider,
+                "provider_name": station.provider_name,
+                "country_code": station.country_code,
                 "operator": station.operator,
                 "distance_m_rounded": (
                     round(station.distance_m / 1000) * 1000
@@ -57,6 +63,12 @@ async def async_get_config_entry_diagnostics(
                     else None
                 ),
                 "availability_reported": station.availability_reported,
+                "connector_count_reported": station.connector_count_reported,
+                "evse_status": (
+                    station.evse_status.value
+                    if station.evse_status is not None
+                    else None
+                ),
                 "available_connectors": station.available_connectors,
                 "unavailable_connectors": station.unavailable_connectors,
                 "occupied_connectors": station.occupied_connectors,

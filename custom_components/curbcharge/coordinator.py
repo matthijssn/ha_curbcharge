@@ -16,11 +16,7 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
-from .const import (
-    DOMAIN,
-    MISSING_STATION_REFRESHES,
-    PROVIDER_NDW_DOT_NL,
-)
+from .const import DOMAIN, MISSING_STATION_REFRESHES
 from .models import ChargingStation
 from .provider import (
     AuthenticationError,
@@ -49,7 +45,9 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
     ) -> None:
         """Initialize the shared coordinator."""
         self.provider = provider
-        self.provider_id = PROVIDER_NDW_DOT_NL
+        self.provider_id = provider.provider_id
+        self.provider_name = provider.provider_name
+        self.country_code = provider.country_code
         self.latitude = latitude
         self.longitude = longitude
         self.radius_m = radius_m
