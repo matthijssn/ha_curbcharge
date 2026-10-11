@@ -105,6 +105,11 @@ class NdwDotNlProvider(BaseChargingProvider):
         self._tariff_cache_updated: datetime | None = None
 
     @property
+    def provider_name(self) -> str:
+        """Return the display name of the provider."""
+        return PROVIDER_NAME
+
+    @property
     def provider_id(self) -> str:
         """Return the stable NDW DOT-NL provider identifier."""
         return PROVIDER_NDW_DOT_NL
@@ -405,6 +410,7 @@ def _station_from_feature(
     location = ChargingLocation(
         provider_id=station_id,
         provider=PROVIDER_NDW_DOT_NL,
+        provider_name=PROVIDER_NAME,
         country_code=COUNTRY_NL,
         name=address or station_id,
         latitude=station_latitude,
@@ -431,6 +437,7 @@ def _station_from_feature(
         is_open=is_open,
         country_code=COUNTRY_NL,
         location=location,
+        provider_name=PROVIDER_NAME,
     )
 
 

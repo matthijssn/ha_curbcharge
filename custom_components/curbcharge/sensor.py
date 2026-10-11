@@ -236,6 +236,7 @@ class StatusSummarySensor(CurbChargeStationEntity, SensorEntity):
             "latitude": station.latitude,
             "longitude": station.longitude,
             "provider": station.provider,
+            "country_code": station.country_code,
             "provider_station_id": station.provider_id,
             "last_updated": _isoformat(station.last_updated),
             "last_successful_update": _isoformat(
@@ -276,6 +277,8 @@ class BestNearbyChargerSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEn
         tariff = station.tariff
         return {
             "station_id": station.provider_id,
+            "provider": station.provider,
+            "country_code": station.country_code,
             "distance_m": station.distance_m,
             "available_connectors": station.available_connectors,
             "max_power_kw": station.max_power_kw,

@@ -56,6 +56,8 @@ async def test_diagnostics_redact_coordinates_and_addresses(hass, sample_station
     assert "5.654321" not in serialized
     assert "Teststraat 1" not in serialized
     assert diagnostics["provider"] == "NDW DOT-NL"
+    assert diagnostics["provider_id"] == "ndw_dot_nl"
+    assert diagnostics["country_code"] == "NL"
     assert diagnostics["discovered_stations"] == 1
     assert diagnostics["stations"][0]["available_connectors"] == 2
     assert diagnostics["stations"][0]["distance_m_rounded"] == 0
