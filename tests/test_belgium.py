@@ -687,6 +687,31 @@ def test_belgium_evse_status_parser_handles_missing_and_unmatched_records():
                             "energyInfrastructureSiteStatus": [
                                 {
                                     "energyInfrastructureStationStatus": [
+                                        {
+                                            "refillPointStatus": [
+                                                {
+                                                    "aegiElectricChargingPointStatus": {
+                                                        "reference": None
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "messageContainer": {
+                "payload": [
+                    {
+                        "aegiEnergyInfrastructureStatusPublication": {
+                            "energyInfrastructureSiteStatus": [
+                                {
+                                    "energyInfrastructureStationStatus": [
                                         {"refillPointStatus": [{}]}
                                     ]
                                 }
@@ -733,6 +758,35 @@ def test_belgium_evse_status_parser_handles_missing_and_unmatched_records():
 async def test_belgium_price_and_optional_field_helpers_preserve_unknowns():
     assert belgium._ad_hoc_tariff({}, "Belgium") is None
     assert belgium._ad_hoc_tariff({"energyRateUpdate": []}, "Belgium") is None
+    assert (
+        belgium._ad_hoc_tariff(
+            {
+                "energyRateUpdate": [
+                    {
+                        "applicableCurrency": ["EURO"],
+                        "energyPrice": [{"priceType": "pricePerKWh", "value": 0.3}],
+                    },
+                    {"applicableCurrency": ["EUR"]},
+                    {
+                        "applicableCurrency": ["EUR"],
+                        "energyPrice": [{"priceType": "pricePerHour", "value": 2}],
+                    },
+                    {
+                        "applicableCurrency": ["EUR"],
+                        "energyPrice": [
+                            {
+                                "priceType": "pricePerKWh",
+                                "value": 0.3,
+                                "overallPeriod": {},
+                            }
+                        ],
+                    },
+                ]
+            },
+            "Belgium",
+        )
+        is None
+    )
     assert belgium._static_ad_hoc_tariff({}, "Belgium") is None
     assert belgium._static_ad_hoc_tariff({"electricEnergy": [{}]}, "Belgium") is None
     assert (
@@ -746,12 +800,79 @@ async def test_belgium_price_and_optional_field_helpers_preserve_unknowns():
         )
         is None
     )
+    assert (
+        belgium._static_ad_hoc_tariff(
+            {
+                "electricEnergy": [
+                    {
+                        "energyRate": [
+                            {
+                                "ratePolicy": "adHoc",
+                                "applicableCurrency": ["EUR", "USD"],
+                                "energyPrice": [
+                                    {"priceType": "pricePerKWh", "value": 1}
+                                ],
+                            },
+                            {
+                                "ratePolicy": "adHoc",
+                                "applicableCurrency": ["EU"],
+                                "energyPrice": [
+                                    {"priceType": "pricePerKWh", "value": 1}
+                                ],
+                            },
+                            {
+                                "ratePolicy": "adHoc",
+                                "applicableCurrency": ["EUR"],
+                            },
+                            {
+                                "ratePolicy": "adHoc",
+                                "applicableCurrency": ["EUR"],
+                                "energyPrice": [
+                                    {"priceType": "pricePerHour", "value": 2}
+                                ],
+                            },
+                            {
+                                "ratePolicy": "adHoc",
+                                "applicableCurrency": ["EUR"],
+                                "energyPrice": [
+                                    {
+                                        "priceType": "pricePerKWh",
+                                        "value": 0.3,
+                                        "overallPeriod": {},
+                                    }
+                                ],
+                            },
+                        ]
+                    }
+                ]
+            },
+            "Belgium",
+        )
+        is None
+    )
     assert belgium._optional_date(None, "EVSE") is None
+    assert belgium._optional_datex_string(None, "identifier") is None
     assert belgium._location_coordinates(None, "site") is None
     assert belgium._location_coordinates({"unknown": {}}, "site") is None
+    assert (
+        belgium._location_coordinates(
+            {"locAreaLocation": {"coordinatesForDisplay": None}}, "site"
+        )
+        is None
+    )
+    with pytest.raises(InvalidProviderResponseError):
+        belgium._location_coordinates(
+            {
+                "locAreaLocation": {
+                    "coordinatesForDisplay": {"latitude": 91, "longitude": 0}
+                }
+            },
+            "site",
+        )
     assert belgium._localized_text("Name") == "Name"
     assert belgium._localized_text(None) is None
     assert belgium._localized_text({"values": "invalid"}) is None
+    assert belgium._localized_text({"values": [{}, {"value": None}]}) is None
     assert belgium._datex_code("available") == "available"
     assert belgium._datex_code({"value": "available"}) == "available"
     assert belgium._datex_code(None) is None
@@ -762,9 +883,11 @@ async def test_belgium_price_and_optional_field_helpers_preserve_unknowns():
         lambda: belgium._datex_list({}, "list"),
         lambda: belgium._required_datex_string("", "identifier"),
         lambda: belgium._datex_number(True, "number"),
+        lambda: belgium._datex_number(float("nan"), "number"),
         lambda: belgium._datex_decimal(object(), "price"),
         lambda: belgium._datex_decimal("not-a-price", "price"),
         lambda: belgium._datex_decimal(-1, "price"),
+        lambda: belgium._optional_date(1, "EVSE"),
         lambda: belgium._optional_date("not-a-date", "EVSE"),
         lambda: belgium._optional_date("2026-10-11T12:00:00", "EVSE"),
     )
