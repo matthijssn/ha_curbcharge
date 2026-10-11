@@ -1,6 +1,6 @@
 """Shared entities and dynamic station lifecycle support."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
@@ -26,14 +26,16 @@ class CurbChargeStationEntity(CoordinatorEntity[CurbChargeCoordinator]):
     _attr_has_entity_name = True
 
     def __init__(
-        self, coordinator: CurbChargeCoordinator, station: ChargingStation
+        self,
+        coordinator: CurbChargeCoordinator,
+        station: ChargingStation,
+        unique_id_suffix: str | None = None,
     ) -> None:
         """Initialize an entity with stable station identity."""
         super().__init__(coordinator)
         self._station_id = station.provider_id
-        self._attr_unique_id = (
-            f"{station.provider}_{station.provider_id}_{self._attr_translation_key}"
-        )
+        entity_key = unique_id_suffix or self._attr_translation_key
+        self._attr_unique_id = f"{station.provider}_{station.provider_id}_{entity_key}"
         self._attr_device_info = DeviceInfo(
             identifiers={
                 station_device_identifier(station.provider, station.provider_id)
@@ -66,7 +68,7 @@ def setup_dynamic_station_entities(
     entry: ConfigEntry,
     coordinator: CurbChargeCoordinator,
     async_add_entities: AddEntitiesCallback,
-    create_entities: Callable[[ChargingStation], list[Entity]],
+    create_entities: Callable[[ChargingStation], Sequence[Entity]],
 ) -> None:
     """Add new station entities and remove stations absent for three good polls."""
     platform = async_get_current_platform()
@@ -82,7 +84,7 @@ def setup_dynamic_station_entities(
         for station_id, station in stations.items():
             if station_id in known_station_ids:
                 continue
-            entities = create_entities(station)
+            entities = list(create_entities(station))
             entities_by_station[station_id] = entities
             known_station_ids.add(station_id)
             new_entities.extend(entities)
@@ -98,7 +100,7 @@ def setup_dynamic_station_entities(
                     pending_removals.discard(station_id)
                     continue
                 for entity in entities_by_station.pop(station_id, []):
-                    if entity.entity_id is not None:
+                    if entity.entity_id in platform.entities:
                         await platform.async_remove_entity(entity.entity_id)
 
                 identifier = station_device_identifier(

@@ -1,12 +1,12 @@
 {
   "domain": "curbcharge",
   "name": "CurbCharge",
-  "codeowners": [],
+  "codeowners": ["@matthijssn"],
   "config_flow": true,
   "documentation": "https://docs.ndw.nu/data-uitwisseling/interface-beschrijvingen/dafne-api/",
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "issue_tracker": "https://github.com/matthijssn/ha_curbcharge/issues",
   "requirements": [],
-  "version": "0.1.0"
+  "version": "0.1.3"
 }

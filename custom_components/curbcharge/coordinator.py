@@ -61,6 +61,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         self.station_removal_lock = asyncio.Lock()
         self.removed_station_ids: set[str] = set()
         self.last_successful_update: datetime | None = None
+        self._update_unavailable = False
         super().__init__(
             hass,
             _LOGGER,
@@ -79,25 +80,27 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
                 self.max_stations,
             )
         except AuthenticationError as err:
+            self._log_update_unavailable(type(err).__name__)
             raise ConfigEntryAuthFailed(
-                "Authentication with the charging provider failed"
+                translation_domain=DOMAIN,
+                translation_key="authentication_failed",
             ) from err
         except ProviderRateLimitError as err:
+            self._log_update_unavailable(type(err).__name__)
             retry_seconds = err.retry_after or int(
                 self._default_update_interval.total_seconds()
             )
             self.update_interval = max(
                 self._default_update_interval, timedelta(seconds=retry_seconds)
             )
-            _LOGGER.warning(
-                "NDW DOT-NL rate limited an update; retrying after %s seconds",
-                int(self.update_interval.total_seconds()),
-            )
             raise UpdateFailed("NDW DOT-NL rate limit reached") from err
         except ChargingProviderError as err:
-            _LOGGER.warning("CurbCharge update failed (%s)", type(err).__name__)
+            self._log_update_unavailable(type(err).__name__)
             raise UpdateFailed("Could not update charging station data") from err
 
+        if self._update_unavailable:
+            _LOGGER.info("CurbCharge data updates have recovered")
+            self._update_unavailable = False
         self.update_interval = self._default_update_interval
         current = {
             station.provider_id: station
@@ -120,6 +123,13 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         self.removed_station_ids = removed
         self.last_successful_update = datetime.now(UTC)
         return current
+
+    def _log_update_unavailable(self, error_type: str) -> None:
+        """Log only the transition to an unavailable provider."""
+        if self._update_unavailable:
+            return
+        _LOGGER.warning("CurbCharge data update failed (%s)", error_type)
+        self._update_unavailable = True
 
     @property
     def best_station(self) -> ChargingStation | None:

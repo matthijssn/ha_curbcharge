@@ -4,37 +4,45 @@ from dataclasses import replace
 
 import pytest
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
+from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 import custom_components.curbcharge as curbcharge
 from custom_components.curbcharge.const import (
+    CONF_INCLUDE_UNKNOWN,
     CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
     CONF_PROVIDER,
+    CONF_SCAN_INTERVAL,
     CONF_SEARCH_RADIUS,
     DOMAIN,
+    LOCATION_HOME,
     LOCATION_MANUAL,
     PROVIDER_NDW_DOT_NL,
 )
+from custom_components.curbcharge.provider import ChargingProviderError
 from tests.conftest import FakeProvider
 
 pytestmark = pytest.mark.usefixtures("enable_custom_integrations")
 
 
-def _entry() -> MockConfigEntry:
+def _entry(overrides: dict[str, object] | None = None) -> MockConfigEntry:
+    data: dict[str, object] = {
+        CONF_LOCATION_SOURCE: LOCATION_MANUAL,
+        CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+        CONF_SEARCH_RADIUS: 500,
+        CONF_MAX_STATIONS: 10,
+        CONF_LATITUDE: 52.0,
+        CONF_LONGITUDE: 5.0,
+    }
+    if overrides is not None:
+        data.update(overrides)
     return MockConfigEntry(
         domain=DOMAIN,
         unique_id="test-search-area",
-        data={
-            CONF_LOCATION_SOURCE: LOCATION_MANUAL,
-            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
-            CONF_SEARCH_RADIUS: 500,
-            CONF_MAX_STATIONS: 10,
-            CONF_LATITUDE: 52.0,
-            CONF_LONGITUDE: 5.0,
-        },
+        data=data,
     )
 
 
@@ -132,3 +140,98 @@ async def test_stations_with_the_same_address_get_unique_device_names(
         f"{station.name} ({station.provider}:{station.provider_id})"
         for station in (first, second)
     }
+
+
+def test_entry_location_rejects_invalid_or_incomplete_coordinates(hass):
+    invalid_locations = (
+        {CONF_LOCATION_SOURCE: LOCATION_MANUAL},
+        {CONF_LATITUDE: True, CONF_LONGITUDE: 5},
+        {CONF_LATITUDE: float("nan"), CONF_LONGITUDE: 5},
+        {CONF_LATITUDE: 91, CONF_LONGITUDE: 5},
+        {CONF_LATITUDE: 52, CONF_LONGITUDE: 181},
+    )
+    for location in invalid_locations:
+        assert curbcharge._entry_location(hass, location) is None
+
+    hass.config.latitude = 0
+    hass.config.longitude = 0
+    assert (
+        curbcharge._entry_location(hass, {CONF_LOCATION_SOURCE: LOCATION_HOME}) is None
+    )
+
+    hass.config.latitude = 52
+    hass.config.longitude = 5
+    assert curbcharge._entry_location(hass, {CONF_LOCATION_SOURCE: LOCATION_HOME}) == (
+        52.0,
+        5.0,
+    )
+
+
+@pytest.mark.asyncio
+async def test_setup_requires_a_valid_location(hass):
+    entry = _entry({CONF_LATITUDE: None, CONF_LONGITUDE: None})
+
+    with pytest.raises(ConfigEntryNotReady) as error:
+        await curbcharge.async_setup_entry(hass, entry)
+
+    assert error.value.translation_key == "location_not_configured"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        (CONF_PROVIDER, "unsupported"),
+        (CONF_SEARCH_RADIUS, 1),
+        (CONF_MAX_STATIONS, 0),
+        (CONF_SCAN_INTERVAL, 0),
+        (CONF_INCLUDE_UNKNOWN, 1),
+    ],
+)
+async def test_setup_rejects_invalid_options(hass, key, value):
+    entry = _entry({key: value})
+
+    with pytest.raises(ConfigEntryNotReady) as error:
+        await curbcharge.async_setup_entry(hass, entry)
+
+    assert error.value.translation_key == "invalid_config"
+
+
+@pytest.mark.asyncio
+async def test_setup_translates_provider_initialization_error(hass, monkeypatch):
+    entry = _entry()
+
+    def fail_provider(*_args):
+        raise ChargingProviderError("private provider details")
+
+    monkeypatch.setattr(curbcharge, "create_provider", fail_provider)
+
+    with pytest.raises(ConfigEntryNotReady) as error:
+        await curbcharge.async_setup_entry(hass, entry)
+
+    assert error.value.translation_key == "unsupported_provider"
+
+
+@pytest.mark.asyncio
+async def test_setup_translates_first_refresh_failure(hass, monkeypatch):
+    entry = _entry()
+    provider = FakeProvider([ChargingProviderError("private provider details")])
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    entry.add_to_hass(hass)
+
+    assert not await hass.config_entries.async_setup(entry.entry_id)
+
+
+@pytest.mark.asyncio
+async def test_options_update_reloads_the_entry(hass, monkeypatch):
+    entry = _entry()
+    reloaded: list[str] = []
+
+    async def reload_entry(entry_id: str) -> None:
+        reloaded.append(entry_id)
+
+    monkeypatch.setattr(hass.config_entries, "async_reload", reload_entry)
+
+    await curbcharge._async_options_updated(hass, entry)
+
+    assert reloaded == [entry.entry_id]

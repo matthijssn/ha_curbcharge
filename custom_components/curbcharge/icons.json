@@ -1,0 +1,29 @@
+{
+  "entity": {
+    "binary_sensor": {
+      "available": {
+        "default": "mdi:ev-station-outline",
+        "state": {
+          "on": "mdi:ev-station",
+          "off": "mdi:ev-station-outline"
+        }
+      }
+    },
+    "sensor": {
+      "connector_group": {
+        "default": "mdi:ev-plug-type2"
+      },
+      "best_nearby_charger": {
+        "default": "mdi:ev-station"
+      },
+      "status_summary": {
+        "default": "mdi:ev-station-outline",
+        "state": {
+          "available": "mdi:ev-station",
+          "none_available": "mdi:ev-station-outline",
+          "unknown": "mdi:help-circle-outline"
+        }
+      }
+    }
+  }
+}

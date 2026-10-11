@@ -1,6 +1,8 @@
 """Tests for diagnostics privacy."""
 
 import json
+from dataclasses import replace
+from decimal import Decimal
 
 import pytest
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
@@ -19,12 +21,16 @@ from custom_components.curbcharge.coordinator import CurbChargeCoordinator
 from custom_components.curbcharge.diagnostics import (
     async_get_config_entry_diagnostics,
 )
+from custom_components.curbcharge.models import ChargingTariff
 from tests.conftest import FakeProvider
 
 
 @pytest.mark.asyncio
 async def test_diagnostics_redact_coordinates_and_addresses(hass, sample_stations):
-    station = sample_stations[0]
+    station = replace(
+        sample_stations[0],
+        tariff=ChargingTariff("EUR", Decimal("0.42"), None, None, None, "NDW DOT-NL"),
+    )
     coordinator = CurbChargeCoordinator(
         hass, FakeProvider(), 52.0, 5.0, 500, 10, 5, True
     )
@@ -53,3 +59,4 @@ async def test_diagnostics_redact_coordinates_and_addresses(hass, sample_station
     assert diagnostics["discovered_stations"] == 1
     assert diagnostics["stations"][0]["available_connectors"] == 2
     assert diagnostics["stations"][0]["distance_m_rounded"] == 0
+    assert diagnostics["stations"][0]["tariff"]["price_per_kwh"] == "0.42"

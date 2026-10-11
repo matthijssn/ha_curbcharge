@@ -9,14 +9,16 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfLength, UnitOfPower
+from homeassistant.const import EntityCategory, UnitOfLength, UnitOfPower
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import CurbChargeCoordinator
 from .entity import CurbChargeStationEntity, setup_dynamic_station_entities
-from .models import ChargingStation
+from .models import ChargingConnector, ChargingStation
+
+PARALLEL_UPDATES = 0
 
 
 async def async_setup_entry(
@@ -40,6 +42,7 @@ class AvailableConnectorsSensor(CurbChargeStationEntity, SensorEntity):
     """Number of connectors the provider reports as available."""
 
     _attr_translation_key = "available_connectors"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_state_class = SensorStateClass.MEASUREMENT
 
     @property
@@ -52,6 +55,7 @@ class OccupiedConnectorsSensor(CurbChargeStationEntity, SensorEntity):
     """Occupied count only when the provider makes it knowable."""
 
     _attr_translation_key = "occupied_connectors"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_state_class = SensorStateClass.MEASUREMENT
 
     @property
@@ -64,6 +68,7 @@ class UnavailableConnectorsSensor(CurbChargeStationEntity, SensorEntity):
     """Number of connectors not reported as available."""
 
     _attr_translation_key = "unavailable_connectors"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_state_class = SensorStateClass.MEASUREMENT
 
     @property
@@ -76,12 +81,65 @@ class TotalConnectorsSensor(CurbChargeStationEntity, SensorEntity):
     """Total number of connectors in the provider's availability report."""
 
     _attr_translation_key = "total_connectors"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_state_class = SensorStateClass.MEASUREMENT
 
     @property
     def native_value(self) -> int | None:
         station = self.station
         return None if station is None else station.total_connectors
+
+
+class ConnectorGroupSensor(CurbChargeStationEntity, SensorEntity):
+    """Expose one provider-reported group of equivalent connectors."""
+
+    _attr_translation_key = "connector_group"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(
+        self,
+        coordinator: CurbChargeCoordinator,
+        station: ChargingStation,
+        connector: ChargingConnector,
+    ) -> None:
+        """Initialize a connector group without implying individual plug IDs."""
+        group_index = connector.provider_connector_id.rsplit(":", 1)[-1]
+        super().__init__(
+            coordinator, station, unique_id_suffix=f"connector_group_{group_index}"
+        )
+        self._connector = connector
+        self._attr_translation_placeholders = {
+            "connector_type": _display_connector_type(connector.connector_type)
+        }
+
+    @property
+    def native_value(self) -> int:
+        """Return the provider-reported total in this connector group."""
+        return self._connector.count
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Expose only counts and properties actually present in the feed."""
+        available = self._connector.available_count
+        return {
+            "available_connectors": available,
+            "unavailable_connectors": (
+                self._connector.count - available if available is not None else None
+            ),
+            "occupied_connectors": (0 if available == self._connector.count else None),
+            "connector_type": self._connector.connector_type,
+            "connector_format": self._connector.connector_format,
+            "power_type": self._connector.power_type,
+            "max_power_kw": self._connector.max_power_kw,
+        }
+
+
+def _display_connector_type(connector_type: str | None) -> str:
+    if connector_type is None:
+        return "Unknown"
+    return connector_type.replace("_", " ").title()
 
 
 class MaximumChargingPowerSensor(CurbChargeStationEntity, SensorEntity):
@@ -191,7 +249,7 @@ class StatusSummarySensor(CurbChargeStationEntity, SensorEntity):
 class BestNearbyChargerSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEntity):
     """The best currently available station under the configured ranking."""
 
-    _attr_has_entity_name = False
+    _attr_has_entity_name = True
     _attr_translation_key = "best_nearby_charger"
 
     def __init__(
@@ -250,6 +308,10 @@ def create_station_sensors(
         PricePerKwhSensor(coordinator, station),
         DistanceSensor(coordinator, station),
         StatusSummarySensor(coordinator, station),
+        *(
+            ConnectorGroupSensor(coordinator, station, connector)
+            for connector in station.connectors
+        ),
     ]
 
 

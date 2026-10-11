@@ -64,6 +64,29 @@ async def async_get_config_entry_diagnostics(
                 "out_of_service_connectors": station.out_of_service_connectors,
                 "unknown_connectors": station.unknown_connectors,
                 "connector_types": list(station.connector_types),
+                "max_power_kw": station.max_power_kw,
+                "tariff": (
+                    {
+                        "currency": station.tariff.currency,
+                        "price_per_kwh": (
+                            str(station.tariff.price_per_kwh)
+                            if station.tariff.price_per_kwh is not None
+                            else None
+                        ),
+                        "session_fee": (
+                            str(station.tariff.session_fee)
+                            if station.tariff.session_fee is not None
+                            else None
+                        ),
+                        "price_per_minute": (
+                            str(station.tariff.price_per_minute)
+                            if station.tariff.price_per_minute is not None
+                            else None
+                        ),
+                    }
+                    if station.tariff
+                    else None
+                ),
                 "is_open": station.is_open,
                 "last_updated": (
                     station.last_updated.isoformat() if station.last_updated else None

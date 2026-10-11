@@ -2,16 +2,17 @@
 
 import asyncio
 import gzip
+import hashlib
 import json
 import logging
 import math
 import re
 import zlib
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from email.utils import parsedate_to_datetime
-from typing import Any
+from typing import Literal, TypedDict, cast
 from urllib.parse import urljoin, urlsplit
 
 import aiohttp
@@ -40,6 +41,50 @@ from .provider import (
 _EARTH_RADIUS_M = 6_371_000
 _METERS_PER_DEGREE = 111_320
 _LOGGER = logging.getLogger(__name__)
+
+
+class GeoJSONFeature(TypedDict):
+    """Validated DOT-NL station feature."""
+
+    type: Literal["Feature"]
+    id: str
+    geometry: dict[str, object]
+    properties: dict[str, object]
+
+
+class GeoJSONFeatureCollection(TypedDict):
+    """Validated page of DOT-NL station features."""
+
+    type: Literal["FeatureCollection"]
+    features: list[GeoJSONFeature]
+
+
+class TariffPriceComponent(TypedDict, total=False):
+    """OCPI price component fields consumed by CurbCharge."""
+
+    type: str
+    price: object
+    vat: object
+    step_size: object
+
+
+class TariffElement(TypedDict, total=False):
+    """OCPI tariff element fields consumed by CurbCharge."""
+
+    restrictions: object
+    price_components: list[TariffPriceComponent]
+
+
+class TariffRecord(TypedDict, total=False):
+    """OCPI tariff fields consumed by CurbCharge."""
+
+    id: object
+    currency: object
+    elements: object
+    start_date_time: object
+    end_date_time: object
+    tax_included: object
+    tariff_alt_text: object
 
 
 class NdwDotNlProvider(BaseChargingProvider):
@@ -92,13 +137,13 @@ class NdwDotNlProvider(BaseChargingProvider):
 
     async def _async_get_features(
         self, latitude: float, longitude: float, radius_m: int
-    ) -> list[dict[str, Any]]:
+    ) -> list[GeoJSONFeature]:
         """Fetch all pages for a bounded search area."""
         bbox = _bounding_box(latitude, longitude, radius_m)
         url = PROVIDER_API_URL
         params: dict[str, str] | None = {"bbox": bbox}
         seen_urls: set[str] = set()
-        features: list[dict[str, Any]] = []
+        features: list[GeoJSONFeature] = []
         expected_total: int | None = None
 
         while url:
@@ -114,14 +159,14 @@ class NdwDotNlProvider(BaseChargingProvider):
             )
             params = None
             try:
-                payload = json.loads(body)
+                payload: object = json.loads(body)
             except (json.JSONDecodeError, UnicodeDecodeError) as err:
                 raise InvalidProviderResponseError(
                     "NDW DOT-NL returned invalid GeoJSON"
                 ) from err
 
-            page_features = _feature_collection_features(payload)
-            features.extend(page_features)
+            feature_collection = _feature_collection(payload)
+            features.extend(feature_collection["features"])
             total_header = headers.get("x-total-count")
             if total_header is not None:
                 try:
@@ -143,11 +188,7 @@ class NdwDotNlProvider(BaseChargingProvider):
 
         station_ids: set[str] = set()
         for feature in features:
-            station_id = feature.get("id")
-            if not isinstance(station_id, str):
-                raise InvalidProviderResponseError(
-                    "NDW DOT-NL returned an invalid station identifier"
-                )
+            station_id = feature["id"]
             if station_id in station_ids:
                 raise InvalidProviderResponseError(
                     "NDW DOT-NL returned duplicate charging station identifiers"
@@ -177,7 +218,7 @@ class NdwDotNlProvider(BaseChargingProvider):
             TARIFF_FEED_URL, timeout=TARIFF_REQUEST_TIMEOUT
         )
         try:
-            records = json.loads(gzip.decompress(body))
+            records_value: object = json.loads(gzip.decompress(body))
         except (
             gzip.BadGzipFile,
             EOFError,
@@ -189,28 +230,31 @@ class NdwDotNlProvider(BaseChargingProvider):
             raise InvalidProviderResponseError(
                 "NDW DOT-NL returned an invalid tariff file"
             ) from err
-        if not isinstance(records, list):
+        if not isinstance(records_value, list):
             raise InvalidProviderResponseError(
                 "NDW DOT-NL returned an invalid tariff list"
             )
+        records: list[object] = [record for record in records_value]
 
         if expired:
             self._tariff_cache.clear()
             self._cached_tariff_ids.clear()
 
         found: dict[str, ChargingTariff | None] = {}
-        for record in records:
-            if (
-                isinstance(record, dict)
-                and isinstance(record.get("id"), str)
-                and record["id"] in lookup_ids
-            ):
-                tariff_id = record["id"]
+        for record_value in records:
+            if not isinstance(record_value, dict):
+                raise InvalidProviderResponseError(
+                    "NDW DOT-NL returned an invalid tariff"
+                )
+            record = _string_mapping(record_value, "tariff")
+            record_id = record.get("id")
+            if isinstance(record_id, str) and record_id in lookup_ids:
+                tariff_id = record_id
                 if tariff_id in found:
                     raise InvalidProviderResponseError(
                         "NDW DOT-NL returned a duplicate tariff"
                     )
-                found[tariff_id] = _parse_tariff(record)
+                found[tariff_id] = _parse_tariff(cast(TariffRecord, record))
 
         for tariff_id in lookup_ids:
             self._tariff_cache[tariff_id] = found.get(tariff_id)
@@ -230,7 +274,7 @@ class NdwDotNlProvider(BaseChargingProvider):
         url: str,
         *,
         params: dict[str, str] | None = None,
-        timeout: Any,
+        timeout: timedelta,
     ) -> tuple[bytes, dict[str, str]]:
         """Make one request and translate transport errors without leaking URLs."""
         try:
@@ -268,31 +312,44 @@ def create_provider(
     raise UnsupportedProviderError("The configured charging provider is unsupported")
 
 
-def _feature_collection_features(payload: Any) -> list[dict[str, Any]]:
-    if (
-        not isinstance(payload, dict)
-        or payload.get("type") != "FeatureCollection"
-        or not isinstance(payload.get("features"), list)
-    ):
+def _feature_collection(payload: object) -> GeoJSONFeatureCollection:
+    collection = _string_mapping(payload, "feature collection")
+    if collection.get("type") != "FeatureCollection":
         raise InvalidProviderResponseError(
             "NDW DOT-NL returned an invalid GeoJSON feature collection"
         )
-    if not all(isinstance(feature, dict) for feature in payload["features"]):
+    raw_features = collection.get("features")
+    if not isinstance(raw_features, list):
         raise InvalidProviderResponseError(
             "NDW DOT-NL returned an invalid charging station"
         )
-    return payload["features"]
+    features: list[GeoJSONFeature] = []
+    for raw_feature in raw_features:
+        feature = _string_mapping(raw_feature, "charging station")
+        if feature.get("type") != "Feature":
+            raise InvalidProviderResponseError("NDW DOT-NL returned an invalid feature")
+        features.append(
+            {
+                "type": "Feature",
+                "id": _required_string(feature.get("id"), "station id"),
+                "geometry": _string_mapping(feature.get("geometry"), "geometry"),
+                "properties": _string_mapping(
+                    feature.get("properties"), "station data"
+                ),
+            }
+        )
+    return {"type": "FeatureCollection", "features": features}
 
 
 def _station_from_feature(
-    feature: dict[str, Any], latitude: float, longitude: float
+    feature: GeoJSONFeature, latitude: float, longitude: float
 ) -> ChargingStation:
     """Validate one documented GeoJSON feature and map it to a station."""
     if feature.get("type") != "Feature":
         raise InvalidProviderResponseError("NDW DOT-NL returned an invalid feature")
     station_id = _required_string(feature.get("id"), "station id")
-    geometry = feature.get("geometry")
-    if not isinstance(geometry, dict) or geometry.get("type") != "Point":
+    geometry = feature["geometry"]
+    if geometry.get("type") != "Point":
         raise InvalidProviderResponseError("NDW DOT-NL returned invalid coordinates")
     coordinates = geometry.get("coordinates")
     if not isinstance(coordinates, list) or len(coordinates) != 2:
@@ -302,9 +359,7 @@ def _station_from_feature(
     if not (-180 <= station_longitude <= 180 and -90 <= station_latitude <= 90):
         raise InvalidProviderResponseError("NDW DOT-NL returned invalid coordinates")
 
-    properties = feature.get("properties")
-    if not isinstance(properties, dict):
-        raise InvalidProviderResponseError("NDW DOT-NL returned invalid station data")
+    properties = feature["properties"]
     raw_address = properties.get("address")
     if not isinstance(raw_address, str):
         raise InvalidProviderResponseError("NDW DOT-NL returned invalid address")
@@ -322,7 +377,9 @@ def _station_from_feature(
         connectors: tuple[ChargingConnector, ...] = ()
     elif isinstance(raw_availabilities, list):
         availability_reported = True
-        connectors = _parse_availabilities(station_id, raw_availabilities)
+        connectors = _parse_availabilities(
+            station_id, [availability for availability in raw_availabilities]
+        )
     else:
         raise InvalidProviderResponseError(
             "NDW DOT-NL returned invalid connector availability"
@@ -348,14 +405,11 @@ def _station_from_feature(
 
 
 def _parse_availabilities(
-    station_id: str, raw_availabilities: list[Any]
+    station_id: str, raw_availabilities: list[object]
 ) -> tuple[ChargingConnector, ...]:
-    parsed: list[tuple[dict[str, Any], str, str, str, float, tuple[str, ...]]] = []
-    for raw in raw_availabilities:
-        if not isinstance(raw, dict):
-            raise InvalidProviderResponseError(
-                "NDW DOT-NL returned invalid connector availability"
-            )
+    parsed: list[tuple[int, int, str, str, str, float, tuple[str, ...]]] = []
+    for raw_value in raw_availabilities:
+        raw = _string_mapping(raw_value, "connector availability")
         available = _required_integer(raw.get("available"), "available connectors")
         total = _required_integer(raw.get("total"), "total connectors")
         if available > total:
@@ -383,7 +437,8 @@ def _parse_availabilities(
             )
         parsed.append(
             (
-                raw,
+                available,
+                total,
                 connector_type,
                 connector_format,
                 power_type,
@@ -394,20 +449,31 @@ def _parse_availabilities(
 
     parsed.sort(key=lambda row: (row[1], row[2], row[3], row[4], row[5]))
     connectors: list[ChargingConnector] = []
-    for index, (
-        raw,
+    for (
+        available,
+        total,
         connector_type,
         connector_format,
         power_type,
         power_kw,
         tariff_ids,
-    ) in enumerate(parsed):
-        available = int(raw["available"])
-        total = int(raw["total"])
+    ) in parsed:
+        group_id = hashlib.sha256(
+            json.dumps(
+                [
+                    connector_type,
+                    connector_format,
+                    power_type,
+                    power_kw,
+                    tariff_ids,
+                ],
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()[:12]
         connectors.append(
             ChargingConnector(
                 # ponytail: DOT-NL reports groups and counts, not per-connector IDs.
-                provider_connector_id=f"{station_id}:availability:{index}",
+                provider_connector_id=f"{station_id}:availability:{group_id}",
                 connector_type=connector_type,
                 status=(
                     ConnectorStatus.AVAILABLE
@@ -425,7 +491,7 @@ def _parse_availabilities(
     return tuple(connectors)
 
 
-def _parse_tariff(record: dict[str, Any]) -> ChargingTariff:
+def _parse_tariff(record: TariffRecord) -> ChargingTariff:
     """Parse an OCPI tariff conservatively; conditional prices remain unknown."""
     currency = _required_string(record.get("currency"), "tariff currency")
     if len(currency) != 3 or not currency.isalpha():
@@ -446,24 +512,42 @@ def _parse_tariff(record: dict[str, Any]) -> ChargingTariff:
             raise InvalidProviderResponseError(
                 "NDW DOT-NL returned invalid tax information"
             )
-    restricted = False
-    components: list[dict[str, Any]] = []
-    for element in elements:
-        if not isinstance(element, dict):
-            raise InvalidProviderResponseError("NDW DOT-NL returned an invalid tariff")
-        if element.get("restrictions"):
-            restricted = True
-        price_components = element.get("price_components")
+    parsed_elements: list[TariffElement] = []
+    element_values: list[object] = [element for element in elements]
+    for element in element_values:
+        element_mapping = _string_mapping(element, "tariff element")
+        price_components = element_mapping.get("price_components")
         if not isinstance(price_components, list):
             raise InvalidProviderResponseError(
                 "NDW DOT-NL returned invalid tariff components"
             )
-        for component in price_components:
-            if not isinstance(component, dict):
-                raise InvalidProviderResponseError(
-                    "NDW DOT-NL returned an invalid tariff component"
-                )
-            components.append(component)
+        component_values: list[object] = [component for component in price_components]
+        parsed_components: list[TariffPriceComponent] = []
+        for component in component_values:
+            component_mapping = _string_mapping(component, "tariff component")
+            parsed_components.append(
+                {
+                    "type": _required_string(
+                        component_mapping.get("type"), "tariff component type"
+                    ),
+                    "price": component_mapping.get("price"),
+                    "vat": component_mapping.get("vat"),
+                    "step_size": component_mapping.get("step_size"),
+                }
+            )
+        parsed_elements.append(
+            {
+                "restrictions": element_mapping.get("restrictions"),
+                "price_components": parsed_components,
+            }
+        )
+
+    restricted = any(element.get("restrictions") for element in parsed_elements)
+    components = [
+        component
+        for element in parsed_elements
+        for component in element["price_components"]
+    ]
 
     if active and not restricted:
         price_per_kwh, vat_percentage = _unique_component_price(
@@ -487,7 +571,7 @@ def _parse_tariff(record: dict[str, Any]) -> ChargingTariff:
 
 
 def _unique_component_price(
-    components: list[dict[str, Any]],
+    components: list[TariffPriceComponent],
     component_type: str,
     tax_included: bool | str | None,
 ) -> tuple[Decimal | None, Decimal | None]:
@@ -508,7 +592,7 @@ def _unique_component_price(
 
 
 def _unique_time_price(
-    components: list[dict[str, Any]], tax_included: bool | str | None
+    components: list[TariffPriceComponent], tax_included: bool | str | None
 ) -> Decimal | None:
     prices: set[Decimal] = set()
     for component in components:
@@ -529,7 +613,7 @@ def _unique_time_price(
 
 
 def _gross_component_price(
-    component: dict[str, Any], tax_included: bool | str | None
+    component: TariffPriceComponent, tax_included: bool | str | None
 ) -> tuple[Decimal | None, Decimal | None]:
     price = _decimal_price(component.get("price"))
     raw_vat = component.get("vat")
@@ -541,7 +625,7 @@ def _gross_component_price(
     return None, vat
 
 
-def _decimal_price(value: Any) -> Decimal:
+def _decimal_price(value: object) -> Decimal:
     if isinstance(value, bool) or not isinstance(value, (int, float, str, Decimal)):
         raise InvalidProviderResponseError(
             "NDW DOT-NL returned an invalid tariff price"
@@ -559,7 +643,7 @@ def _decimal_price(value: Any) -> Decimal:
     return price
 
 
-def _tariff_is_active(record: dict[str, Any], now: datetime) -> bool:
+def _tariff_is_active(record: TariffRecord, now: datetime) -> bool:
     start = record.get("start_date_time")
     end = record.get("end_date_time")
     if start is not None and _parse_datetime(start) > now:
@@ -569,13 +653,15 @@ def _tariff_is_active(record: dict[str, Any], now: datetime) -> bool:
     return True
 
 
-def _tariff_description(value: Any) -> str | None:
+def _tariff_description(value: object) -> str | None:
     if isinstance(value, str):
         return value
     if isinstance(value, list):
         for item in value:
-            if isinstance(item, dict) and isinstance(item.get("text"), str):
-                return item["text"]
+            if isinstance(item, dict):
+                text = item.get("text")
+                if isinstance(text, str):
+                    return text
     return None
 
 
@@ -590,6 +676,8 @@ def _with_station_tariff(
         if not group_tariffs or any(tariff is None for tariff in group_tariffs):
             return station
         first = group_tariffs[0]
+        if first is None:
+            return station
         if any(
             _tariff_signature(tariff) != _tariff_signature(first)
             for tariff in group_tariffs[1:]
@@ -604,7 +692,7 @@ def _with_station_tariff(
     return replace(station, tariff=groups[0])
 
 
-def _tariff_signature(tariff: ChargingTariff | None) -> tuple[Any, ...] | None:
+def _tariff_signature(tariff: ChargingTariff | None) -> tuple[object, ...] | None:
     if tariff is None:
         return None
     return (
@@ -663,7 +751,7 @@ def _distance_m(
     return round(2 * _EARTH_RADIUS_M * math.asin(math.sqrt(haversine)))
 
 
-def _parse_datetime(value: Any) -> datetime:
+def _parse_datetime(value: object) -> datetime:
     if not isinstance(value, str):
         raise InvalidProviderResponseError("NDW DOT-NL returned an invalid timestamp")
     try:
@@ -677,19 +765,19 @@ def _parse_datetime(value: Any) -> datetime:
     return parsed.astimezone(UTC)
 
 
-def _required_string(value: Any, field: str) -> str:
+def _required_string(value: object, field: str) -> str:
     if not isinstance(value, str) or not value:
         raise InvalidProviderResponseError(f"NDW DOT-NL returned invalid {field}")
     return value
 
 
-def _optional_string(value: Any, field: str) -> str | None:
+def _optional_string(value: object, field: str) -> str | None:
     if value is None:
         return None
     return _required_string(value, field)
 
 
-def _required_number(value: Any, field: str) -> float:
+def _required_number(value: object, field: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise InvalidProviderResponseError(f"NDW DOT-NL returned invalid {field}")
     number = float(value)
@@ -698,7 +786,7 @@ def _required_number(value: Any, field: str) -> float:
     return number
 
 
-def _coordinate_number(value: Any, field: str) -> float:
+def _coordinate_number(value: object, field: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise InvalidProviderResponseError(f"NDW DOT-NL returned invalid {field}")
     number = float(value)
@@ -707,10 +795,21 @@ def _coordinate_number(value: Any, field: str) -> float:
     return number
 
 
-def _required_integer(value: Any, field: str) -> int:
+def _required_integer(value: object, field: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise InvalidProviderResponseError(f"NDW DOT-NL returned invalid {field}")
     return value
+
+
+def _string_mapping(value: object, field: str) -> dict[str, object]:
+    if not isinstance(value, dict):
+        raise InvalidProviderResponseError(f"NDW DOT-NL returned invalid {field}")
+    result: dict[str, object] = {}
+    for key, item in value.items():
+        if not isinstance(key, str):
+            raise InvalidProviderResponseError(f"NDW DOT-NL returned invalid {field}")
+        result[key] = item
+    return result
 
 
 def _retry_after_seconds(value: str | None) -> int | None:
@@ -746,5 +845,5 @@ def _next_page_url(link_header: str | None, current_url: str) -> str | None:
             raise InvalidProviderResponseError(
                 "NDW DOT-NL returned an invalid pagination link"
             )
-        return candidate
+        return str(candidate)
     return None
