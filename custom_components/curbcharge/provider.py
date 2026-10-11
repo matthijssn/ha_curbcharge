@@ -43,6 +43,11 @@ class BaseChargingProvider(ABC):
 
     @property
     @abstractmethod
+    def provider_name(self) -> str:
+        """Return the display name of the provider."""
+
+    @property
+    @abstractmethod
     def provider_id(self) -> str:
         """Return the stable provider identifier used in entity identities."""
 

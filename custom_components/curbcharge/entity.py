@@ -15,7 +15,7 @@ from homeassistant.helpers.entity_platform import (
 )
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, PROVIDER_NAME
+from .const import DOMAIN
 from .coordinator import CurbChargeCoordinator
 from .models import ChargingStation
 
@@ -42,7 +42,7 @@ class CurbChargeStationEntity(CoordinatorEntity[CurbChargeCoordinator]):
             },
             name=f"{station.name} ({station.provider}:{station.provider_id})",
             manufacturer=station.operator,
-            model=PROVIDER_NAME,
+            model=station.provider_name,
             serial_number=station.provider_id,
         )
 

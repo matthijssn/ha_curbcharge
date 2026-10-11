@@ -50,6 +50,7 @@ class ChargingLocation:
 
     provider_id: str
     provider: str
+    provider_name: str
     country_code: str
     name: str
     latitude: float
@@ -79,6 +80,7 @@ class ChargingStation:
     is_stale: bool = False
     country_code: str = "NL"
     location: ChargingLocation | None = None
+    provider_name: str = "NDW DOT-NL"
 
     @property
     def available_connectors(self) -> int | None:

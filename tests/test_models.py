@@ -94,6 +94,7 @@ def test_location_model_is_country_and_provider_independent():
     location = ChargingLocation(
         provider_id="site-123",
         provider="example_provider",
+        provider_name="Example Provider",
         country_code="BE",
         name="Example site",
         latitude=50.85,

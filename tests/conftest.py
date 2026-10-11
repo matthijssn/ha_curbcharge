@@ -31,6 +31,10 @@ def sample_stations(sample_geojson: dict[str, Any]):
 class FakeProvider:
     """In-memory provider returning queued snapshots or failures."""
 
+    provider_id = "ndw_dot_nl"
+    provider_name = "NDW DOT-NL"
+    country_code = "NL"
+
     def __init__(self, snapshots: list[Any] | None = None) -> None:
         self.snapshots = deque(snapshots or [])
         self.current: tuple[Any, ...] = ()
