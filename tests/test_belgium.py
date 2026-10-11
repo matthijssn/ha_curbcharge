@@ -521,6 +521,45 @@ async def test_request_limiter_enforces_ip_location_and_per_evse_limits(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_belgium_provider_factory_shares_rate_limits_between_entries(
+    hass, monkeypatch
+):
+    current_time = [0.0]
+    waits: list[float] = []
+
+    def monotonic() -> float:
+        return current_time[0]
+
+    async def sleep(delay: float) -> None:
+        waits.append(delay)
+        current_time[0] += delay
+
+    monkeypatch.setattr(belgium.time, "monotonic", monotonic)
+    monkeypatch.setattr(belgium.asyncio, "sleep", sleep)
+    providers = [
+        belgium.create_belgium_provider(
+            hass,
+            FakeSession([FakeResponse(_locations_document())]),
+            token,
+        )
+        for token in ("shared-token", "shared-token", "other-token")
+    ]
+
+    for provider in providers:
+        await provider.async_validate_connection(50.85, 4.35, 1000)
+
+    assert waits == [120, 10]
+
+
+def test_shared_belgium_limiter_rejects_invalid_hass_data(hass):
+    domain_data = hass.data.setdefault(belgium.DOMAIN, {})
+    domain_data["belgium_request_limiter"] = object()
+
+    with pytest.raises(RuntimeError, match="invalid type"):
+        belgium._shared_request_limiter(hass)
+
+
+@pytest.mark.asyncio
 async def test_belgium_provider_validates_the_static_location_snapshot():
     provider = BelgiumChargingProvider(
         BelgiumDatexClient(
