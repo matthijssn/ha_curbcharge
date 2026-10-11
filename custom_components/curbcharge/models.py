@@ -45,8 +45,23 @@ class ChargingTariff:
 
 
 @dataclass(frozen=True, slots=True)
+class ChargingLocation:
+    """A provider-identified physical charging site."""
+
+    provider_id: str
+    provider: str
+    country_code: str
+    name: str
+    latitude: float
+    longitude: float
+    address: str | None
+    operator: str | None
+    last_updated: datetime | None
+
+
+@dataclass(frozen=True, slots=True)
 class ChargingStation:
-    """A charging point and the information currently reported for it."""
+    """A charging unit with country-neutral location and connector data."""
 
     provider_id: str
     name: str
@@ -62,6 +77,8 @@ class ChargingStation:
     availability_reported: bool = True
     is_open: bool | None = None
     is_stale: bool = False
+    country_code: str = "NL"
+    location: ChargingLocation | None = None
 
     @property
     def available_connectors(self) -> int | None:

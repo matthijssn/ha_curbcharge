@@ -101,6 +101,9 @@ async def test_get_stations_filters_by_radius_and_limit(sample_geojson):
     assert stations[0].max_power_kw == 50
     assert stations[0].connectors[0].status is ConnectorStatus.UNKNOWN
     assert stations[0].tariff is None
+    assert stations[0].country_code == "NL"
+    assert stations[0].location is not None
+    assert stations[0].location.provider_id == stations[0].provider_id
     assert len(session.requests) == 1
 
 

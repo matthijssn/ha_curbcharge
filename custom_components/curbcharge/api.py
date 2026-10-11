@@ -28,7 +28,13 @@ from .const import (
     TARIFF_FEED_URL,
     TARIFF_REQUEST_TIMEOUT,
 )
-from .models import ChargingConnector, ChargingStation, ChargingTariff, ConnectorStatus
+from .models import (
+    ChargingConnector,
+    ChargingLocation,
+    ChargingStation,
+    ChargingTariff,
+    ConnectorStatus,
+)
 from .provider import (
     AuthenticationError,
     BaseChargingProvider,
@@ -396,10 +402,21 @@ def _station_from_feature(
             "NDW DOT-NL returned invalid connector availability"
         )
 
+    location = ChargingLocation(
+        provider_id=station_id,
+        provider=PROVIDER_NDW_DOT_NL,
+        country_code=COUNTRY_NL,
+        name=address or station_id,
+        latitude=station_latitude,
+        longitude=station_longitude,
+        address=address,
+        operator=operator,
+        last_updated=last_updated,
+    )
     return ChargingStation(
         provider_id=station_id,
         provider=PROVIDER_NDW_DOT_NL,
-        name=address or station_id,
+        name=location.name,
         latitude=station_latitude,
         longitude=station_longitude,
         address=address,
@@ -412,6 +429,8 @@ def _station_from_feature(
         last_updated=last_updated,
         availability_reported=availability_reported,
         is_open=is_open,
+        country_code=COUNTRY_NL,
+        location=location,
     )
 
 
