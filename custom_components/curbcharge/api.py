@@ -27,6 +27,7 @@ from .const import (
     TARIFF_FEED_URL,
     TARIFF_REQUEST_TIMEOUT,
 )
+from .geography import distance_m
 from .models import (
     ChargingConnector,
     ChargingLocation,
@@ -427,9 +428,7 @@ def _station_from_feature(
         longitude=station_longitude,
         address=address,
         operator=operator,
-        distance_m=_distance_m(
-            latitude, longitude, station_latitude, station_longitude
-        ),
+        distance_m=distance_m(latitude, longitude, station_latitude, station_longitude),
         connectors=connectors,
         tariff=None,
         last_updated=last_updated,
@@ -438,6 +437,7 @@ def _station_from_feature(
         country_code=COUNTRY_NL,
         location=location,
         provider_name=PROVIDER_NAME,
+        connector_count_reported=availability_reported,
     )
 
 
@@ -772,20 +772,6 @@ def _bounding_box(latitude: float, longitude: float, radius_m: int) -> str:
             max_latitude,
         )
     )
-
-
-def _distance_m(
-    latitude: float, longitude: float, other_latitude: float, other_longitude: float
-) -> int:
-    """Calculate distance using the haversine formula."""
-    lat1, lat2 = math.radians(latitude), math.radians(other_latitude)
-    delta_lat = lat2 - lat1
-    delta_lon = math.radians(other_longitude - longitude)
-    haversine = (
-        math.sin(delta_lat / 2) ** 2
-        + math.cos(lat1) * math.cos(lat2) * math.sin(delta_lon / 2) ** 2
-    )
-    return round(2 * _EARTH_RADIUS_M * math.asin(math.sqrt(haversine)))
 
 
 def _parse_datetime(value: object) -> datetime:
