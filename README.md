@@ -201,9 +201,9 @@ configuration directory and restart Home Assistant.
 
 ## Development
 
-The protected `main` branch requires the `test` and `hassfest` check contexts.
-The Hassfest workflow uses its own job context so it can block merges
-independently of HACS validation.
+The protected `main` branch requires the `test`, `hassfest`, and `hacs` check
+contexts. The Hassfest and HACS workflows use distinct job contexts so each
+validator can block merges independently.
 
 Install the test tools and run:
 
