@@ -47,6 +47,9 @@ description.
 
 ### HACS custom repository
 
+[Add CurbCharge to HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=matthijssn&repository=ha_curbcharge&category=integration),
+or:
+
 1. In HACS, open **Integrations** and choose **Custom repositories** from the
    menu.
 2. Add the GitHub URL for this repository and select **Integration** as the
@@ -73,6 +76,13 @@ default polling interval is five minutes; the options flow permits intervals
 of one minute or longer, plus changes to the radius, station limit, provider,
 and whether to include stations for which no availability data was returned.
 
+## Supported stations
+
+CurbCharge discovers publicly accessible charging points in the Netherlands
+that NDW DOT-NL publishes within the configured search area. It reports provider
+data; it does not connect to or control physical chargers. Stations outside
+the DOT-NL dataset are not discoverable through this integration.
+
 ## Entities
 
 Each charging point is one Home Assistant device. CurbCharge creates:
@@ -84,6 +94,10 @@ Each charging point is one Home Assistant device. CurbCharge creates:
 - **Status summary**, including connector types, operator, address, provider
   status, tariff details, coordinates, and provider update timestamps.
 - One integration-level **Best nearby charger** sensor.
+
+For each availability group reported by NDW, the station also has a
+disabled-by-default connector-group sensor. The provider groups connectors by type and
+power characteristics; these are not individual physical connector IDs.
 
 The occupied sensor is unknown if the provider only reports available and
 total counts and some connectors are not available. This avoids treating a
@@ -101,21 +115,83 @@ When a station is absent from three consecutive successful refreshes, its
 entities and device are removed. Failed refreshes do not count as absence and
 do not replace the last successful coordinator data.
 
+## Data updates
+
+CurbCharge refreshes station data with a shared `DataUpdateCoordinator`. The
+coordinator calls the provider once per cycle; entities never make requests.
+The default interval is five minutes and can be reduced to one minute in
+options. NDW may paginate GeoJSON results, and tariffs come from a separate
+OCPI file cached for six hours. The provider client may therefore make
+additional HTTP requests when more pages or uncached tariffs are needed.
+NDW's station `last_updated` time is shown separately from Home Assistant's
+last successful refresh time; upstream data can be delayed even immediately
+after a successful poll.
+
+## Use cases and automations
+
+Use the **Available** binary sensor to notify when a station reports an
+available connector, or use **Best nearby charger** as a recommendation input.
+Replace the example entity ID with the one created for your station:
+
+```yaml
+alias: Notify when a charging station is available
+trigger:
+  - platform: state
+    entity_id: binary_sensor.your_station_available
+    to: "on"
+action:
+  - service: persistent_notification.create
+    data:
+      title: Charging station available
+      message: A connector is reported available at this station.
+mode: single
+```
+
+## Services
+
+CurbCharge is read-only and registers no custom services, actions, triggers, or
+conditions. Use its entities in Home Assistant automations as shown above.
+
+## Troubleshooting
+
+- **No stations appear:** Check the configured home/manual location, radius,
+  and that public stations are listed in NDW DOT-NL for that area.
+- **Setup cannot connect:** Check Home Assistant internet access and retry
+  after a provider rate limit expires.
+- **Availability is unknown:** NDW may not have supplied connector availability
+  for that station. CurbCharge does not infer it from operational status.
+- **Price is unknown:** The provider may omit the tariff or publish conditional,
+  conflicting, mixed-currency, or incomplete tax data.
+- **Data looks old:** Compare the station's provider update timestamp with
+  Home Assistant's last successful refresh timestamp.
+- **A station disappeared:** Temporarily missing stations remain unavailable
+  for two successful polls and are removed after the third.
+
 ## Privacy and diagnostics
 
 Diagnostics omit station addresses and exact station coordinates, redact
 manual coordinates from entry data, and round distances to the nearest
 kilometre. CurbCharge does not log coordinates, credentials, or raw provider
-responses. The integration does not request credentials from NDW.
+responses. The integration does not request credentials from NDW. To download
+diagnostics, open **Settings → Devices & services → CurbCharge**, open the
+integration menu, and select **Download diagnostics**.
+
+## Removing CurbCharge
+
+Remove the integration from **Settings → Devices & services**. For a manual
+installation, delete `custom_components/curbcharge` from the Home Assistant
+configuration directory and restart Home Assistant.
 
 ## Development
 
 Install the test tools and run:
 
 ```bash
-pip install pytest pytest-homeassistant-custom-component ruff
-pytest
+pip install pytest pytest-homeassistant-custom-component pytest-cov ruff mypy
+pytest --cov=custom_components/curbcharge --cov-fail-under=96
 ruff check .
+ruff format --check .
+mypy
 ```
 
 ## Preparing a release

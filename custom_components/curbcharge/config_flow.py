@@ -4,16 +4,20 @@ from __future__ import annotations
 
 import hashlib
 import math
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+
+if TYPE_CHECKING:
+    from homeassistant.config_entries import ConfigFlowResult as FlowResult
+else:
+    from homeassistant.data_entry_flow import FlowResult
 
 from .api import create_provider
 from .const import (
@@ -48,11 +52,17 @@ from .provider import (
 )
 
 
-def manual_location_schema() -> vol.Schema:
+def manual_location_schema(
+    latitude: float | None = None, longitude: float | None = None
+) -> vol.Schema:
     """Return the schema for manually entered coordinates."""
     return vol.Schema(
         {
-            vol.Required(CONF_LATITUDE): selector.NumberSelector(
+            (
+                vol.Required(CONF_LATITUDE)
+                if latitude is None
+                else vol.Required(CONF_LATITUDE, default=latitude)
+            ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=-90,
                     max=90,
@@ -60,7 +70,11 @@ def manual_location_schema() -> vol.Schema:
                     mode=selector.NumberSelectorMode.BOX,
                 )
             ),
-            vol.Required(CONF_LONGITUDE): selector.NumberSelector(
+            (
+                vol.Required(CONF_LONGITUDE)
+                if longitude is None
+                else vol.Required(CONF_LONGITUDE, default=longitude)
+            ): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=-180,
                     max=180,
@@ -165,6 +179,22 @@ def options_schema(defaults: dict[str, Any]) -> vol.Schema:
     )
 
 
+def _show_form(
+    flow: config_entries.ConfigFlow | config_entries.OptionsFlow,
+    *,
+    step_id: str,
+    data_schema: vol.Schema,
+    errors: dict[str, str] | None = None,
+) -> FlowResult:
+    """Show a voluptuous form across Home Assistant's flow type changes."""
+    # HA 2026.10 types use probatio; voluptuous remains needed for HA 2024.12.
+    return flow.async_show_form(
+        step_id=step_id,
+        data_schema=cast(Any, data_schema),
+        errors=errors,
+    )
+
+
 class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Set up a CurbCharge location and validate the provider connection."""
 
@@ -185,7 +215,8 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if self._location_source == LOCATION_HOME:
                 location = _home_location(self.hass)
                 if location is None:
-                    return self.async_show_form(
+                    return _show_form(
+                        self,
                         step_id="user",
                         data_schema=_location_source_schema(),
                         errors={"base": "location_not_configured"},
@@ -194,8 +225,130 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return await self.async_step_station_options()
             return await self.async_step_manual_location()
 
-        return self.async_show_form(
-            step_id="user", data_schema=_location_source_schema()
+        return _show_form(self, step_id="user", data_schema=_location_source_schema())
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Allow a user to change the configured search location."""
+        entry = self._get_reconfigure_entry()
+        if user_input is None:
+            return _show_form(
+                self,
+                step_id="reconfigure",
+                data_schema=_location_source_schema(
+                    entry.data.get(CONF_LOCATION_SOURCE, LOCATION_HOME)
+                ),
+            )
+
+        self._location_source = user_input[CONF_LOCATION_SOURCE]
+        if self._location_source == LOCATION_HOME:
+            location = _home_location(self.hass)
+            if location is None:
+                return _show_form(
+                    self,
+                    step_id="reconfigure",
+                    data_schema=_location_source_schema(LOCATION_HOME),
+                    errors={"base": "location_not_configured"},
+                )
+            self._latitude, self._longitude = location
+            return await self._async_save_reconfigured_location(entry)
+
+        stored_latitude = entry.data.get(CONF_LATITUDE)
+        stored_longitude = entry.data.get(CONF_LONGITUDE)
+        current_location: tuple[float, float] | None
+        if (
+            entry.data.get(CONF_LOCATION_SOURCE) == LOCATION_MANUAL
+            and isinstance(stored_latitude, (int, float))
+            and not isinstance(stored_latitude, bool)
+            and isinstance(stored_longitude, (int, float))
+            and not isinstance(stored_longitude, bool)
+            and _valid_coordinates(float(stored_latitude), float(stored_longitude))
+        ):
+            current_location = (float(stored_latitude), float(stored_longitude))
+        else:
+            current_location = _home_location(self.hass)
+        self._latitude, self._longitude = (
+            current_location if current_location is not None else (None, None)
+        )
+        return _show_form(
+            self,
+            step_id="reconfigure_manual_location",
+            data_schema=manual_location_schema(self._latitude, self._longitude),
+        )
+
+    async def async_step_reconfigure_manual_location(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Collect replacement coordinates for a manual search location."""
+        if user_input is None:
+            return self.async_abort(reason="location_not_configured")
+
+        latitude = float(user_input[CONF_LATITUDE])
+        longitude = float(user_input[CONF_LONGITUDE])
+        if not _valid_coordinates(latitude, longitude):
+            return _show_form(
+                self,
+                step_id="reconfigure_manual_location",
+                data_schema=manual_location_schema(latitude, longitude),
+                errors={"base": "invalid_location"},
+            )
+        self._location_source = LOCATION_MANUAL
+        self._latitude = latitude
+        self._longitude = longitude
+        return await self._async_save_reconfigured_location(
+            self._get_reconfigure_entry()
+        )
+
+    async def _async_save_reconfigured_location(self, entry: ConfigEntry) -> FlowResult:
+        """Validate a replacement location and update the existing entry."""
+        assert self._location_source is not None
+        assert self._latitude is not None
+        assert self._longitude is not None
+
+        options = {**entry.data, **entry.options}
+        provider_id = options.get(CONF_PROVIDER, PROVIDER_NDW_DOT_NL)
+        radius = int(options.get(CONF_SEARCH_RADIUS, DEFAULT_SEARCH_RADIUS_M))
+        try:
+            provider = create_provider(provider_id, async_get_clientsession(self.hass))
+            await provider.async_validate_connection(
+                self._latitude, self._longitude, radius
+            )
+        except ChargingProviderError as err:
+            if self._location_source == LOCATION_MANUAL:
+                return _show_form(
+                    self,
+                    step_id="reconfigure_manual_location",
+                    data_schema=manual_location_schema(self._latitude, self._longitude),
+                    errors={"base": _flow_error(err)},
+                )
+            return _show_form(
+                self,
+                step_id="reconfigure",
+                data_schema=_location_source_schema(LOCATION_HOME),
+                errors={"base": _flow_error(err)},
+            )
+
+        new_unique_id = _config_unique_id(
+            provider_id, self._latitude, self._longitude, radius
+        )
+        if new_unique_id != entry.unique_id:
+            await self.async_set_unique_id(new_unique_id)
+            self._abort_if_unique_id_configured()
+
+        data = dict(entry.data)
+        data[CONF_LOCATION_SOURCE] = self._location_source
+        if self._location_source == LOCATION_MANUAL:
+            data[CONF_LATITUDE] = self._latitude
+            data[CONF_LONGITUDE] = self._longitude
+        else:
+            data.pop(CONF_LATITUDE, None)
+            data.pop(CONF_LONGITUDE, None)
+        return self.async_update_reload_and_abort(
+            entry,
+            unique_id=new_unique_id,
+            data=data,
+            reason="reconfigure_successful",
         )
 
     async def async_step_manual_location(
@@ -206,7 +359,8 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             latitude = float(user_input[CONF_LATITUDE])
             longitude = float(user_input[CONF_LONGITUDE])
             if not _valid_coordinates(latitude, longitude):
-                return self.async_show_form(
+                return _show_form(
+                    self,
                     step_id="manual_location",
                     data_schema=manual_location_schema(),
                     errors={"base": "invalid_location"},
@@ -215,8 +369,8 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._longitude = longitude
             return await self.async_step_station_options()
 
-        return self.async_show_form(
-            step_id="manual_location", data_schema=manual_location_schema()
+        return _show_form(
+            self, step_id="manual_location", data_schema=manual_location_schema()
         )
 
     async def async_step_station_options(
@@ -247,7 +401,8 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self._latitude, self._longitude, radius
                 )
             except ChargingProviderError as err:
-                return self.async_show_form(
+                return _show_form(
+                    self,
                     step_id="station_options",
                     data_schema=station_options_schema(
                         radius=radius, max_stations=max_stations
@@ -266,8 +421,8 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 data[CONF_LONGITUDE] = self._longitude
             return self.async_create_entry(title="CurbCharge", data=data)
 
-        return self.async_show_form(
-            step_id="station_options", data_schema=station_options_schema()
+        return _show_form(
+            self, step_id="station_options", data_schema=station_options_schema()
         )
 
     @staticmethod
@@ -299,16 +454,16 @@ class CurbChargeOptionsFlow(config_entries.OptionsFlow):
             )
 
         defaults = {**self.config_entry.data, **self.config_entry.options}
-        return self.async_show_form(
-            step_id="init", data_schema=options_schema(defaults)
-        )
+        return _show_form(self, step_id="init", data_schema=options_schema(defaults))
 
 
-def _location_source_schema() -> vol.Schema:
+def _location_source_schema(
+    default: str = LOCATION_HOME,
+) -> vol.Schema:
     return vol.Schema(
         {
             vol.Required(
-                CONF_LOCATION_SOURCE, default=LOCATION_HOME
+                CONF_LOCATION_SOURCE, default=default
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=[LOCATION_HOME, LOCATION_MANUAL],

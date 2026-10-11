@@ -1,11 +1,39 @@
 {
   "config": {
+    "initiate_flow": {
+      "reconfigure": "Change search location"
+    },
     "step": {
       "user": {
         "title": "Set up CurbCharge",
         "description": "Choose how CurbCharge finds your search location.",
         "data": {
           "location_source": "Location source"
+        },
+        "data_description": {
+          "location_source": "Use the Home Assistant home location or provide coordinates for this search."
+        }
+      },
+      "reconfigure": {
+        "title": "Change the search location",
+        "description": "Choose whether to use the current Home Assistant home location or enter new coordinates.",
+        "data": {
+          "location_source": "Location source"
+        },
+        "data_description": {
+          "location_source": "Changing the search area may change which nearby stations are included."
+        }
+      },
+      "reconfigure_manual_location": {
+        "title": "Enter a new search location",
+        "description": "CurbCharge checks the provider before saving this location.",
+        "data": {
+          "latitude": "Latitude",
+          "longitude": "Longitude"
+        },
+        "data_description": {
+          "latitude": "Latitude of the center of the charging station search area.",
+          "longitude": "Longitude of the center of the charging station search area."
         }
       },
       "manual_location": {
@@ -14,6 +42,10 @@
         "data": {
           "latitude": "Latitude",
           "longitude": "Longitude"
+        },
+        "data_description": {
+          "latitude": "Latitude of the center of the charging station search area.",
+          "longitude": "Longitude of the center of the charging station search area."
         }
       },
       "station_options": {
@@ -23,6 +55,11 @@
           "search_radius": "Search radius (m)",
           "max_stations": "Maximum stations",
           "provider": "Provider"
+        },
+        "data_description": {
+          "search_radius": "Only public charging stations within this distance are included.",
+          "max_stations": "Limit the number of stations and their entities.",
+          "provider": "The data provider used to discover stations and availability."
         }
       }
     },
@@ -37,7 +74,8 @@
     },
     "abort": {
       "already_configured": "This provider and search area are already configured.",
-      "location_not_configured": "The search location is not configured."
+      "location_not_configured": "The search location is not configured.",
+      "reconfigure_successful": "Search location updated."
     }
   },
   "options": {
@@ -50,8 +88,29 @@
           "max_stations": "Maximum stations",
           "provider": "Provider",
           "include_unknown": "Include stations without availability data"
+        },
+        "data_description": {
+          "scan_interval": "How often Home Assistant refreshes charging station data.",
+          "search_radius": "Only public charging stations within this distance are included.",
+          "max_stations": "Limit the number of stations and their entities.",
+          "provider": "The data provider used to discover stations and availability.",
+          "include_unknown": "Include stations when the provider reports no connector availability."
         }
       }
+    }
+  },
+  "exceptions": {
+    "authentication_failed": {
+      "message": "Authentication with the charging provider failed."
+    },
+    "invalid_config": {
+      "message": "CurbCharge configuration is invalid."
+    },
+    "location_not_configured": {
+      "message": "The configured charging search location is unavailable."
+    },
+    "unsupported_provider": {
+      "message": "The configured charging provider is unsupported."
     }
   },
   "selector": {
@@ -85,6 +144,9 @@
       },
       "total_connectors": {
         "name": "Total connectors"
+      },
+      "connector_group": {
+        "name": "{connector_type} connectors"
       },
       "maximum_charging_power": {
         "name": "Maximum charging power"

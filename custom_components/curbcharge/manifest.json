@@ -1,7 +1,7 @@
 {
   "domain": "curbcharge",
   "name": "CurbCharge",
-  "codeowners": [],
+  "codeowners": ["@matthijssn"],
   "config_flow": true,
   "documentation": "https://docs.ndw.nu/data-uitwisseling/interface-beschrijvingen/dafne-api/",
   "integration_type": "service",

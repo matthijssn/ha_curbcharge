@@ -1,0 +1,24 @@
+name: Question or other
+description: Ask a CurbCharge usage question or raise an issue that does not fit another form.
+title: "[Question]: "
+labels:
+  - question
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include credentials, API tokens, exact home coordinates, or unredacted diagnostics.
+  - type: textarea
+    id: question
+    attributes:
+      label: What would you like help with?
+      description: Include what you tried and any relevant non-sensitive details.
+    validations:
+      required: true
+  - type: input
+    id: home_assistant_version
+    attributes:
+      label: Home Assistant version (optional)
+      placeholder: "2026.10.0"
+    validations:
+      required: false

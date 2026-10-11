@@ -1,11 +1,39 @@
 {
   "config": {
+    "initiate_flow": {
+      "reconfigure": "Zoeklocatie wijzigen"
+    },
     "step": {
       "user": {
         "title": "CurbCharge instellen",
         "description": "Kies hoe CurbCharge de zoeklocatie bepaalt.",
         "data": {
           "location_source": "Locatiebron"
+        },
+        "data_description": {
+          "location_source": "Gebruik de thuislocatie van Home Assistant of voer coördinaten voor deze zoekopdracht in."
+        }
+      },
+      "reconfigure": {
+        "title": "Zoeklocatie wijzigen",
+        "description": "Kies de huidige thuislocatie van Home Assistant of voer nieuwe coördinaten in.",
+        "data": {
+          "location_source": "Locatiebron"
+        },
+        "data_description": {
+          "location_source": "Een gewijzigd zoekgebied kan andere laadpunten opleveren."
+        }
+      },
+      "reconfigure_manual_location": {
+        "title": "Nieuwe zoeklocatie invoeren",
+        "description": "CurbCharge controleert de provider voordat deze locatie wordt opgeslagen.",
+        "data": {
+          "latitude": "Breedtegraad",
+          "longitude": "Lengtegraad"
+        },
+        "data_description": {
+          "latitude": "Breedtegraad van het middelpunt van het zoekgebied voor laadpunten.",
+          "longitude": "Lengtegraad van het middelpunt van het zoekgebied voor laadpunten."
         }
       },
       "manual_location": {
@@ -14,6 +42,10 @@
         "data": {
           "latitude": "Breedtegraad",
           "longitude": "Lengtegraad"
+        },
+        "data_description": {
+          "latitude": "Breedtegraad van het middelpunt van het zoekgebied voor laadpunten.",
+          "longitude": "Lengtegraad van het middelpunt van het zoekgebied voor laadpunten."
         }
       },
       "station_options": {
@@ -23,6 +55,11 @@
           "search_radius": "Zoekradius (m)",
           "max_stations": "Maximumaantal laadpunten",
           "provider": "Provider"
+        },
+        "data_description": {
+          "search_radius": "Neem alleen openbare laadpunten binnen deze afstand op.",
+          "max_stations": "Beperk het aantal laadpunten en bijbehorende entiteiten.",
+          "provider": "De gegevensprovider voor het vinden van laadpunten en beschikbaarheid."
         }
       }
     },
@@ -37,7 +74,8 @@
     },
     "abort": {
       "already_configured": "Deze provider en zoeklocatie zijn al ingesteld.",
-      "location_not_configured": "De zoeklocatie is niet ingesteld."
+      "location_not_configured": "De zoeklocatie is niet ingesteld.",
+      "reconfigure_successful": "De zoeklocatie is bijgewerkt."
     }
   },
   "options": {
@@ -50,8 +88,29 @@
           "max_stations": "Maximumaantal laadpunten",
           "provider": "Provider",
           "include_unknown": "Laadpunten zonder beschikbaarheidsgegevens opnemen"
+        },
+        "data_description": {
+          "scan_interval": "Hoe vaak Home Assistant de laadpuntgegevens vernieuwt.",
+          "search_radius": "Neem alleen openbare laadpunten binnen deze afstand op.",
+          "max_stations": "Beperk het aantal laadpunten en bijbehorende entiteiten.",
+          "provider": "De gegevensprovider voor het vinden van laadpunten en beschikbaarheid.",
+          "include_unknown": "Neem laadpunten op als de provider geen connectorbeschikbaarheid meldt."
         }
       }
+    }
+  },
+  "exceptions": {
+    "authentication_failed": {
+      "message": "De authenticatie bij de laadprovider is mislukt."
+    },
+    "invalid_config": {
+      "message": "De CurbCharge-configuratie is ongeldig."
+    },
+    "location_not_configured": {
+      "message": "De ingestelde zoeklocatie is niet beschikbaar."
+    },
+    "unsupported_provider": {
+      "message": "De ingestelde laadprovider wordt niet ondersteund."
     }
   },
   "selector": {
@@ -85,6 +144,9 @@
       },
       "total_connectors": {
         "name": "Totaal aantal connectoren"
+      },
+      "connector_group": {
+        "name": "{connector_type}-connectoren"
       },
       "maximum_charging_power": {
         "name": "Maximaal laadvermogen"

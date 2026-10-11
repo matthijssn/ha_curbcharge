@@ -9,6 +9,8 @@ from .coordinator import CurbChargeCoordinator
 from .entity import CurbChargeStationEntity, setup_dynamic_station_entities
 from .models import ChargingStation
 
+PARALLEL_UPDATES = 0
+
 
 async def async_setup_entry(
     hass: HomeAssistant,

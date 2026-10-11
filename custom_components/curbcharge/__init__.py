@@ -1,6 +1,7 @@
 """CurbCharge Home Assistant integration."""
 
 import math
+from collections.abc import Mapping
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -44,7 +45,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
     location = _entry_location(hass, entry.data)
     if location is None:
         raise ConfigEntryNotReady(
-            "The configured charging search location is unavailable"
+            translation_domain=DOMAIN,
+            translation_key="location_not_configured",
         )
 
     options = {**entry.data, **entry.options}
@@ -63,13 +65,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
         or scan_interval < MIN_SCAN_INTERVAL_MINUTES
         or not isinstance(include_unknown, bool)
     ):
-        raise ConfigEntryNotReady("CurbCharge configuration is invalid")
+        raise ConfigEntryNotReady(
+            translation_domain=DOMAIN,
+            translation_key="invalid_config",
+        )
 
     try:
         provider = create_provider(provider_id, async_get_clientsession(hass))
     except ChargingProviderError as err:
         raise ConfigEntryNotReady(
-            "The configured charging provider is unsupported"
+            translation_domain=DOMAIN,
+            translation_key="unsupported_provider",
         ) from err
 
     coordinator = CurbChargeCoordinator(
@@ -102,9 +108,11 @@ async def _async_options_updated(
 
 
 def _entry_location(
-    hass: HomeAssistant, data: dict[str, Any]
+    hass: HomeAssistant, data: Mapping[str, Any]
 ) -> tuple[float, float] | None:
     is_home_location = data.get(CONF_LOCATION_SOURCE) == LOCATION_HOME
+    latitude: object
+    longitude: object
     if is_home_location:
         latitude = hass.config.latitude
         longitude = hass.config.longitude

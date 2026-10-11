@@ -1,5 +1,6 @@
 """Tests for coordinated data updates and station retention."""
 
+import logging
 from datetime import timedelta
 
 import pytest
@@ -114,3 +115,36 @@ async def test_unknown_status_option_excludes_stations_without_availability(
     assert sample_stations[0].provider_id in coordinator.data
     assert sample_stations[1].provider_id in coordinator.data
     assert sample_stations[2].provider_id not in coordinator.data
+
+
+@pytest.mark.asyncio
+async def test_update_failure_logs_once_until_provider_recovers(
+    hass, sample_stations, caplog
+):
+    provider = FakeProvider(
+        [
+            ProviderConnectionError("offline"),
+            ProviderConnectionError("offline"),
+            (sample_stations[0],),
+            ProviderConnectionError("offline"),
+        ]
+    )
+    coordinator = _coordinator(hass, provider)
+
+    with caplog.at_level(logging.INFO):
+        for _ in range(2):
+            with pytest.raises(UpdateFailed):
+                await coordinator._async_update_data()
+        await coordinator._async_update_data()
+        with pytest.raises(UpdateFailed):
+            await coordinator._async_update_data()
+
+    assert [
+        record.message for record in caplog.records if record.levelno == logging.WARNING
+    ] == [
+        "CurbCharge data update failed (ProviderConnectionError)",
+        "CurbCharge data update failed (ProviderConnectionError)",
+    ]
+    assert [
+        record.message for record in caplog.records if record.levelno == logging.INFO
+    ] == ["CurbCharge data updates have recovered"]

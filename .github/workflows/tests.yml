@@ -10,9 +10,46 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.13"
-      - run: pip install pytest pytest-homeassistant-custom-component ruff
+      - run: pip install pytest pytest-homeassistant-custom-component pytest-cov ruff mypy
       - run: ruff check .
-      - run: pytest
+      - run: ruff format --check .
+      - name: Test with coverage threshold
+        run: pytest --cov=custom_components/curbcharge --cov-report=term-missing --cov-report=json:coverage.json --cov-fail-under=96
+      - name: Reject coverage decreases
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]]; then
+            echo "No prior commit is available for coverage comparison."
+            exit 0
+          fi
+          git worktree add --detach "$RUNNER_TEMP/base" "$BASE_SHA"
+          (
+            cd "$RUNNER_TEMP/base"
+            pytest --cov=custom_components/curbcharge --cov-report=json:"$RUNNER_TEMP/coverage-base.json"
+          )
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          base = json.loads(
+              Path(os.environ["RUNNER_TEMP"], "coverage-base.json").read_text()
+          )["totals"]["percent_covered"]
+          current = json.loads(Path("coverage.json").read_text())["totals"][
+              "percent_covered"
+          ]
+          if current < base:
+              raise SystemExit(
+                  f"Coverage decreased from {base:.2f}% to {current:.2f}%"
+              )
+          print(f"Coverage did not decrease ({base:.2f}% -> {current:.2f}%).")
+          PY
+      - run: mypy
