@@ -11,7 +11,6 @@ import zlib
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal, InvalidOperation
-from email.utils import parsedate_to_datetime
 from typing import Literal, TypedDict, cast
 from urllib.parse import urljoin, urlsplit
 
@@ -43,6 +42,7 @@ from .provider import (
     ProviderRateLimitError,
     UnsupportedLocationError,
     UnsupportedProviderError,
+    retry_after_seconds,
 )
 
 _EARTH_RADIUS_M = 6_371_000
@@ -310,7 +310,7 @@ class NdwDotNlProvider(BaseChargingProvider):
                 if response.status == 429:
                     raise ProviderRateLimitError(
                         "NDW DOT-NL rate limit reached",
-                        _retry_after_seconds(response.headers.get("Retry-After")),
+                        retry_after_seconds(response.headers.get("Retry-After")),
                     )
                 if response.status < 200 or response.status >= 300:
                     raise ProviderConnectionError(
@@ -847,21 +847,6 @@ def _string_mapping(value: object, field: str) -> dict[str, object]:
             raise InvalidProviderResponseError(f"NDW DOT-NL returned invalid {field}")
         result[key] = item
     return result
-
-
-def _retry_after_seconds(value: str | None) -> int | None:
-    if value is None:
-        return None
-    try:
-        return max(0, int(value))
-    except ValueError:
-        try:
-            retry_at = parsedate_to_datetime(value)
-        except (TypeError, ValueError):
-            return None
-        if retry_at.tzinfo is None:
-            retry_at = retry_at.replace(tzinfo=UTC)
-        return max(0, math.ceil((retry_at - datetime.now(UTC)).total_seconds()))
 
 
 def _next_page_url(link_header: str | None, current_url: str) -> str | None:
