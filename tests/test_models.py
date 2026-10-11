@@ -4,6 +4,7 @@ from dataclasses import replace
 
 from custom_components.curbcharge.models import (
     ChargingConnector,
+    ChargingLocation,
     ConnectorStatus,
 )
 
@@ -87,3 +88,21 @@ def test_station_with_an_empty_report_has_zero_counts(sample_stations):
     assert station.reserved_connectors == 0
     assert station.out_of_service_connectors == 0
     assert station.unknown_connectors == 0
+
+
+def test_location_model_is_country_and_provider_independent():
+    location = ChargingLocation(
+        provider_id="site-123",
+        provider="example_provider",
+        country_code="BE",
+        name="Example site",
+        latitude=50.85,
+        longitude=4.35,
+        address=None,
+        operator="Example CPO",
+        last_updated=None,
+    )
+
+    assert location.provider_id == "site-123"
+    assert location.country_code == "BE"
+    assert location.provider == "example_provider"
