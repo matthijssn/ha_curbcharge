@@ -29,6 +29,7 @@ from custom_components.curbcharge.provider import (
     ProviderRateLimitError,
     UnsupportedLocationError,
     UnsupportedProviderError,
+    retry_after_seconds,
 )
 
 
@@ -494,7 +495,7 @@ def test_bounding_box_rejects_out_of_bounds_searches():
     ],
 )
 def test_retry_after_accepts_delta_seconds_or_http_dates(value, expected):
-    assert api._retry_after_seconds(value) == expected
+    assert retry_after_seconds(value) == expected
 
 
 def test_pagination_links_must_remain_on_the_provider_endpoint():
