@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  validate:
+  hassfest:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7.0.1
