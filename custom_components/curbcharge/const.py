@@ -18,6 +18,7 @@ LOCATION_HOME = "home"
 LOCATION_MANUAL = "manual"
 
 PROVIDER_NDW_DOT_NL = "ndw_dot_nl"
+COUNTRY_NL = "NL"
 PROVIDER_NAME = "NDW DOT-NL"
 PROVIDER_API_URL = (
     "https://dotnl.ndw.nu/api/rest/geojson/dynamic-road-status/"

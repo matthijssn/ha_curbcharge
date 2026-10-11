@@ -112,6 +112,13 @@ async def test_valid_empty_response_is_empty(sample_geojson):
     assert await provider.async_get_stations(52.0, 5.0, 500, 10) == ()
 
 
+def test_ndw_provider_exposes_stable_country_identity():
+    provider = NdwDotNlProvider(FakeSession([]))
+
+    assert provider.provider_id == "ndw_dot_nl"
+    assert provider.country_code == "NL"
+
+
 @pytest.mark.asyncio
 async def test_pagination_follows_the_documented_next_link(sample_geojson):
     features = sample_geojson["features"]

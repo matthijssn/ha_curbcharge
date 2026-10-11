@@ -18,6 +18,7 @@ from urllib.parse import urljoin, urlsplit
 import aiohttp
 
 from .const import (
+    COUNTRY_NL,
     GEOJSON_REQUEST_TIMEOUT,
     MAX_BBOX_AREA_DEG2,
     PROVIDER_API_URL,
@@ -96,6 +97,16 @@ class NdwDotNlProvider(BaseChargingProvider):
         self._tariff_cache: dict[str, ChargingTariff | None] = {}
         self._cached_tariff_ids: set[str] = set()
         self._tariff_cache_updated: datetime | None = None
+
+    @property
+    def provider_id(self) -> str:
+        """Return the stable NDW DOT-NL provider identifier."""
+        return PROVIDER_NDW_DOT_NL
+
+    @property
+    def country_code(self) -> str:
+        """Return the country served by NDW DOT-NL."""
+        return COUNTRY_NL
 
     async def async_validate_connection(
         self, latitude: float, longitude: float, radius_m: int
