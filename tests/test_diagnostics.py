@@ -48,6 +48,7 @@ async def test_diagnostics_redact_coordinates_and_addresses(hass, sample_station
             CONF_LONGITUDE: 5.654321,
             CONF_API_TOKEN: "diagnostic-secret-token",
         },
+        options={CONF_API_TOKEN: "options-secret-token"},
     )
     entry.runtime_data = coordinator
 
@@ -58,6 +59,7 @@ async def test_diagnostics_redact_coordinates_and_addresses(hass, sample_station
     assert "5.654321" not in serialized
     assert "Teststraat 1" not in serialized
     assert "diagnostic-secret-token" not in serialized
+    assert "options-secret-token" not in serialized
     assert diagnostics["provider"] == "NDW DOT-NL"
     assert diagnostics["provider_id"] == "ndw_dot_nl"
     assert diagnostics["country_code"] == "NL"

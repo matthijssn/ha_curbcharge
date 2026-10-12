@@ -265,7 +265,30 @@ async def test_reauth_replaces_belgium_token_and_preserves_unique_id(hass, monke
     assert result["reason"] == "reauth_successful"
     assert entry.data[CONF_API_TOKEN] == "replacement-token"
     assert entry.unique_id == location_id
+    assert hass.config_entries.async_entries(DOMAIN) == [entry]
     assert provider.validation_calls == [(50.85, 4.35, 500)]
+
+
+@pytest.mark.asyncio
+async def test_cancelled_reauth_keeps_existing_token(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="belgium-search-area",
+        data={
+            CONF_PROVIDER: PROVIDER_ECO_MOVEMENT_BE,
+            CONF_API_TOKEN: "old-token",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reauth", "entry_id": entry.entry_id},
+    )
+    hass.config_entries.flow.async_abort(result["flow_id"])
+
+    assert entry.data[CONF_API_TOKEN] == "old-token"
+    assert hass.config_entries.async_entries(DOMAIN) == [entry]
 
 
 @pytest.mark.asyncio
