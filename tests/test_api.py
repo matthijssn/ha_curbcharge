@@ -690,6 +690,23 @@ def test_tariff_parser_preserves_unavailable_restriction_reasons(
     assert tariff.status is expected_status
 
 
+@pytest.mark.parametrize("invalid_date", [123, "not-a-date", "20260115"])
+def test_tariff_parser_rejects_invalid_restriction_dates(invalid_date):
+    with pytest.raises(InvalidProviderResponseError):
+        _parse_tariff(
+            {
+                "currency": "EUR",
+                "elements": [
+                    {
+                        "restrictions": {"start_date": invalid_date},
+                        "price_components": [],
+                    }
+                ],
+            },
+            now=datetime(2026, 1, 15, 12, tzinfo=UTC),
+        )
+
+
 @pytest.mark.asyncio
 async def test_tariff_cache_avoids_refetch_and_preserves_unknown_prices(caplog):
     cached = ChargingTariff("EUR", Decimal("0.2"), None, None, None, "NDW")
@@ -776,6 +793,39 @@ def test_station_tariff_remains_unknown_when_connector_groups_differ(sample_stat
     assert [
         connector.tariffs[0].price_per_kwh for connector in resolved.connectors
     ] == [Decimal("0.2"), Decimal("0.3")]
+
+
+@pytest.mark.parametrize(
+    "status",
+    [TariffStatus.CONDITIONAL, TariffStatus.INACTIVE, TariffStatus.INCOMPLETE],
+)
+def test_connector_tariff_status_preserves_unresolved_reason(sample_stations, status):
+    station = sample_stations[0]
+    connector = replace(station.connectors[0], tariff_ids=("restricted",))
+    station = replace(station, connectors=(connector,))
+    tariff = ChargingTariff("EUR", None, None, None, None, "NDW DOT-NL", status=status)
+
+    resolved = _with_station_tariff(station, {"restricted": tariff})
+
+    assert resolved.tariff is None
+    assert resolved.tariff_status is status
+    assert resolved.connectors[0].tariff_status is status
+
+
+def test_connector_with_conflicting_tariffs_is_ambiguous(sample_stations):
+    station = sample_stations[0]
+    connector = replace(station.connectors[0], tariff_ids=("first", "second"))
+    station = replace(station, connectors=(connector,))
+    tariffs = {
+        "first": ChargingTariff("EUR", Decimal("0.2"), None, None, None, "NDW"),
+        "second": ChargingTariff("EUR", Decimal("0.3"), None, None, None, "NDW"),
+    }
+
+    resolved = _with_station_tariff(station, tariffs)
+
+    assert resolved.tariff is None
+    assert resolved.tariff_status is TariffStatus.AMBIGUOUS
+    assert resolved.connectors[0].tariff_status is TariffStatus.AMBIGUOUS
 
 
 def test_provider_factory_rejects_unimplemented_providers():
