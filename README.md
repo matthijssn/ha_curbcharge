@@ -5,6 +5,14 @@ manually configured location. It creates one device per charging point and
 reports provider-supplied availability, connector counts, power, distance,
 operator, tariff data when unambiguous, and a best-nearby recommendation.
 
+## Requirements
+
+CurbCharge requires Home Assistant 2024.12.0 or newer; this is the minimum
+declared in `hacs.json`. Core 2024.12.0 provides `ConfigEntry.runtime_data` and
+requires Python 3.12 or newer, matching the integration's APIs and Python
+syntax. CI runs on Python 3.13 with the current Home Assistant test package; it
+does not pin the test suite to Core 2024.12.0.
+
 ## Data source and coverage
 
 The first provider is the Dutch [NDW DOT-NL platform][dotnl], which publishes
@@ -90,11 +98,15 @@ directory at `custom_components/curbcharge`, then restart Home Assistant.
 ## Lovelace card
 
 The single-station card is bundled with the integration; it is not a separate
-HACS plugin. Copy
-`custom_components/curbcharge/www/curbcharge-card.js` into the Home Assistant
-configuration directory's `www` folder (create the folder if needed). In
+HACS plugin. HACS installs it alongside the integration but does not serve it
+as a dashboard resource. Copy
+`custom_components/curbcharge/www/curbcharge-card.js` to
+`<config>/www/curbcharge-card.js`; for Home Assistant OS, use
+`/config/www/curbcharge-card.js`.
+If `www` does not exist yet, create it and restart Home Assistant. In
 **Settings → Dashboards → Resources**, add `/local/curbcharge-card.js` as a
-JavaScript module.
+JavaScript module. Opening that URL on the Home Assistant host should return
+the JavaScript file.
 
 Add the card to a dashboard and set `entity` to the station's **Status summary**
 sensor:
@@ -103,6 +115,13 @@ sensor:
 type: custom:curbcharge-card
 entity: sensor.your_station_status_summary
 ```
+
+The card reads only that Home Assistant entity; it makes no provider requests.
+It displays the station name, availability, available/occupied/unavailable/total
+connector counts, maximum power, price when known, distance, open/closed status,
+the provider update time, and the last successful integration update. Unknown
+values remain unknown, and unavailable station data is shown as unavailable.
+Labels follow the Home Assistant language in English, Dutch, French, or German.
 
 ## Configuration
 
