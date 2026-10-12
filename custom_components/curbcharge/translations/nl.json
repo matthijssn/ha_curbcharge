@@ -58,12 +58,33 @@
           "max_stations": "Beperk het aantal laadpunten en bijbehorende entiteiten.",
           "provider": "De gegevensprovider voor het vinden van laadpunten en beschikbaarheid."
         }
+      },
+      "belgium_credentials": {
+        "title": "Verbinden met Eco-Movement België",
+        "description": "Voer de API-token in die Eco-Movement aan u heeft verstrekt. De token wordt in deze integratie opgeslagen en in diagnostiek afgeschermd.",
+        "data": {
+          "api_token": "Eco-Movement API-token"
+        },
+        "data_description": {
+          "api_token": "Gebruik alleen een token waarvoor u toestemming heeft. Deel deze niet in meldingen."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Eco-Movement-inloggegevens wijzigen",
+        "description": "Voer een vervangende API-token in die Eco-Movement aan u heeft verstrekt.",
+        "data": {
+          "api_token": "Eco-Movement API-token"
+        },
+        "data_description": {
+          "api_token": "De token wordt in deze integratie opgeslagen en in diagnostiek afgeschermd."
+        }
       }
     },
     "error": {
       "auth": "De provider heeft de authenticatie geweigerd.",
       "cannot_connect": "Kan geen verbinding maken met de laadprovider.",
       "invalid_location": "Voer geldige coördinaten en een ondersteund zoekgebied in.",
+      "invalid_api_token": "Voer een niet-lege, afdrukbare ASCII-API-token in.",
       "invalid_response": "De provider heeft gegevens in een onverwacht formaat geretourneerd.",
       "location_not_configured": "De thuiscoördinaten zijn niet ingesteld in Home Assistant.",
       "rate_limited": "De provider beperkt het aantal verzoeken. Probeer het later opnieuw.",
@@ -72,7 +93,8 @@
     "abort": {
       "already_configured": "Deze provider en zoeklocatie zijn al ingesteld.",
       "location_not_configured": "De zoeklocatie is niet ingesteld.",
-      "reconfigure_successful": "De zoeklocatie is bijgewerkt."
+      "reconfigure_successful": "De zoeklocatie is bijgewerkt.",
+      "reauth_successful": "De Eco-Movement-inloggegevens zijn bijgewerkt."
     }
   },
   "options": {
@@ -119,7 +141,8 @@
     },
     "provider": {
       "options": {
-        "ndw_dot_nl": "NDW DOT-NL"
+        "ndw_dot_nl": "NDW DOT-NL",
+        "eco_movement_be": "Eco-Movement België (preview)"
       }
     }
   },

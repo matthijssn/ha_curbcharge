@@ -6,6 +6,7 @@ import asyncio
 import copy
 import json
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -86,18 +87,17 @@ def _locations_document(
     number_of_connectors: int | None = 2,
     external_evse_id: str | None = "BE*EXAMPLE*1",
 ) -> dict[str, Any]:
-    point: dict[str, Any] = {
-        "idG": "evse-internal-1",
-        "lastUpdated": "2026-10-11T12:00:00+02:00",
-        "numberOfConnectors": number_of_connectors,
-        "connector": [
-            {
-                "connectorType": {"value": "iec62196T2"},
-                "maxPowerAtSocket": 22000,
-            },
-            {"connectorType": {"value": "chademo"}, "maxPowerAtSocket": 50000},
-        ],
-    }
+    document = json.loads(
+        (
+            Path(__file__).parent / "fixtures" / "belgium_locations_example.json"
+        ).read_text(encoding="utf-8")
+    )
+    point = document["payload"]["aegiEnergyInfrastructureTablePublication"][
+        "energyInfrastructureTable"
+    ][0]["energyInfrastructureSite"][0]["energyInfrastructureStation"][0][
+        "refillPoint"
+    ][0]["aegiElectricChargingPoint"]
+    point["numberOfConnectors"] = number_of_connectors
     if external_evse_id is not None:
         point["externalIdentifier"] = [
             {
@@ -108,66 +108,9 @@ def _locations_document(
                 },
             }
         ]
-    site = {
-        "idG": "site-1",
-        "lastUpdated": "2026-10-11T11:00:00+02:00",
-        "locationReference": {
-            "locAreaLocation": {
-                "coordinatesForDisplay": {"latitude": 50.85, "longitude": 4.35},
-                "locLocationExtensionG": {
-                    "FacilityLocation": {
-                        "address": {
-                            "countryCode": "BE",
-                            "postcode": "1000",
-                            "city": {"values": [{"lang": "en", "value": "Brussels"}]},
-                            "addressLine": [
-                                {
-                                    "order": 0,
-                                    "type": {"value": "street"},
-                                    "text": {
-                                        "values": [
-                                            {"lang": "en", "value": "Main Street"}
-                                        ]
-                                    },
-                                },
-                                {
-                                    "order": 1,
-                                    "type": {"value": "houseNumber"},
-                                    "text": {"values": [{"lang": "en", "value": "1"}]},
-                                },
-                            ],
-                        }
-                    }
-                },
-            }
-        },
-        "operator": {
-            "afacAnOrganisation": {
-                "name": {"values": [{"lang": "en", "value": "Example CPO"}]}
-            }
-        },
-        "energyInfrastructureStation": [
-            {
-                "idG": "station-1",
-                "locationReference": {
-                    "locPointLocation": {
-                        "coordinatesForDisplay": {
-                            "latitude": 50.85,
-                            "longitude": 4.35,
-                        }
-                    }
-                },
-                "refillPoint": [{"aegiElectricChargingPoint": point}],
-            }
-        ],
-    }
-    return {
-        "payload": {
-            "aegiEnergyInfrastructureTablePublication": {
-                "energyInfrastructureTable": [{"energyInfrastructureSite": [site]}]
-            }
-        }
-    }
+    else:
+        point.pop("externalIdentifier", None)
+    return document
 
 
 def _status_document(
@@ -177,43 +120,28 @@ def _status_document(
     currency: str | None = "EUR",
     evse_id: str = "evse-internal-1",
 ) -> dict[str, Any]:
-    point_status: dict[str, Any] = {
-        "reference": {"idG": evse_id},
-        "lastUpdated": "2026-10-11T12:01:00+02:00",
-        "status": {"value": status},
-    }
+    document = json.loads(
+        (Path(__file__).parent / "fixtures" / "belgium_status_example.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    point_status = document["messageContainer"]["payload"][0][
+        "aegiEnergyInfrastructureStatusPublication"
+    ]["energyInfrastructureSiteStatus"][0]["energyInfrastructureStationStatus"][0][
+        "refillPointStatus"
+    ][0]["aegiElectricChargingPointStatus"]
+    point_status["reference"]["idG"] = evse_id
+    point_status["status"]["value"] = status
     if price is not None:
-        update: dict[str, Any] = {
-            "energyPrice": [{"priceType": {"value": "pricePerKWh"}, "value": price}]
-        }
+        update = point_status["energyRateUpdate"][0]
+        update["energyPrice"][0]["value"] = price
         if currency is not None:
             update["applicableCurrency"] = [currency]
-        point_status["energyRateUpdate"] = [update]
-    return {
-        "messageContainer": {
-            "payload": [
-                {
-                    "aegiEnergyInfrastructureStatusPublication": {
-                        "energyInfrastructureSiteStatus": [
-                            {
-                                "energyInfrastructureStationStatus": [
-                                    {
-                                        "refillPointStatus": [
-                                            {
-                                                "aegiElectricChargingPointStatus": (
-                                                    point_status
-                                                )
-                                            }
-                                        ]
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                }
-            ]
-        }
-    }
+        else:
+            update.pop("applicableCurrency", None)
+    else:
+        point_status.pop("energyRateUpdate", None)
+    return document
 
 
 @pytest.mark.asyncio

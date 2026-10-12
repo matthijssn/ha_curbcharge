@@ -1,0 +1,193 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "CurbCharge einrichten",
+        "description": "Wählen Sie aus, wie CurbCharge den Suchstandort bestimmt.",
+        "data": {
+          "location_source": "Standortquelle"
+        },
+        "data_description": {
+          "location_source": "Verwenden Sie den Home-Assistant-Standort oder geben Sie Koordinaten für diese Suche ein."
+        }
+      },
+      "reconfigure": {
+        "title": "Suchgebiet ändern",
+        "description": "Wählen Sie den aktuellen Home-Assistant-Standort oder geben Sie neue Koordinaten ein.",
+        "data": {
+          "location_source": "Standortquelle"
+        },
+        "data_description": {
+          "location_source": "Eine Änderung des Suchgebiets kann die enthaltenen Ladestationen ändern."
+        }
+      },
+      "reconfigure_manual_location": {
+        "title": "Neuen Suchstandort eingeben",
+        "description": "CurbCharge prüft den Anbieter, bevor dieser Standort gespeichert wird.",
+        "data": {
+          "latitude": "Breitengrad",
+          "longitude": "Längengrad"
+        },
+        "data_description": {
+          "latitude": "Breitengrad des Mittelpunkts des Ladestations-Suchgebiets.",
+          "longitude": "Längengrad des Mittelpunkts des Ladestations-Suchgebiets."
+        }
+      },
+      "manual_location": {
+        "title": "Suchstandort eingeben",
+        "description": "Koordinaten werden nur gespeichert, wenn Sie einen manuellen Standort auswählen.",
+        "data": {
+          "latitude": "Breitengrad",
+          "longitude": "Längengrad"
+        },
+        "data_description": {
+          "latitude": "Breitengrad des Mittelpunkts des Ladestations-Suchgebiets.",
+          "longitude": "Längengrad des Mittelpunkts des Ladestations-Suchgebiets."
+        }
+      },
+      "station_options": {
+        "title": "Ladestationen in der Nähe auswählen",
+        "description": "CurbCharge prüft die Verbindung zum Anbieter, bevor der Eintrag erstellt wird.",
+        "data": {
+          "search_radius": "Suchradius (m)",
+          "max_stations": "Maximale Anzahl Ladestationen",
+          "provider": "Anbieter"
+        },
+        "data_description": {
+          "search_radius": "Nur öffentliche Ladestationen innerhalb dieses Radius einschließen.",
+          "max_stations": "Die Anzahl der Ladestationen und zugehörigen Entitäten begrenzen.",
+          "provider": "Datenanbieter zum Ermitteln von Ladestationen und ihrer Verfügbarkeit."
+        }
+      },
+      "belgium_credentials": {
+        "title": "Mit Eco-Movement Belgien verbinden",
+        "description": "Geben Sie das von Eco-Movement ausgestellte API-Token ein. Es wird in diesem Konfigurationseintrag gespeichert und in Diagnosedaten geschwärzt.",
+        "data": {
+          "api_token": "Eco-Movement-API-Token"
+        },
+        "data_description": {
+          "api_token": "Verwenden Sie nur ein Token, zu dessen Nutzung Sie berechtigt sind. Geben Sie es nicht in Fehlerberichten weiter."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Eco-Movement-Zugangsdaten aktualisieren",
+        "description": "Geben Sie ein neues, von Eco-Movement ausgestelltes API-Token ein.",
+        "data": {
+          "api_token": "Eco-Movement-API-Token"
+        },
+        "data_description": {
+          "api_token": "Das Token wird in diesem Konfigurationseintrag gespeichert und in Diagnosedaten geschwärzt."
+        }
+      }
+    },
+    "error": {
+      "auth": "Der Anbieter hat die Authentifizierung abgelehnt.",
+      "cannot_connect": "Verbindung zum Ladestationsanbieter nicht möglich.",
+      "invalid_location": "Geben Sie gültige Koordinaten und ein unterstütztes Suchgebiet ein.",
+      "invalid_api_token": "Geben Sie ein nicht leeres, druckbares ASCII-API-Token ein.",
+      "invalid_response": "Der Anbieter hat Daten in einem unerwarteten Format zurückgegeben.",
+      "location_not_configured": "Die Home-Assistant-Standortkoordinaten sind nicht konfiguriert.",
+      "rate_limited": "Der Anbieter begrenzt die Anfragen. Versuchen Sie es später erneut.",
+      "unsupported_provider": "Der ausgewählte Anbieter wird nicht unterstützt."
+    },
+    "abort": {
+      "already_configured": "Dieser Anbieter und dieses Suchgebiet sind bereits konfiguriert.",
+      "location_not_configured": "Der Suchstandort ist nicht konfiguriert.",
+      "reconfigure_successful": "Der Suchstandort wurde aktualisiert.",
+      "reauth_successful": "Die Eco-Movement-Zugangsdaten wurden aktualisiert."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "CurbCharge-Optionen",
+        "data": {
+          "scan_interval": "Aktualisierungsintervall (Minuten)",
+          "search_radius": "Suchradius (m)",
+          "max_stations": "Maximale Anzahl Ladestationen",
+          "provider": "Anbieter",
+          "include_unknown": "Ladestationen ohne Verfügbarkeitsdaten einschließen"
+        },
+        "data_description": {
+          "scan_interval": "Wie oft Home Assistant die Ladestationsdaten aktualisiert.",
+          "search_radius": "Nur öffentliche Ladestationen innerhalb dieses Radius einschließen.",
+          "max_stations": "Die Anzahl der Ladestationen und zugehörigen Entitäten begrenzen.",
+          "provider": "Datenanbieter zum Ermitteln von Ladestationen und ihrer Verfügbarkeit.",
+          "include_unknown": "Ladestationen einschließen, wenn der Anbieter keine Verfügbarkeit meldet."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "authentication_failed": {
+      "message": "Die Authentifizierung beim Ladestationsanbieter ist fehlgeschlagen."
+    },
+    "invalid_config": {
+      "message": "Die CurbCharge-Konfiguration ist ungültig."
+    },
+    "location_not_configured": {
+      "message": "Der konfigurierte Ladestations-Suchstandort ist nicht verfügbar."
+    },
+    "unsupported_provider": {
+      "message": "Der konfigurierte Ladestationsanbieter wird nicht unterstützt."
+    }
+  },
+  "selector": {
+    "location_source": {
+      "options": {
+        "home": "Home-Assistant-Standortkoordinaten",
+        "manual": "Manueller Breiten- und Längengrad"
+      }
+    },
+    "provider": {
+      "options": {
+        "ndw_dot_nl": "NDW DOT-NL",
+        "eco_movement_be": "Eco-Movement Belgien (Vorschau)"
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "available": {
+        "name": "Verfügbar"
+      }
+    },
+    "sensor": {
+      "available_connectors": {
+        "name": "Verfügbare Anschlüsse"
+      },
+      "occupied_connectors": {
+        "name": "Belegte Anschlüsse"
+      },
+      "unavailable_connectors": {
+        "name": "Nicht verfügbare Anschlüsse"
+      },
+      "total_connectors": {
+        "name": "Anschlüsse gesamt"
+      },
+      "connector_group": {
+        "name": "{connector_type}-Anschlüsse"
+      },
+      "maximum_charging_power": {
+        "name": "Maximale Ladeleistung"
+      },
+      "price_per_kwh": {
+        "name": "Preis pro kWh"
+      },
+      "distance": {
+        "name": "Entfernung"
+      },
+      "status_summary": {
+        "name": "Statusübersicht",
+        "state": {
+          "available": "Verfügbar",
+          "none_available": "Keine verfügbar",
+          "unknown": "Unbekannt"
+        }
+      },
+      "best_nearby_charger": {
+        "name": "Beste Ladestation in der Nähe"
+      }
+    }
+  }
+}

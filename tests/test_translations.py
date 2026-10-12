@@ -25,13 +25,15 @@ def test_english_translation_matches_strings():
     assert source == english
 
 
-def test_dutch_translation_has_the_same_keys_as_english():
+def test_translations_have_the_same_keys_as_english():
     integration = Path(__file__).parent.parent / "custom_components" / "curbcharge"
     english = json.loads(
         (integration / "translations" / "en.json").read_text(encoding="utf-8")
     )
-    dutch = json.loads(
-        (integration / "translations" / "nl.json").read_text(encoding="utf-8")
-    )
-
-    assert _leaf_paths(english) == _leaf_paths(dutch)
+    for language in ("nl", "fr", "de"):
+        translated = json.loads(
+            (integration / "translations" / f"{language}.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert _leaf_paths(english) == _leaf_paths(translated)

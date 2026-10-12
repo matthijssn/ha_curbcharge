@@ -9,6 +9,7 @@ PLATFORMS = (Platform.BINARY_SENSOR, Platform.SENSOR)
 
 CONF_LOCATION_SOURCE = "location_source"
 CONF_PROVIDER = "provider"
+CONF_API_TOKEN = "api_token"
 CONF_SEARCH_RADIUS = "search_radius"
 CONF_MAX_STATIONS = "max_stations"
 CONF_SCAN_INTERVAL = "scan_interval"

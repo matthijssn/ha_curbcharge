@@ -9,6 +9,7 @@ from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.curbcharge.const import (
+    CONF_API_TOKEN,
     CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
     CONF_PROVIDER,
@@ -45,6 +46,7 @@ async def test_diagnostics_redact_coordinates_and_addresses(hass, sample_station
             CONF_MAX_STATIONS: 10,
             CONF_LATITUDE: 52.123456,
             CONF_LONGITUDE: 5.654321,
+            CONF_API_TOKEN: "diagnostic-secret-token",
         },
     )
     entry.runtime_data = coordinator
@@ -55,6 +57,7 @@ async def test_diagnostics_redact_coordinates_and_addresses(hass, sample_station
     assert "52.123456" not in serialized
     assert "5.654321" not in serialized
     assert "Teststraat 1" not in serialized
+    assert "diagnostic-secret-token" not in serialized
     assert diagnostics["provider"] == "NDW DOT-NL"
     assert diagnostics["provider_id"] == "ndw_dot_nl"
     assert diagnostics["country_code"] == "NL"

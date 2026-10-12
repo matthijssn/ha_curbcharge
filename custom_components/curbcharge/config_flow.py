@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any, cast
 
 import voluptuous as vol
@@ -20,7 +21,9 @@ else:
     from homeassistant.data_entry_flow import FlowResult
 
 from .api import create_provider
+from .belgium import is_valid_belgium_api_token
 from .const import (
+    CONF_API_TOKEN,
     CONF_INCLUDE_UNKNOWN,
     CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
@@ -39,6 +42,7 @@ from .const import (
     MIN_MAX_STATIONS,
     MIN_SCAN_INTERVAL_MINUTES,
     MIN_SEARCH_RADIUS_M,
+    PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NDW_DOT_NL,
 )
 from .provider import (
@@ -86,6 +90,17 @@ def manual_location_schema(
     )
 
 
+def belgium_credentials_schema() -> vol.Schema:
+    """Return a password field for the Belgium provider token."""
+    return vol.Schema(
+        {
+            vol.Required(CONF_API_TOKEN): selector.TextSelector(
+                selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+            )
+        }
+    )
+
+
 def station_options_schema(
     *,
     radius: int = DEFAULT_SEARCH_RADIUS_M,
@@ -116,7 +131,7 @@ def station_options_schema(
                 CONF_PROVIDER, default=PROVIDER_NDW_DOT_NL
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
-                    options=[PROVIDER_NDW_DOT_NL],
+                    options=[PROVIDER_NDW_DOT_NL, PROVIDER_ECO_MOVEMENT_BE],
                     mode=selector.SelectSelectorMode.DROPDOWN,
                     translation_key="provider",
                 )
@@ -127,6 +142,9 @@ def station_options_schema(
 
 def options_schema(defaults: dict[str, Any]) -> vol.Schema:
     """Return the editable runtime options schema."""
+    provider_id = defaults.get(CONF_PROVIDER, PROVIDER_NDW_DOT_NL)
+    if provider_id not in (PROVIDER_NDW_DOT_NL, PROVIDER_ECO_MOVEMENT_BE):
+        provider_id = PROVIDER_NDW_DOT_NL
     return vol.Schema(
         {
             vol.Required(
@@ -161,12 +179,9 @@ def options_schema(defaults: dict[str, Any]) -> vol.Schema:
                     mode=selector.NumberSelectorMode.BOX,
                 )
             ),
-            vol.Required(
-                CONF_PROVIDER,
-                default=defaults.get(CONF_PROVIDER, PROVIDER_NDW_DOT_NL),
-            ): selector.SelectSelector(
+            vol.Required(CONF_PROVIDER, default=provider_id): selector.SelectSelector(
                 selector.SelectSelectorConfig(
-                    options=[PROVIDER_NDW_DOT_NL],
+                    options=[provider_id],
                     mode=selector.SelectSelectorMode.DROPDOWN,
                     translation_key="provider",
                 )
@@ -205,6 +220,9 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._location_source: str | None = None
         self._latitude: float | None = None
         self._longitude: float | None = None
+        self._provider_id = PROVIDER_NDW_DOT_NL
+        self._search_radius = DEFAULT_SEARCH_RADIUS_M
+        self._max_stations = DEFAULT_MAX_STATIONS
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -226,6 +244,73 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return await self.async_step_manual_location()
 
         return _show_form(self, step_id="user", data_schema=_location_source_schema())
+
+    async def async_step_reauth(
+        self, _entry_data: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Ask for a replacement Belgium API token."""
+        provider_id = (
+            _entry_data.get(CONF_PROVIDER)
+            if _entry_data is not None
+            else self._get_reauth_entry().data.get(CONF_PROVIDER)
+        )
+        if provider_id != PROVIDER_ECO_MOVEMENT_BE:
+            return self.async_abort(reason="unsupported_provider")
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Validate and save a replacement Belgium API token."""
+        entry = self._get_reauth_entry()
+        if user_input is None:
+            return _show_form(
+                self,
+                step_id="reauth_confirm",
+                data_schema=belgium_credentials_schema(),
+            )
+
+        token = user_input[CONF_API_TOKEN]
+        if not is_valid_belgium_api_token(token):
+            return _show_form(
+                self,
+                step_id="reauth_confirm",
+                data_schema=belgium_credentials_schema(),
+                errors={"base": "invalid_api_token"},
+            )
+
+        options = {**entry.data, **entry.options}
+        provider_id = options.get(CONF_PROVIDER, PROVIDER_NDW_DOT_NL)
+        location = _entry_location(self.hass, entry.data)
+        if provider_id != PROVIDER_ECO_MOVEMENT_BE:
+            return self.async_abort(reason="unsupported_provider")
+        if location is None:
+            return self.async_abort(reason="location_not_configured")
+
+        try:
+            provider = create_provider(
+                provider_id, async_get_clientsession(self.hass), self.hass, token
+            )
+            await provider.async_validate_connection(
+                location[0],
+                location[1],
+                int(options.get(CONF_SEARCH_RADIUS, DEFAULT_SEARCH_RADIUS_M)),
+            )
+        except ChargingProviderError as err:
+            return _show_form(
+                self,
+                step_id="reauth_confirm",
+                data_schema=belgium_credentials_schema(),
+                errors={"base": _flow_error(err)},
+            )
+
+        data = dict(entry.data)
+        data[CONF_API_TOKEN] = token
+        return self.async_update_reload_and_abort(
+            entry,
+            data=data,
+            reason="reauth_successful",
+        )
 
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
@@ -310,7 +395,12 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         provider_id = options.get(CONF_PROVIDER, PROVIDER_NDW_DOT_NL)
         radius = int(options.get(CONF_SEARCH_RADIUS, DEFAULT_SEARCH_RADIUS_M))
         try:
-            provider = create_provider(provider_id, async_get_clientsession(self.hass))
+            provider = create_provider(
+                provider_id,
+                async_get_clientsession(self.hass),
+                self.hass,
+                entry.data.get(CONF_API_TOKEN),
+            )
             await provider.async_validate_connection(
                 self._latitude, self._longitude, radius
             )
@@ -388,42 +478,91 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             provider_id = user_input[CONF_PROVIDER]
             radius = int(user_input[CONF_SEARCH_RADIUS])
             max_stations = int(user_input[CONF_MAX_STATIONS])
+            self._provider_id = provider_id
+            self._search_radius = radius
+            self._max_stations = max_stations
             await self.async_set_unique_id(
                 _config_unique_id(provider_id, self._latitude, self._longitude, radius)
             )
             self._abort_if_unique_id_configured()
 
-            try:
-                provider = create_provider(
-                    provider_id, async_get_clientsession(self.hass)
-                )
-                await provider.async_validate_connection(
-                    self._latitude, self._longitude, radius
-                )
-            except ChargingProviderError as err:
-                return _show_form(
-                    self,
-                    step_id="station_options",
-                    data_schema=station_options_schema(
-                        radius=radius, max_stations=max_stations
-                    ),
-                    errors={"base": _flow_error(err)},
-                )
-
-            data: dict[str, Any] = {
-                CONF_LOCATION_SOURCE: self._location_source,
-                CONF_PROVIDER: provider_id,
-                CONF_SEARCH_RADIUS: radius,
-                CONF_MAX_STATIONS: max_stations,
-            }
-            if self._location_source == LOCATION_MANUAL:
-                data[CONF_LATITUDE] = self._latitude
-                data[CONF_LONGITUDE] = self._longitude
-            return self.async_create_entry(title="CurbCharge", data=data)
+            if provider_id == PROVIDER_ECO_MOVEMENT_BE:
+                return await self.async_step_belgium_credentials()
+            return await self._async_validate_and_create_entry()
 
         return _show_form(
             self, step_id="station_options", data_schema=station_options_schema()
         )
+
+    async def async_step_belgium_credentials(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Collect and validate the Belgium API token."""
+        if user_input is None:
+            return _show_form(
+                self,
+                step_id="belgium_credentials",
+                data_schema=belgium_credentials_schema(),
+            )
+
+        token = user_input[CONF_API_TOKEN]
+        if not is_valid_belgium_api_token(token):
+            return _show_form(
+                self,
+                step_id="belgium_credentials",
+                data_schema=belgium_credentials_schema(),
+                errors={"base": "invalid_api_token"},
+            )
+        return await self._async_validate_and_create_entry(token)
+
+    async def _async_validate_and_create_entry(
+        self, token: str | None = None
+    ) -> FlowResult:
+        """Validate the selected provider and create the config entry."""
+        assert self._latitude is not None
+        assert self._longitude is not None
+        assert self._location_source is not None
+
+        try:
+            provider = create_provider(
+                self._provider_id,
+                async_get_clientsession(self.hass),
+                self.hass,
+                token,
+            )
+            await provider.async_validate_connection(
+                self._latitude, self._longitude, self._search_radius
+            )
+        except ChargingProviderError as err:
+            if self._provider_id == PROVIDER_ECO_MOVEMENT_BE:
+                return _show_form(
+                    self,
+                    step_id="belgium_credentials",
+                    data_schema=belgium_credentials_schema(),
+                    errors={"base": _flow_error(err)},
+                )
+            return _show_form(
+                self,
+                step_id="station_options",
+                data_schema=station_options_schema(
+                    radius=self._search_radius,
+                    max_stations=self._max_stations,
+                ),
+                errors={"base": _flow_error(err)},
+            )
+
+        data: dict[str, Any] = {
+            CONF_LOCATION_SOURCE: self._location_source,
+            CONF_PROVIDER: self._provider_id,
+            CONF_SEARCH_RADIUS: self._search_radius,
+            CONF_MAX_STATIONS: self._max_stations,
+        }
+        if self._location_source == LOCATION_MANUAL:
+            data[CONF_LATITUDE] = self._latitude
+            data[CONF_LONGITUDE] = self._longitude
+        if token is not None:
+            data[CONF_API_TOKEN] = token
+        return self.async_create_entry(title="CurbCharge", data=data)
 
     @staticmethod
     @callback
@@ -484,6 +623,27 @@ def _home_location(hass: HomeAssistant) -> tuple[float, float] | None:
     longitude = float(longitude)
     if latitude == 0 and longitude == 0:
         return None
+    return (latitude, longitude) if _valid_coordinates(latitude, longitude) else None
+
+
+def _entry_location(
+    hass: HomeAssistant, data: Mapping[str, Any]
+) -> tuple[float, float] | None:
+    """Return the config entry's current home or manual search location."""
+    if data.get(CONF_LOCATION_SOURCE) == LOCATION_HOME:
+        return _home_location(hass)
+
+    latitude = data.get(CONF_LATITUDE)
+    longitude = data.get(CONF_LONGITUDE)
+    if (
+        not isinstance(latitude, (int, float))
+        or isinstance(latitude, bool)
+        or not isinstance(longitude, (int, float))
+        or isinstance(longitude, bool)
+    ):
+        return None
+    latitude = float(latitude)
+    longitude = float(longitude)
     return (latitude, longitude) if _valid_coordinates(latitude, longitude) else None
 
 

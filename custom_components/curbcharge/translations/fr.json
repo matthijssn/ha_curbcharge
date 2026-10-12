@@ -1,0 +1,193 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configurer CurbCharge",
+        "description": "Choisissez comment CurbCharge détermine la zone de recherche.",
+        "data": {
+          "location_source": "Source de localisation"
+        },
+        "data_description": {
+          "location_source": "Utilisez la position du domicile Home Assistant ou saisissez des coordonnées pour cette recherche."
+        }
+      },
+      "reconfigure": {
+        "title": "Modifier la zone de recherche",
+        "description": "Choisissez la position actuelle du domicile Home Assistant ou saisissez de nouvelles coordonnées.",
+        "data": {
+          "location_source": "Source de localisation"
+        },
+        "data_description": {
+          "location_source": "La modification de la zone de recherche peut changer les bornes incluses."
+        }
+      },
+      "reconfigure_manual_location": {
+        "title": "Saisir une nouvelle position",
+        "description": "CurbCharge vérifie le fournisseur avant d'enregistrer cette position.",
+        "data": {
+          "latitude": "Latitude",
+          "longitude": "Longitude"
+        },
+        "data_description": {
+          "latitude": "Latitude du centre de la zone de recherche des bornes.",
+          "longitude": "Longitude du centre de la zone de recherche des bornes."
+        }
+      },
+      "manual_location": {
+        "title": "Saisir une position de recherche",
+        "description": "Les coordonnées ne sont enregistrées que si vous choisissez une position manuelle.",
+        "data": {
+          "latitude": "Latitude",
+          "longitude": "Longitude"
+        },
+        "data_description": {
+          "latitude": "Latitude du centre de la zone de recherche des bornes.",
+          "longitude": "Longitude du centre de la zone de recherche des bornes."
+        }
+      },
+      "station_options": {
+        "title": "Choisir les bornes à proximité",
+        "description": "CurbCharge vérifie la connexion au fournisseur avant de créer l'entrée.",
+        "data": {
+          "search_radius": "Rayon de recherche (m)",
+          "max_stations": "Nombre maximal de bornes",
+          "provider": "Fournisseur"
+        },
+        "data_description": {
+          "search_radius": "Inclure uniquement les bornes publiques dans ce rayon.",
+          "max_stations": "Limiter le nombre de bornes et d'entités associées.",
+          "provider": "Fournisseur de données utilisé pour découvrir les bornes et leur disponibilité."
+        }
+      },
+      "belgium_credentials": {
+        "title": "Connexion à Eco-Movement Belgique",
+        "description": "Saisissez le jeton API qui vous a été délivré par Eco-Movement. Il est stocké dans cette entrée et masqué dans les diagnostics.",
+        "data": {
+          "api_token": "Jeton API Eco-Movement"
+        },
+        "data_description": {
+          "api_token": "Utilisez uniquement un jeton que vous êtes autorisé à utiliser. Ne le partagez pas dans les rapports de problème."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Mettre à jour les identifiants Eco-Movement",
+        "description": "Saisissez un nouveau jeton API délivré par Eco-Movement.",
+        "data": {
+          "api_token": "Jeton API Eco-Movement"
+        },
+        "data_description": {
+          "api_token": "Le jeton est stocké dans cette entrée et masqué dans les diagnostics."
+        }
+      }
+    },
+    "error": {
+      "auth": "Le fournisseur a refusé l'authentification.",
+      "cannot_connect": "Impossible de se connecter au fournisseur de données.",
+      "invalid_location": "Saisissez des coordonnées valides et une zone de recherche prise en charge.",
+      "invalid_api_token": "Saisissez un jeton API ASCII imprimable non vide.",
+      "invalid_response": "Le fournisseur a renvoyé des données dans un format inattendu.",
+      "location_not_configured": "Les coordonnées du domicile ne sont pas configurées dans Home Assistant.",
+      "rate_limited": "Le fournisseur limite le nombre de requêtes. Réessayez plus tard.",
+      "unsupported_provider": "Le fournisseur sélectionné n'est pas pris en charge."
+    },
+    "abort": {
+      "already_configured": "Ce fournisseur et cette zone de recherche sont déjà configurés.",
+      "location_not_configured": "La position de recherche n'est pas configurée.",
+      "reconfigure_successful": "La position de recherche a été mise à jour.",
+      "reauth_successful": "Les identifiants Eco-Movement ont été mis à jour."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options CurbCharge",
+        "data": {
+          "scan_interval": "Intervalle d'actualisation (minutes)",
+          "search_radius": "Rayon de recherche (m)",
+          "max_stations": "Nombre maximal de bornes",
+          "provider": "Fournisseur",
+          "include_unknown": "Inclure les bornes sans données de disponibilité"
+        },
+        "data_description": {
+          "scan_interval": "Fréquence d'actualisation des données des bornes par Home Assistant.",
+          "search_radius": "Inclure uniquement les bornes publiques dans ce rayon.",
+          "max_stations": "Limiter le nombre de bornes et d'entités associées.",
+          "provider": "Fournisseur de données utilisé pour découvrir les bornes et leur disponibilité.",
+          "include_unknown": "Inclure les bornes lorsque le fournisseur ne communique pas leur disponibilité."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "authentication_failed": {
+      "message": "L'authentification auprès du fournisseur de données a échoué."
+    },
+    "invalid_config": {
+      "message": "La configuration CurbCharge n'est pas valide."
+    },
+    "location_not_configured": {
+      "message": "La position de recherche configurée n'est pas disponible."
+    },
+    "unsupported_provider": {
+      "message": "Le fournisseur de données configuré n'est pas pris en charge."
+    }
+  },
+  "selector": {
+    "location_source": {
+      "options": {
+        "home": "Coordonnées du domicile Home Assistant",
+        "manual": "Latitude et longitude manuelles"
+      }
+    },
+    "provider": {
+      "options": {
+        "ndw_dot_nl": "NDW DOT-NL",
+        "eco_movement_be": "Eco-Movement Belgique (aperçu)"
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "available": {
+        "name": "Disponible"
+      }
+    },
+    "sensor": {
+      "available_connectors": {
+        "name": "Connecteurs disponibles"
+      },
+      "occupied_connectors": {
+        "name": "Connecteurs occupés"
+      },
+      "unavailable_connectors": {
+        "name": "Connecteurs indisponibles"
+      },
+      "total_connectors": {
+        "name": "Total des connecteurs"
+      },
+      "connector_group": {
+        "name": "Connecteurs {connector_type}"
+      },
+      "maximum_charging_power": {
+        "name": "Puissance de charge maximale"
+      },
+      "price_per_kwh": {
+        "name": "Prix par kWh"
+      },
+      "distance": {
+        "name": "Distance"
+      },
+      "status_summary": {
+        "name": "Résumé de l'état",
+        "state": {
+          "available": "Disponible",
+          "none_available": "Aucun disponible",
+          "unknown": "Inconnu"
+        }
+      },
+      "best_nearby_charger": {
+        "name": "Meilleure borne à proximité"
+      }
+    }
+  }
+}

@@ -15,12 +15,15 @@ from typing import Literal, TypedDict, cast
 from urllib.parse import urljoin, urlsplit
 
 import aiohttp
+from homeassistant.core import HomeAssistant
 
+from .belgium import create_belgium_provider
 from .const import (
     COUNTRY_NL,
     GEOJSON_REQUEST_TIMEOUT,
     MAX_BBOX_AREA_DEG2,
     PROVIDER_API_URL,
+    PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NAME,
     PROVIDER_NDW_DOT_NL,
     TARIFF_CACHE_TTL,
@@ -327,11 +330,16 @@ class NdwDotNlProvider(BaseChargingProvider):
 
 
 def create_provider(
-    provider_id: str, session: aiohttp.ClientSession
+    provider_id: str,
+    session: aiohttp.ClientSession,
+    hass: HomeAssistant | None = None,
+    token: str | None = None,
 ) -> BaseChargingProvider:
     """Return the requested implemented provider."""
     if provider_id == PROVIDER_NDW_DOT_NL:
         return NdwDotNlProvider(session)
+    if provider_id == PROVIDER_ECO_MOVEMENT_BE and hass is not None and token:
+        return create_belgium_provider(hass, session, token)
     raise UnsupportedProviderError("The configured charging provider is unsupported")
 
 
