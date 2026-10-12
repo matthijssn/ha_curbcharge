@@ -100,9 +100,7 @@ async def test_rate_limit_retry_after_extends_update_interval(hass):
 @pytest.mark.asyncio
 async def test_authentication_failure_does_not_log_provider_message(hass, caplog):
     token = "private-auth-token"
-    coordinator = _coordinator(
-        hass, FakeProvider([AuthenticationError(token)])
-    )
+    coordinator = _coordinator(hass, FakeProvider([AuthenticationError(token)]))
 
     with caplog.at_level(logging.WARNING):
         with pytest.raises(ConfigEntryAuthFailed):
