@@ -825,8 +825,7 @@ def _with_station_tariff(
     if not connectors:
         station_status = TariffStatus.NOT_REPORTED
     elif all(
-        connector.tariff_status is TariffStatus.AVAILABLE
-        for connector in connectors
+        connector.tariff_status is TariffStatus.AVAILABLE for connector in connectors
     ):
         group_tariffs = [connector.tariffs[0] for connector in connectors]
         if all(
