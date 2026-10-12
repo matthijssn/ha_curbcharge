@@ -732,8 +732,15 @@ def test_with_station_tariff_attaches_only_a_complete_matching_price(sample_stat
     missing = _with_station_tariff(station, {})
     assert missing.tariff is None
     assert missing.tariff_status is TariffStatus.MISSING
-    assert missing.connectors[0].tariff_status is TariffStatus.MISSING
-    assert missing.connectors[1].tariff_status is TariffStatus.NOT_REPORTED
+    assert any(
+        connector.tariff_ids and connector.tariff_status is TariffStatus.MISSING
+        for connector in missing.connectors
+    )
+    assert any(
+        not connector.tariff_ids
+        and connector.tariff_status is TariffStatus.NOT_REPORTED
+        for connector in missing.connectors
+    )
     assert (
         _with_station_tariff(replace(station, connectors=()), {}).tariff_status
         is TariffStatus.NOT_REPORTED
