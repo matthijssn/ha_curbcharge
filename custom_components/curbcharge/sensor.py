@@ -16,7 +16,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .coordinator import CurbChargeCoordinator
 from .entity import CurbChargeStationEntity, setup_dynamic_station_entities
-from .models import ChargingConnector, ChargingStation
+from .models import ChargingConnector, ChargingStation, ChargingTariff, TariffStatus
 
 PARALLEL_UPDATES = 0
 
@@ -180,6 +180,11 @@ class PricePerKwhSensor(CurbChargeStationEntity, SensorEntity):
             return None
         return float(station.tariff.price_per_kwh)
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        station = self.station
+        return {} if station is None else _tariff_attributes(station)
+
 
 class DistanceSensor(CurbChargeStationEntity, SensorEntity):
     """Distance to the configured search location."""
@@ -214,7 +219,7 @@ class StatusSummarySensor(CurbChargeStationEntity, SensorEntity):
         station = self.station
         if station is None:
             return {"provider_station_id": self._station_id}
-        return {
+        attributes = {
             "station_name": station.name,
             "available_connectors": station.available_connectors,
             "occupied_connectors": station.occupied_connectors,
@@ -228,21 +233,7 @@ class StatusSummarySensor(CurbChargeStationEntity, SensorEntity):
             "address": station.address,
             "distance_m": station.distance_m,
             "max_power_kw": station.max_power_kw,
-            "price_per_kwh": (
-                float(station.tariff.price_per_kwh)
-                if station.tariff and station.tariff.price_per_kwh is not None
-                else None
-            ),
-            "currency": station.tariff.currency if station.tariff else None,
-            "tariff_description": (
-                station.tariff.description if station.tariff else None
-            ),
-            "tariff_source": station.tariff.source if station.tariff else None,
-            "tariff_vat_percentage": (
-                float(station.tariff.vat_percentage)
-                if station.tariff and station.tariff.vat_percentage is not None
-                else None
-            ),
+            **_tariff_attributes(station),
             "latitude": station.latitude,
             "longitude": station.longitude,
             "provider": station.provider,
@@ -258,6 +249,94 @@ class StatusSummarySensor(CurbChargeStationEntity, SensorEntity):
                 station.evse_status.value if station.evse_status is not None else None
             ),
         }
+        if station.tariff is None and any(
+            connector.tariff_ids for connector in station.connectors
+        ):
+            attributes["connector_tariffs"] = [
+                _connector_tariff_attributes(connector)
+                for connector in station.connectors
+            ]
+        return attributes
+
+
+def _tariff_attributes(station: ChargingStation) -> dict[str, Any]:
+    """Return the station-level CPO tariff in a stable sensor attribute shape."""
+    tariff = station.tariff
+    tariff_ids = {
+        tariff_id for connector in station.connectors for tariff_id in connector.tariff_ids
+    }
+    if tariff is not None and tariff.tariff_id is not None:
+        tariff_ids.add(tariff.tariff_id)
+    return {
+        "price_per_kwh": _decimal_attribute(
+            tariff.price_per_kwh if tariff is not None else None
+        ),
+        "currency": tariff.currency if tariff is not None else None,
+        "tariff_description": tariff.description if tariff is not None else None,
+        "tariff_source": tariff.source if tariff is not None else None,
+        "tariff_vat_percentage": _decimal_attribute(
+            tariff.vat_percentage if tariff is not None else None
+        ),
+        "session_fee": _decimal_attribute(
+            tariff.session_fee if tariff is not None else None
+        ),
+        "price_per_minute": _decimal_attribute(
+            tariff.price_per_minute if tariff is not None else None
+        ),
+        "tariff_ids": sorted(tariff_ids),
+        "tariff_type": tariff.tariff_type if tariff is not None else None,
+        "tariff_status": _station_tariff_status(station).value,
+    }
+
+
+def _station_tariff_status(station: ChargingStation) -> TariffStatus:
+    if station.tariff_status is not None:
+        return station.tariff_status
+    if station.tariff is not None:
+        return station.tariff.effective_status
+    if any(connector.tariff_ids for connector in station.connectors):
+        return TariffStatus.INCOMPLETE
+    return TariffStatus.NOT_REPORTED
+
+
+def _connector_tariff_attributes(connector: ChargingConnector) -> dict[str, Any]:
+    status = connector.tariff_status or (
+        TariffStatus.INCOMPLETE if connector.tariff_ids else TariffStatus.NOT_REPORTED
+    )
+    return {
+        "connector_type": connector.connector_type,
+        "connector_format": connector.connector_format,
+        "power_type": connector.power_type,
+        "max_power_kw": connector.max_power_kw,
+        "count": connector.count,
+        "tariff_ids": list(connector.tariff_ids),
+        "tariff_status": status.value,
+        "tariffs": [
+            {
+                **_tariff_record_attributes(tariff),
+                "tariff_id": tariff.tariff_id,
+            }
+            for tariff in connector.tariffs
+        ],
+    }
+
+
+def _tariff_record_attributes(tariff: ChargingTariff) -> dict[str, Any]:
+    return {
+        "price_per_kwh": _decimal_attribute(tariff.price_per_kwh),
+        "currency": tariff.currency,
+        "tariff_description": tariff.description,
+        "tariff_source": tariff.source,
+        "tariff_vat_percentage": _decimal_attribute(tariff.vat_percentage),
+        "session_fee": _decimal_attribute(tariff.session_fee),
+        "price_per_minute": _decimal_attribute(tariff.price_per_minute),
+        "tariff_type": tariff.tariff_type,
+        "tariff_status": tariff.effective_status.value,
+    }
+
+
+def _decimal_attribute(value: Decimal | None) -> float | None:
+    return float(value) if value is not None else None
 
 
 class BestNearbyChargerSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEntity):

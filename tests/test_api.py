@@ -23,7 +23,11 @@ from custom_components.curbcharge.api import (
 )
 from custom_components.curbcharge.belgium import BelgiumChargingProvider
 from custom_components.curbcharge.const import PROVIDER_ECO_MOVEMENT_BE
-from custom_components.curbcharge.models import ChargingTariff, ConnectorStatus
+from custom_components.curbcharge.models import (
+    ChargingTariff,
+    ConnectorStatus,
+    TariffStatus,
+)
 from custom_components.curbcharge.provider import (
     AuthenticationError,
     InvalidProviderResponseError,
@@ -606,6 +610,86 @@ def test_inactive_tariffs_and_unambiguous_descriptions_are_handled():
     assert tariff.description == "Public tariff"
 
 
+def test_tariff_parser_uses_active_date_restricted_energy_price():
+    now = datetime(2026, 1, 15, 12, tzinfo=UTC)
+    tariff = _parse_tariff(
+        {
+            "id": "tariff-active-date",
+            "type": "AD_HOC_PAYMENT",
+            "currency": "EUR",
+            "elements": [
+                {
+                    "restrictions": {
+                        "start_time": None,
+                        "end_time": None,
+                        "start_date": "2025-11-19",
+                        "end_date": None,
+                        "min_kwh": None,
+                        "max_kwh": None,
+                        "min_current": None,
+                        "max_current": None,
+                        "min_power": None,
+                        "max_power": None,
+                        "min_duration": None,
+                        "max_duration": None,
+                        "day_of_week": None,
+                        "reservation": None,
+                    },
+                    "price_components": [
+                        {
+                            "type": "ENERGY",
+                            "price": 0.35,
+                            "vat": 21.0,
+                            "step_size": 1,
+                        }
+                    ],
+                }
+            ],
+        },
+        now=now,
+    )
+
+    assert tariff.price_per_kwh == Decimal("0.4235")
+    assert tariff.tariff_id == "tariff-active-date"
+    assert tariff.tariff_type == "AD_HOC_PAYMENT"
+    assert tariff.status is TariffStatus.AVAILABLE
+
+
+@pytest.mark.parametrize(
+    ("restrictions", "expected_status"),
+    [
+        ({"start_date": "2026-01-16"}, TariffStatus.INACTIVE),
+        ({"end_date": "2026-01-15"}, TariffStatus.INACTIVE),
+        ({"start_date": "2025-11-19", "max_kwh": 30}, TariffStatus.CONDITIONAL),
+    ],
+)
+def test_tariff_parser_preserves_unavailable_restriction_reasons(
+    restrictions, expected_status
+):
+    tariff = _parse_tariff(
+        {
+            "currency": "EUR",
+            "elements": [
+                {
+                    "restrictions": restrictions,
+                    "price_components": [
+                        {
+                            "type": "ENERGY",
+                            "price": 0.35,
+                            "vat": 21.0,
+                            "step_size": 1,
+                        }
+                    ],
+                }
+            ],
+        },
+        now=datetime(2026, 1, 15, 12, tzinfo=UTC),
+    )
+
+    assert tariff.price_per_kwh is None
+    assert tariff.status is expected_status
+
+
 @pytest.mark.asyncio
 async def test_tariff_cache_avoids_refetch_and_preserves_unknown_prices(caplog):
     cached = ChargingTariff("EUR", Decimal("0.2"), None, None, None, "NDW")
@@ -645,14 +729,47 @@ async def test_tariff_feed_rejects_invalid_gzip_json_records_and_duplicates():
 
 def test_with_station_tariff_attaches_only_a_complete_matching_price(sample_stations):
     station = sample_stations[0]
-    assert _with_station_tariff(station, {}).tariff is None
-    assert _with_station_tariff(replace(station, connectors=()), {}).tariff is None
+    missing = _with_station_tariff(station, {})
+    assert missing.tariff is None
+    assert missing.tariff_status is TariffStatus.MISSING
+    assert missing.connectors[0].tariff_status is TariffStatus.MISSING
+    assert missing.connectors[1].tariff_status is TariffStatus.NOT_REPORTED
+    assert (
+        _with_station_tariff(replace(station, connectors=()), {}).tariff_status
+        is TariffStatus.NOT_REPORTED
+    )
 
     connector = replace(station.connectors[0], tariff_ids=("known",))
     station = replace(station, connectors=(connector,))
     tariff = ChargingTariff("EUR", Decimal("0.2"), None, None, None, "NDW")
-    assert _with_station_tariff(station, {"known": tariff}).tariff == tariff
-    assert _with_station_tariff(station, {"known": None}).tariff is None
+    resolved = _with_station_tariff(station, {"known": tariff})
+    assert resolved.tariff == tariff
+    assert resolved.tariff_status is TariffStatus.AVAILABLE
+    assert resolved.connectors[0].tariffs == (tariff,)
+
+    unresolved = _with_station_tariff(station, {"known": None})
+    assert unresolved.tariff is None
+    assert unresolved.tariff_status is TariffStatus.MISSING
+
+
+def test_station_tariff_remains_unknown_when_connector_groups_differ(sample_stations):
+    station = sample_stations[0]
+    first = replace(station.connectors[0], tariff_ids=("first",))
+    second = replace(station.connectors[1], tariff_ids=("second",))
+    station = replace(station, connectors=(first, second))
+    tariffs = {
+        "first": ChargingTariff("EUR", Decimal("0.2"), None, None, None, "NDW"),
+        "second": ChargingTariff("EUR", Decimal("0.3"), None, None, None, "NDW"),
+    }
+
+    resolved = _with_station_tariff(station, tariffs)
+
+    assert resolved.tariff is None
+    assert resolved.tariff_status is TariffStatus.AMBIGUOUS
+    assert [connector.tariffs[0].price_per_kwh for connector in resolved.connectors] == [
+        Decimal("0.2"),
+        Decimal("0.3"),
+    ]
 
 
 def test_provider_factory_rejects_unimplemented_providers():

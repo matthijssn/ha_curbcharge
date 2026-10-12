@@ -8,7 +8,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.curbcharge.const import DOMAIN
 from custom_components.curbcharge.coordinator import CurbChargeCoordinator
-from custom_components.curbcharge.models import ChargingTariff
+from custom_components.curbcharge.models import ChargingTariff, TariffStatus
 from custom_components.curbcharge.sensor import (
     AvailableConnectorsSensor,
     BestNearbyChargerSensor,
@@ -65,13 +65,44 @@ def test_connector_group_sensor_exposes_provider_group_counts(hass, sample_stati
 
 
 def test_price_sensor_uses_decimal_tariff_and_currency_unit(hass, sample_stations):
-    tariff = ChargingTariff("EUR", Decimal("0.257"), None, None, None, "NDW DOT-NL")
-    station = replace(sample_stations[0], tariff=tariff)
+    tariff = ChargingTariff(
+        "EUR",
+        Decimal("0.257"),
+        None,
+        None,
+        "Public tariff",
+        "NDW DOT-NL",
+        tariff_id="tariff-1",
+        tariff_type="AD_HOC_PAYMENT",
+        status=TariffStatus.AVAILABLE,
+    )
+    station = replace(
+        sample_stations[0],
+        connectors=(),
+        tariff=tariff,
+        tariff_status=TariffStatus.AVAILABLE,
+    )
     coordinator = _coordinator(hass, station)
     sensor = PricePerKwhSensor(coordinator, station)
 
     assert sensor.native_value == 0.257
     assert sensor.native_unit_of_measurement == "EUR/kWh"
+    attributes = sensor.extra_state_attributes
+    assert attributes["price_per_kwh"] == 0.257
+    assert attributes["currency"] == "EUR"
+    assert attributes["tariff_description"] == "Public tariff"
+    assert attributes["tariff_source"] == "NDW DOT-NL"
+    assert attributes["tariff_ids"] == ["tariff-1"]
+    assert attributes["tariff_type"] == "AD_HOC_PAYMENT"
+    assert attributes["tariff_status"] == "available"
+
+    summary_attributes = StatusSummarySensor(
+        coordinator, station
+    ).extra_state_attributes
+    assert {
+        key: summary_attributes[key]
+        for key in attributes
+    } == attributes
 
 
 def test_price_sensor_is_unknown_without_tariff(hass, sample_stations):
@@ -86,6 +117,7 @@ def test_price_sensor_is_unknown_without_tariff(hass, sample_stations):
     sensor = PricePerKwhSensor(_coordinator(hass, station), station)
     assert sensor.native_value is None
     assert sensor.native_unit_of_measurement == "EUR/kWh"
+    assert sensor.extra_state_attributes["tariff_status"] == "incomplete"
 
 
 def test_status_summary_exposes_operational_and_provider_status(hass, sample_stations):
@@ -105,6 +137,49 @@ def test_status_summary_exposes_operational_and_provider_status(hass, sample_sta
     assert sensor.extra_state_attributes["total_connectors"] == station.total_connectors
     assert sensor.extra_state_attributes["distance_m"] == station.distance_m
     assert sensor.extra_state_attributes["max_power_kw"] == station.max_power_kw
+    assert sensor.extra_state_attributes["tariff_status"] == "incomplete"
+    assert sensor.extra_state_attributes["connector_tariffs"][0]["tariff_ids"] == [
+        "tariff-eur-022"
+    ]
+
+
+def test_summary_exposes_conflicting_connector_tariffs(hass, sample_stations):
+    station = sample_stations[0]
+    tariff_a = ChargingTariff("EUR", Decimal("0.2"), None, None, None, "NDW DOT-NL")
+    tariff_b = ChargingTariff("EUR", Decimal("0.3"), None, None, None, "NDW DOT-NL")
+    connector_a = replace(
+        station.connectors[0],
+        tariff_ids=("tariff-a",),
+        tariffs=(tariff_a,),
+        tariff_status=TariffStatus.AVAILABLE,
+    )
+    connector_b = replace(
+        station.connectors[1],
+        tariff_ids=("tariff-b",),
+        tariffs=(tariff_b,),
+        tariff_status=TariffStatus.AVAILABLE,
+    )
+    station = replace(
+        station,
+        connectors=(connector_a, connector_b),
+        tariff=None,
+        tariff_status=TariffStatus.AMBIGUOUS,
+    )
+    coordinator = _coordinator(hass, station)
+
+    summary_attributes = StatusSummarySensor(
+        coordinator, station
+    ).extra_state_attributes
+    price_attributes = PricePerKwhSensor(coordinator, station).extra_state_attributes
+
+    assert summary_attributes["price_per_kwh"] is None
+    assert summary_attributes["tariff_status"] == "ambiguous"
+    assert [
+        group["tariffs"][0]["price_per_kwh"]
+        for group in summary_attributes["connector_tariffs"]
+    ] == [0.2, 0.3]
+    assert price_attributes["price_per_kwh"] is None
+    assert price_attributes["tariff_status"] == "ambiguous"
 
 
 def test_best_nearby_sensor_exposes_selection_reason(hass, sample_stations):
