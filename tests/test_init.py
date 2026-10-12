@@ -24,6 +24,10 @@ from custom_components.curbcharge.const import (
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NDW_DOT_NL,
 )
+from custom_components.curbcharge.entity import (
+    location_device_identifier,
+    station_device_identifier,
+)
 from custom_components.curbcharge.provider import ChargingProviderError
 from tests.conftest import FakeProvider
 
@@ -67,6 +71,9 @@ async def test_setup_unload_and_reload_keep_stable_entities(
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     registry = er.async_get(hass)
+    assert (
+        len(dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)) == 1
+    )
     before = {
         item.unique_id
         for item in er.async_entries_for_config_entry(registry, entry.entry_id)
@@ -141,6 +148,117 @@ async def test_stations_with_the_same_address_get_unique_device_names(
     assert set(names) == {
         f"{station.name} ({station.provider}:{station.provider_id})"
         for station in (first, second)
+    }
+
+
+@pytest.mark.asyncio
+async def test_belgium_evse_devices_are_children_of_location_and_cleanup_parent(
+    hass, monkeypatch, sample_stations
+):
+    sample_station = sample_stations[0]
+    assert sample_station.location is not None
+    location = replace(
+        sample_station.location,
+        provider_id="site-1",
+        provider=PROVIDER_ECO_MOVEMENT_BE,
+        provider_name="Eco-Movement Belgium",
+        country_code="BE",
+        name="Example charging site",
+    )
+    first_evse = replace(
+        sample_station,
+        provider_id="evse-1",
+        name="EVSE 1",
+        provider=PROVIDER_ECO_MOVEMENT_BE,
+        provider_name="Eco-Movement Belgium",
+        country_code="BE",
+        location=location,
+        evse_id=None,
+    )
+    second_evse = replace(
+        first_evse,
+        provider_id="evse-2",
+        name="EVSE 2",
+    )
+    provider = FakeProvider(
+        [
+            (first_evse, second_evse),
+            (second_evse,),
+            (second_evse,),
+            (second_evse,),
+            (),
+            (),
+            (),
+        ]
+    )
+    provider.provider_id = PROVIDER_ECO_MOVEMENT_BE
+    provider.provider_name = "Eco-Movement Belgium"
+    provider.country_code = "BE"
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    entry = _entry(
+        {CONF_PROVIDER: PROVIDER_ECO_MOVEMENT_BE, CONF_API_TOKEN: "test-token"}
+    )
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    device_registry = dr.async_get(hass)
+    parent_identifier = location_device_identifier(
+        PROVIDER_ECO_MOVEMENT_BE, location.provider_id
+    )
+    parent_device = next(
+        device
+        for device in dr.async_entries_for_config_entry(device_registry, entry.entry_id)
+        if parent_identifier in device.identifiers
+    )
+
+    def evse_device(evse_id: str):
+        identifier = station_device_identifier(PROVIDER_ECO_MOVEMENT_BE, evse_id)
+        get_child = getattr(
+            device_registry, "async_get_child_device_by_identifier", None
+        )
+        child = get_child(identifier, entry.entry_id) if get_child is not None else None
+        if child is not None:
+            return child
+        return next(
+            (
+                device
+                for device in dr.async_entries_for_config_entry(
+                    device_registry, entry.entry_id
+                )
+                if identifier in device.identifiers
+            ),
+            None,
+        )
+
+    first_device = evse_device("evse-1")
+    second_device = evse_device("evse-2")
+    assert first_device is not None
+    assert second_device is not None
+    assert getattr(first_device, "parent_device_id", None) == parent_device.id or (
+        getattr(first_device, "via_device_id", None) == parent_device.id
+    )
+    assert getattr(second_device, "parent_device_id", None) == parent_device.id or (
+        getattr(second_device, "via_device_id", None) == parent_device.id
+    )
+
+    for _ in range(3):
+        await entry.runtime_data.async_refresh()
+        await hass.async_block_till_done()
+    assert evse_device("evse-1") is None
+    assert evse_device("evse-2") is not None
+    assert parent_device in dr.async_entries_for_config_entry(
+        device_registry, entry.entry_id
+    )
+
+    for _ in range(3):
+        await entry.runtime_data.async_refresh()
+        await hass.async_block_till_done()
+    assert evse_device("evse-2") is None
+    assert parent_identifier not in {
+        identifier
+        for device in dr.async_entries_for_config_entry(device_registry, entry.entry_id)
+        for identifier in device.identifiers
     }
 
 
