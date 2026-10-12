@@ -9,10 +9,11 @@ import math
 import re
 import zlib
 from dataclasses import replace
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Literal, TypedDict, cast
 from urllib.parse import urljoin, urlsplit
+from zoneinfo import ZoneInfo
 
 import aiohttp
 from homeassistant.core import HomeAssistant
@@ -37,6 +38,7 @@ from .models import (
     ChargingStation,
     ChargingTariff,
     ConnectorStatus,
+    TariffStatus,
 )
 from .provider import (
     AuthenticationError,
@@ -51,6 +53,7 @@ from .provider import (
 
 _EARTH_RADIUS_M = 6_371_000
 _METERS_PER_DEGREE = 111_320
+_NDW_LOCAL_TIMEZONE = ZoneInfo("Europe/Amsterdam")
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -90,6 +93,7 @@ class TariffRecord(TypedDict, total=False):
     """OCPI tariff fields consumed by CurbCharge."""
 
     id: object
+    type: object
     currency: object
     elements: object
     start_date_time: object
@@ -280,7 +284,7 @@ class NdwDotNlProvider(BaseChargingProvider):
                     raise InvalidProviderResponseError(
                         "NDW DOT-NL returned a duplicate tariff"
                     )
-                found[tariff_id] = _parse_tariff(cast(TariffRecord, record))
+                found[tariff_id] = _parse_tariff(cast(TariffRecord, record), now=now)
 
         for tariff_id in lookup_ids:
             self._tariff_cache[tariff_id] = found.get(tariff_id)
@@ -536,8 +540,10 @@ def _parse_availabilities(
     return tuple(connectors)
 
 
-def _parse_tariff(record: TariffRecord) -> ChargingTariff:
-    """Parse an OCPI tariff conservatively; conditional prices remain unknown."""
+def _parse_tariff(
+    record: TariffRecord, *, now: datetime | None = None
+) -> ChargingTariff:
+    """Parse an OCPI tariff while preserving unresolved price conditions."""
     currency = _required_string(record.get("currency"), "tariff currency")
     if len(currency) != 3 or not currency.isalpha():
         raise InvalidProviderResponseError("NDW DOT-NL returned invalid currency")
@@ -548,7 +554,8 @@ def _parse_tariff(record: TariffRecord) -> ChargingTariff:
             "NDW DOT-NL returned invalid tariff elements"
         )
 
-    active = _tariff_is_active(record, datetime.now(UTC))
+    now = now or datetime.now(UTC)
+    active = _tariff_is_active(record, now)
     tax_included = record.get("tax_included")
     if tax_included is not None:
         if isinstance(tax_included, str):
@@ -557,7 +564,7 @@ def _parse_tariff(record: TariffRecord) -> ChargingTariff:
             raise InvalidProviderResponseError(
                 "NDW DOT-NL returned invalid tax information"
             )
-    parsed_elements: list[TariffElement] = []
+    parsed_elements: list[tuple[TariffElement, TariffStatus]] = []
     element_values: list[object] = [element for element in elements]
     for element in element_values:
         element_mapping = _string_mapping(element, "tariff element")
@@ -580,29 +587,58 @@ def _parse_tariff(record: TariffRecord) -> ChargingTariff:
                     "step_size": component_mapping.get("step_size"),
                 }
             )
+        parsed_element: TariffElement = {
+            "restrictions": element_mapping.get("restrictions"),
+            "price_components": parsed_components,
+        }
         parsed_elements.append(
-            {
-                "restrictions": element_mapping.get("restrictions"),
-                "price_components": parsed_components,
-            }
+            (
+                parsed_element,
+                _tariff_element_status(element_mapping.get("restrictions"), now),
+            )
         )
 
-    restricted = any(element.get("restrictions") for element in parsed_elements)
+    conditional = any(
+        status is TariffStatus.CONDITIONAL for _, status in parsed_elements
+    )
+    active_elements = [
+        element
+        for element, status in parsed_elements
+        if status is TariffStatus.AVAILABLE
+    ]
     components = [
         component
-        for element in parsed_elements
+        for element in active_elements
         for component in element["price_components"]
     ]
 
-    if active and not restricted:
+    if not active:
+        price_per_kwh = session_fee = price_per_minute = None
+        vat_percentage = None
+        status = TariffStatus.INACTIVE
+    elif conditional:
+        price_per_kwh = session_fee = price_per_minute = None
+        vat_percentage = None
+        status = TariffStatus.CONDITIONAL
+    elif not active_elements:
+        price_per_kwh = session_fee = price_per_minute = None
+        vat_percentage = None
+        status = (
+            TariffStatus.INACTIVE
+            if parsed_elements
+            else TariffStatus.INCOMPLETE
+        )
+    else:
         price_per_kwh, vat_percentage = _unique_component_price(
             components, "ENERGY", tax_included
         )
         session_fee, _ = _unique_component_price(components, "FLAT", tax_included)
         price_per_minute = _unique_time_price(components, tax_included)
-    else:
-        price_per_kwh = session_fee = price_per_minute = None
-        vat_percentage = None
+        status = (
+            TariffStatus.AVAILABLE
+            if price_per_kwh is not None
+            else TariffStatus.INCOMPLETE
+        )
 
     return ChargingTariff(
         currency=currency,
@@ -612,6 +648,9 @@ def _parse_tariff(record: TariffRecord) -> ChargingTariff:
         description=_tariff_description(record.get("tariff_alt_text")),
         source=PROVIDER_NAME,
         vat_percentage=vat_percentage,
+        tariff_id=_optional_string(record.get("id"), "tariff id"),
+        tariff_type=_optional_string(record.get("type"), "tariff type"),
+        status=status,
     )
 
 
@@ -698,6 +737,51 @@ def _tariff_is_active(record: TariffRecord, now: datetime) -> bool:
     return True
 
 
+def _tariff_element_status(restrictions: object, now: datetime) -> TariffStatus:
+    """Evaluate date-only restrictions and keep session-dependent rates unknown."""
+    if restrictions is None:
+        return TariffStatus.AVAILABLE
+
+    fields = _string_mapping(restrictions, "tariff restrictions")
+    local_date = now.astimezone(_NDW_LOCAL_TIMEZONE).date()
+    start_date = fields.get("start_date")
+    end_date = fields.get("end_date")
+    if start_date is not None and local_date < _tariff_restriction_date(
+        start_date, "start date"
+    ):
+        return TariffStatus.INACTIVE
+    if end_date is not None and local_date >= _tariff_restriction_date(
+        end_date, "end date"
+    ):
+        return TariffStatus.INACTIVE
+    if any(
+        value is not None
+        for key, value in fields.items()
+        if key not in ("start_date", "end_date")
+    ):
+        return TariffStatus.CONDITIONAL
+    return TariffStatus.AVAILABLE
+
+
+def _tariff_restriction_date(value: object, field: str) -> date:
+    """Parse an OCPI local calendar date."""
+    if not isinstance(value, str):
+        raise InvalidProviderResponseError(
+            f"NDW DOT-NL returned an invalid tariff {field}"
+        )
+    try:
+        parsed = date.fromisoformat(value)
+    except ValueError as err:
+        raise InvalidProviderResponseError(
+            f"NDW DOT-NL returned an invalid tariff {field}"
+        ) from err
+    if parsed.isoformat() != value:
+        raise InvalidProviderResponseError(
+            f"NDW DOT-NL returned an invalid tariff {field}"
+        )
+    return parsed
+
+
 def _tariff_description(value: object) -> str | None:
     if isinstance(value, str):
         return value
@@ -713,28 +797,110 @@ def _tariff_description(value: object) -> str | None:
 def _with_station_tariff(
     station: ChargingStation, tariffs: dict[str, ChargingTariff | None]
 ) -> ChargingStation:
-    groups: list[ChargingTariff] = []
+    connectors: list[ChargingConnector] = []
     for connector in station.connectors:
         if not connector.tariff_ids:
-            return station
-        group_tariffs = [tariffs.get(tariff_id) for tariff_id in connector.tariff_ids]
-        if not group_tariffs or any(tariff is None for tariff in group_tariffs):
-            return station
-        first = group_tariffs[0]
-        if first is None:
-            return station
-        if any(
-            _tariff_signature(tariff) != _tariff_signature(first)
+            connectors.append(
+                replace(
+                    connector,
+                    tariffs=(),
+                    tariff_status=TariffStatus.NOT_REPORTED,
+                )
+            )
+            continue
+
+        records = [tariffs.get(tariff_id) for tariff_id in connector.tariff_ids]
+        group_tariffs = tuple(tariff for tariff in records if tariff is not None)
+        connectors.append(
+            replace(
+                connector,
+                tariffs=group_tariffs,
+                tariff_status=_connector_tariff_status(
+                    group_tariffs, missing=len(group_tariffs) != len(records)
+                ),
+            )
+        )
+
+    station_tariff = None
+    if not connectors:
+        station_status = TariffStatus.NOT_REPORTED
+    elif all(
+        connector.tariff_status is TariffStatus.AVAILABLE
+        for connector in connectors
+    ):
+        group_tariffs = [connector.tariffs[0] for connector in connectors]
+        if all(
+            _tariff_signature(tariff) == _tariff_signature(group_tariffs[0])
             for tariff in group_tariffs[1:]
         ):
-            return station
-        groups.append(first)
-    if not groups or any(
-        _tariff_signature(tariff) != _tariff_signature(groups[0])
-        for tariff in groups[1:]
+            linked_tariffs = [
+                tariff for connector in connectors for tariff in connector.tariffs
+            ]
+            tariff_ids = {tariff.tariff_id for tariff in linked_tariffs}
+            descriptions = {tariff.description for tariff in linked_tariffs}
+            station_tariff = replace(
+                group_tariffs[0],
+                tariff_id=next(iter(tariff_ids)) if len(tariff_ids) == 1 else None,
+                description=(
+                    next(iter(descriptions)) if len(descriptions) == 1 else None
+                ),
+            )
+            station_status = TariffStatus.AVAILABLE
+        else:
+            station_status = TariffStatus.AMBIGUOUS
+    else:
+        station_status = _combine_tariff_statuses(
+            [connector.tariff_status for connector in connectors]
+        )
+
+    return replace(
+        station,
+        connectors=tuple(connectors),
+        tariff=station_tariff,
+        tariff_status=station_status,
+    )
+
+
+def _connector_tariff_status(
+    tariffs: tuple[ChargingTariff, ...], *, missing: bool
+) -> TariffStatus:
+    if missing or not tariffs:
+        return TariffStatus.MISSING
+
+    statuses = {_resolved_tariff_status(tariff) for tariff in tariffs}
+    status = _combine_tariff_statuses(list(statuses))
+    if status is not TariffStatus.AVAILABLE:
+        return status
+    if any(
+        _tariff_signature(tariff) != _tariff_signature(tariffs[0])
+        for tariff in tariffs[1:]
     ):
-        return station
-    return replace(station, tariff=groups[0])
+        return TariffStatus.AMBIGUOUS
+    return TariffStatus.AVAILABLE
+
+
+def _resolved_tariff_status(tariff: ChargingTariff) -> TariffStatus:
+    return tariff.effective_status
+
+
+def _combine_tariff_statuses(
+    statuses: list[TariffStatus | None],
+) -> TariffStatus:
+    known_statuses = {status for status in statuses if status is not None}
+    if not known_statuses or known_statuses == {TariffStatus.NOT_REPORTED}:
+        return TariffStatus.NOT_REPORTED
+    if known_statuses == {TariffStatus.AVAILABLE}:
+        return TariffStatus.AVAILABLE
+    for status in (
+        TariffStatus.CONDITIONAL,
+        TariffStatus.INACTIVE,
+        TariffStatus.MISSING,
+        TariffStatus.AMBIGUOUS,
+        TariffStatus.INCOMPLETE,
+    ):
+        if status in known_statuses:
+            return status
+    return TariffStatus.INCOMPLETE
 
 
 def _tariff_signature(tariff: ChargingTariff | None) -> tuple[object, ...] | None:
@@ -746,6 +912,7 @@ def _tariff_signature(tariff: ChargingTariff | None) -> tuple[object, ...] | Non
         tariff.session_fee,
         tariff.price_per_minute,
         tariff.vat_percentage,
+        tariff.tariff_type,
     )
 
 

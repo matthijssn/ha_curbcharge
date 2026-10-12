@@ -40,11 +40,17 @@ provider-reported `open` status is displayed separately; CurbCharge does not
 infer connector availability from it or vice versa.
 
 Tariffs are shown only when every connector group at a station resolves to the
-same active currency and price components. Conditional, conflicting, missing,
-or mixed-currency tariffs are treated as unknown. The price sensor remains
-unknown rather than zero when no unambiguous energy price is available. OCPI
-price components are published before VAT; CurbCharge applies the reported VAT
-percentage to present a gross rate and treats a missing VAT rate as unknown.
+same active currency and price components. Date-only OCPI restrictions are
+evaluated using the Netherlands local date; session-dependent or time-window
+restrictions remain unknown. Conflicting, missing, incomplete, or mixed-currency tariffs also
+remain unknown rather than being guessed or shown as zero. The price and
+status-summary sensors expose tariff attributes, including a stable
+`tariff_status` (`available`, `not_reported`, `missing`, `conditional`,
+`inactive`, `incomplete`, or `ambiguous`). When no single station-wide price
+is available, the status-summary sensor includes a connector-group tariff
+breakdown. OCPI price components are published before VAT; CurbCharge applies
+the reported VAT percentage to present a gross rate and treats a missing VAT
+rate as unknown.
 
 The GeoJSON OpenAPI description labels `power_max` as kW, while current live
 examples contain values such as `15000` for a 15 kW connector. CurbCharge

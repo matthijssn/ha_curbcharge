@@ -1,5 +1,7 @@
 """Immutable models shared by providers and Home Assistant platforms."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -30,6 +32,18 @@ class EVSEStatus(StrEnum):
     UNKNOWN = "UNKNOWN"
 
 
+class TariffStatus(StrEnum):
+    """How much of a provider tariff can be safely reported."""
+
+    AVAILABLE = "available"
+    NOT_REPORTED = "not_reported"
+    MISSING = "missing"
+    CONDITIONAL = "conditional"
+    INACTIVE = "inactive"
+    INCOMPLETE = "incomplete"
+    AMBIGUOUS = "ambiguous"
+
+
 @dataclass(frozen=True, slots=True)
 class ChargingConnector:
     """A connector or provider-reported group of equivalent connectors."""
@@ -43,11 +57,13 @@ class ChargingConnector:
     connector_format: str | None = None
     power_type: str | None = None
     tariff_ids: tuple[str, ...] = ()
+    tariffs: tuple[ChargingTariff, ...] = ()
+    tariff_status: TariffStatus | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class ChargingTariff:
-    """A tariff when the provider exposes an unambiguous price."""
+    """Normalized provider tariff, including why its price may be unresolved."""
 
     currency: str
     price_per_kwh: Decimal | None
@@ -56,6 +72,20 @@ class ChargingTariff:
     description: str | None
     source: str | None
     vat_percentage: Decimal | None = None
+    tariff_id: str | None = None
+    tariff_type: str | None = None
+    status: TariffStatus | None = None
+
+    @property
+    def effective_status(self) -> TariffStatus:
+        """Return parsed status or infer it for providers without tariff reasons."""
+        if self.status is not None:
+            return self.status
+        return (
+            TariffStatus.AVAILABLE
+            if self.price_per_kwh is not None
+            else TariffStatus.INCOMPLETE
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +128,7 @@ class ChargingStation:
     evse_id: str | None = None
     evse_status: EVSEStatus | None = None
     connector_count_reported: bool = True
+    tariff_status: TariffStatus | None = None
 
     @property
     def available_connectors(self) -> int | None:
