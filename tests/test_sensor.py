@@ -135,9 +135,13 @@ def test_status_summary_exposes_operational_and_provider_status(hass, sample_sta
     assert sensor.extra_state_attributes["distance_m"] == station.distance_m
     assert sensor.extra_state_attributes["max_power_kw"] == station.max_power_kw
     assert sensor.extra_state_attributes["tariff_status"] == "incomplete"
-    assert sensor.extra_state_attributes["connector_tariffs"][0]["tariff_ids"] == [
-        "tariff-eur-022"
+    tariff_groups = [
+        group
+        for group in sensor.extra_state_attributes["connector_tariffs"]
+        if group["tariff_ids"]
     ]
+    assert len(tariff_groups) == 1
+    assert tariff_groups[0]["tariff_ids"] == ["tariff-eur-022"]
 
 
 def test_summary_exposes_conflicting_connector_tariffs(hass, sample_stations):
