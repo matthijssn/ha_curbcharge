@@ -99,10 +99,7 @@ def test_price_sensor_uses_decimal_tariff_and_currency_unit(hass, sample_station
     summary_attributes = StatusSummarySensor(
         coordinator, station
     ).extra_state_attributes
-    assert {
-        key: summary_attributes[key]
-        for key in attributes
-    } == attributes
+    assert {key: summary_attributes[key] for key in attributes} == attributes
 
 
 def test_price_sensor_is_unknown_without_tariff(hass, sample_stations):
