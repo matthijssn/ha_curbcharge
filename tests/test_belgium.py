@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import json
 from decimal import Decimal
@@ -521,6 +522,38 @@ async def test_request_limiter_enforces_ip_location_and_per_evse_limits(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_retry_after_updates_a_request_already_waiting(monkeypatch):
+    current_time = [0.0]
+    waits: list[float] = []
+    waiting_for_sleep = asyncio.Event()
+    continue_sleep = asyncio.Event()
+
+    def monotonic() -> float:
+        return current_time[0]
+
+    async def sleep(delay: float) -> None:
+        waits.append(delay)
+        if len(waits) == 1:
+            waiting_for_sleep.set()
+            await continue_sleep.wait()
+        current_time[0] += delay
+
+    monkeypatch.setattr(belgium.time, "monotonic", monotonic)
+    monkeypatch.setattr(belgium.asyncio, "sleep", sleep)
+    limiter = BelgiumRequestLimiter()
+
+    await limiter.async_wait("first-token")
+    waiting_request = asyncio.create_task(limiter.async_wait("second-token"))
+    await waiting_for_sleep.wait()
+    limiter.defer_requests(45)
+    continue_sleep.set()
+    await waiting_request
+
+    assert current_time[0] == 45
+    assert waits == [10, 35]
+
+
+@pytest.mark.asyncio
 async def test_belgium_provider_factory_shares_rate_limits_between_entries(
     hass, monkeypatch
 ):
@@ -549,6 +582,43 @@ async def test_belgium_provider_factory_shares_rate_limits_between_entries(
         await provider.async_validate_connection(50.85, 4.35, 1000)
 
     assert waits == [120, 10]
+
+
+@pytest.mark.asyncio
+async def test_retry_after_backoff_is_shared_between_provider_instances(
+    hass, monkeypatch
+):
+    current_time = [0.0]
+    waits: list[float] = []
+
+    def monotonic() -> float:
+        return current_time[0]
+
+    async def sleep(delay: float) -> None:
+        waits.append(delay)
+        current_time[0] += delay
+
+    monkeypatch.setattr(belgium.time, "monotonic", monotonic)
+    monkeypatch.setattr(belgium.asyncio, "sleep", sleep)
+    rate_limited_provider = belgium.create_belgium_provider(
+        hass,
+        FakeSession([FakeResponse({}, status=429, headers={"Retry-After": "45"})]),
+        "first-token",
+    )
+    other_provider = belgium.create_belgium_provider(
+        hass,
+        FakeSession([FakeResponse(_locations_document())]),
+        "second-token",
+    )
+
+    with pytest.raises(ProviderRateLimitError) as raised:
+        await rate_limited_provider.async_validate_connection(50.85, 4.35, 1000)
+    assert raised.value.retry_after == 45
+
+    await other_provider.async_validate_connection(50.85, 4.35, 1000)
+
+    assert current_time[0] == 45
+    assert waits == [45]
 
 
 def test_shared_belgium_limiter_rejects_invalid_hass_data(hass):

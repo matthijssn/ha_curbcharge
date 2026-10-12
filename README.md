@@ -52,7 +52,8 @@ and separate status requests for each EVSE. Its documented limits are one
 request per 10 seconds per source IP, 30 location requests per hour per token,
 and two status requests per minute per EVSE per token. The provider uses a
 shared Home Assistant request limiter; a refresh can therefore take several
-minutes when many EVSEs need status updates.
+minutes when many EVSEs need status updates. A `Retry-After` response pauses
+requests from all Belgium entries sharing that limiter.
 
 Belgian access approval, licensing terms, quotas, and live payload compatibility
 have not been verified. Treat them as release blockers; do not enable Belgium
