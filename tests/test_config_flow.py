@@ -132,6 +132,7 @@ async def test_reconfigure_legacy_netherlands_entry_defaults_to_ndw(hass, monkey
     assert result["reason"] == "reconfigure_successful"
     assert calls[0][0] == PROVIDER_NDW_DOT_NL
     assert calls[0][2:] == (hass, None)
+    assert provider.validation_calls == [(52.3, 5.3, 500)]
     assert entry.unique_id == config_flow._config_unique_id(
         PROVIDER_NDW_DOT_NL, 52.3, 5.3, 500
     )
