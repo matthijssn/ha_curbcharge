@@ -1,6 +1,7 @@
 """Sensors for CurbCharge stations and recommendations."""
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -263,7 +264,9 @@ def _tariff_attributes(station: ChargingStation) -> dict[str, Any]:
     """Return the station-level CPO tariff in a stable sensor attribute shape."""
     tariff = station.tariff
     tariff_ids = {
-        tariff_id for connector in station.connectors for tariff_id in connector.tariff_ids
+        tariff_id
+        for connector in station.connectors
+        for tariff_id in connector.tariff_ids
     }
     if tariff is not None and tariff.tariff_id is not None:
         tariff_ids.add(tariff.tariff_id)

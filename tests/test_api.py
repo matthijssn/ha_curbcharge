@@ -766,10 +766,9 @@ def test_station_tariff_remains_unknown_when_connector_groups_differ(sample_stat
 
     assert resolved.tariff is None
     assert resolved.tariff_status is TariffStatus.AMBIGUOUS
-    assert [connector.tariffs[0].price_per_kwh for connector in resolved.connectors] == [
-        Decimal("0.2"),
-        Decimal("0.3"),
-    ]
+    assert [
+        connector.tariffs[0].price_per_kwh for connector in resolved.connectors
+    ] == [Decimal("0.2"), Decimal("0.3")]
 
 
 def test_provider_factory_rejects_unimplemented_providers():
