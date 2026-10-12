@@ -623,11 +623,7 @@ def _parse_tariff(
     elif not active_elements:
         price_per_kwh = session_fee = price_per_minute = None
         vat_percentage = None
-        status = (
-            TariffStatus.INACTIVE
-            if parsed_elements
-            else TariffStatus.INCOMPLETE
-        )
+        status = TariffStatus.INACTIVE if parsed_elements else TariffStatus.INCOMPLETE
     else:
         price_per_kwh, vat_percentage = _unique_component_price(
             components, "ENERGY", tax_included
