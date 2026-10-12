@@ -104,8 +104,13 @@ async def test_legacy_netherlands_entry_loads_without_provider_field(
         return provider
 
     monkeypatch.setattr(curbcharge, "create_provider", create_provider)
-    entry = _entry()
-    entry.data.pop(CONF_PROVIDER)
+    legacy_data = dict(_entry().data)
+    legacy_data.pop(CONF_PROVIDER)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="legacy-netherlands-entry",
+        data=legacy_data,
+    )
     old_unique_id = entry.unique_id
     entry.add_to_hass(hass)
 
