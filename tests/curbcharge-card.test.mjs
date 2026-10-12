@@ -108,7 +108,58 @@ test("keeps availability separate and localizes status labels", () => {
 
   assert.equal(data.status, "Aucun disponible");
   assert.equal(data.rows[0][1], "Inconnu");
+  assert.equal(
+    data.rows[7][0],
+    "Statut d'ouverture indiqué par le fournisseur",
+  );
   assert.equal(data.rows[7][1], "Ouverte");
+});
+
+test("labels the provider open flag separately from available connectors", () => {
+  const data = cardModule.buildCardData(
+    {
+      entity_id: "sensor.station_status_summary",
+      state: "available",
+      attributes: {
+        provider_station_id: "station-1",
+        station_name: "Station One",
+        available_connectors: 2,
+        is_open: false,
+      },
+    },
+    { language: "en" },
+  );
+
+  assert.equal(data.status, "Available");
+  assert.deepEqual(data.rows[0], ["Available connectors", "2"]);
+  assert.deepEqual(data.rows[7], ["Provider-reported open status", "Closed"]);
+});
+
+test("localizes the provider open-status label in every supported language", () => {
+  const labels = {
+    en: ["Provider-reported open status", "Closed"],
+    nl: ["Openstatus volgens provider", "Gesloten"],
+    fr: ["Statut d'ouverture indiqué par le fournisseur", "Fermée"],
+    de: ["Vom Anbieter gemeldeter Öffnungsstatus", "Geschlossen"],
+  };
+
+  for (const [language, [label, closed]] of Object.entries(labels)) {
+    const data = cardModule.buildCardData(
+      {
+        entity_id: "sensor.station_status_summary",
+        state: "available",
+        attributes: {
+          provider_station_id: "station-1",
+          available_connectors: 2,
+          is_open: false,
+        },
+      },
+      { language },
+    );
+
+    assert.equal(data.rows[7][0], label);
+    assert.equal(data.rows[7][1], closed);
+  }
 });
 
 test("shows unavailable station state without reusing stale measurements", () => {
