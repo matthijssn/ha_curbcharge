@@ -36,7 +36,8 @@ It does not identify individual connectors or distinguish occupied, reserved,
 out-of-service, and other unavailable connectors. CurbCharge reports the
 available and total counts exactly, derives the count not reported available,
 and leaves occupied status unknown when the source cannot establish it. The
-`open` field is kept separate as the provider's operational/open status.
+provider-reported `open` status is displayed separately; CurbCharge does not
+infer connector availability from it or vice versa.
 
 Tariffs are shown only when every connector group at a station resolves to the
 same active currency and price components. Conditional, conflicting, missing,
@@ -118,10 +119,11 @@ entity: sensor.your_station_status_summary
 
 The card reads only that Home Assistant entity; it makes no provider requests.
 It displays the station name, availability, available/occupied/unavailable/total
-connector counts, maximum power, price when known, distance, open/closed status,
-the provider update time, and the last successful integration update. Unknown
-values remain unknown, and unavailable station data is shown as unavailable.
-Labels follow the Home Assistant language in English, Dutch, French, or German.
+connector counts, maximum power, price when known, distance, provider-reported
+open status, the provider update time, and the last successful integration
+update. Unknown values remain unknown, and unavailable station data is shown as
+unavailable. Labels follow the Home Assistant language in English, Dutch,
+French, or German.
 
 ## Configuration
 
