@@ -1,12 +1,13 @@
 """Shared entities and dynamic station lifecycle support."""
 
 from collections.abc import Callable, Sequence
+from typing import cast
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.device_registry import DeviceEntry, DeviceInfo
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import (
     AddEntitiesCallback,
@@ -46,6 +47,36 @@ class CurbChargeStationEntity(CoordinatorEntity[CurbChargeCoordinator]):
             serial_number=station.provider_id,
         )
 
+    def attach_to_location_device(
+        self,
+        station: ChargingStation,
+        parent_device: DeviceEntry,
+        parent_identifier: tuple[str, str],
+    ) -> None:
+        """Register an EVSE as a child of its provider-reported location."""
+        identifiers = {station_device_identifier(station.provider, station.provider_id)}
+        name = f"{station.name} ({station.provider}:{station.provider_id})"
+        child_device_info = getattr(dr, "ChildDeviceInfo", None)
+        if child_device_info is not None:
+            self._attr_device_info = child_device_info(
+                identifiers=identifiers,
+                name=name,
+                parent_device_id=parent_device.id,
+            )
+            return
+
+        self._attr_device_info = cast(
+            DeviceInfo,
+            {
+                "identifiers": identifiers,
+                "name": name,
+                "manufacturer": station.operator,
+                "model": station.provider_name,
+                "serial_number": station.provider_id,
+                "via_device": parent_identifier,
+            },
+        )
+
     @property
     def station(self) -> ChargingStation | None:
         """Return this station's latest coordinator data."""
@@ -63,6 +94,11 @@ def station_device_identifier(provider: str, station_id: str) -> tuple[str, str]
     return DOMAIN, f"{provider}:{station_id}"
 
 
+def location_device_identifier(provider: str, location_id: str) -> tuple[str, str]:
+    """Build a provider-scoped identifier for a distinct physical location."""
+    return DOMAIN, f"{provider}:location:{location_id}"
+
+
 def setup_dynamic_station_entities(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -76,15 +112,47 @@ def setup_dynamic_station_entities(
         raise RuntimeError("CurbCharge station entities require an active platform")
 
     entities_by_station: dict[str, list[Entity]] = {}
+    parent_identifiers_by_station: dict[str, tuple[str, str]] = {}
     known_station_ids: set[str] = set()
     pending_removals: set[str] = set()
 
     def add_stations(stations: dict[str, ChargingStation]) -> None:
+        device_registry = dr.async_get(hass)
         new_entities: list[Entity] = []
         for station_id, station in stations.items():
             if station_id in known_station_ids:
                 continue
+
+            location = station.location
+            parent_device = None
+            parent_identifier = None
+            if (
+                location is not None
+                and location.provider == station.provider
+                and location.provider_id != station.provider_id
+            ):
+                parent_identifier = location_device_identifier(
+                    location.provider, location.provider_id
+                )
+                parent_device = device_registry.async_get_or_create(
+                    config_entry_id=entry.entry_id,
+                    identifiers={parent_identifier},
+                    name=(
+                        f"{location.name} ({location.provider}:{location.provider_id})"
+                    ),
+                    manufacturer=location.operator,
+                    model=location.provider_name,
+                    serial_number=location.provider_id,
+                )
+                parent_identifiers_by_station[station_id] = parent_identifier
+
             entities = list(create_entities(station))
+            if parent_device is not None and parent_identifier is not None:
+                for entity in entities:
+                    if isinstance(entity, CurbChargeStationEntity):
+                        entity.attach_to_location_device(
+                            station, parent_device, parent_identifier
+                        )
             entities_by_station[station_id] = entities
             known_station_ids.add(station_id)
             new_entities.extend(entities)
@@ -99,6 +167,7 @@ def setup_dynamic_station_entities(
                 if station_id in (coordinator.data or {}):
                     pending_removals.discard(station_id)
                     continue
+                parent_identifier = parent_identifiers_by_station.pop(station_id, None)
                 for entity in entities_by_station.pop(station_id, []):
                     if entity.entity_id in platform.entities:
                         await platform.async_remove_entity(entity.entity_id)
@@ -106,29 +175,73 @@ def setup_dynamic_station_entities(
                 identifier = station_device_identifier(
                     coordinator.provider_id, station_id
                 )
+                get_child_device = getattr(
+                    device_registry, "async_get_child_device_by_identifier", None
+                )
+                device = (
+                    get_child_device(identifier, entry.entry_id)
+                    if get_child_device is not None
+                    else None
+                )
+                if device is None:
+                    device = next(
+                        (
+                            candidate
+                            for candidate in dr.async_entries_for_config_entry(
+                                device_registry, entry.entry_id
+                            )
+                            if identifier in candidate.identifiers
+                        ),
+                        None,
+                    )
+                if device is not None:
+                    for registry_entry in er.async_entries_for_device(
+                        entity_registry, device.id
+                    ):
+                        if registry_entry.domain == platform.domain:
+                            entity_registry.async_remove(registry_entry.entity_id)
+                    if not er.async_entries_for_device(entity_registry, device.id):
+                        device_registry.async_remove_device(device.id)
+
+                known_station_ids.discard(station_id)
+                pending_removals.discard(station_id)
+                if (
+                    parent_identifier is None
+                    or parent_identifier in parent_identifiers_by_station.values()
+                ):
+                    continue
+
                 device = next(
                     (
                         candidate
                         for candidate in dr.async_entries_for_config_entry(
                             device_registry, entry.entry_id
                         )
-                        if identifier in candidate.identifiers
+                        if parent_identifier in candidate.identifiers
                     ),
                     None,
                 )
                 if device is None:
-                    known_station_ids.discard(station_id)
-                    pending_removals.discard(station_id)
                     continue
-                for registry_entry in er.async_entries_for_device(
-                    entity_registry, device.id
+
+                get_children = getattr(dr, "async_entries_for_parent_device", None)
+                has_child_devices = (
+                    bool(get_children(device_registry, device.id))
+                    if get_children is not None
+                    else False
+                )
+                has_legacy_children = any(
+                    getattr(candidate, "via_device_id", None) == device.id
+                    for candidate in dr.async_entries_for_config_entry(
+                        device_registry, entry.entry_id
+                    )
+                )
+                if (
+                    not has_child_devices
+                    and not has_legacy_children
+                    and not er.async_entries_for_device(entity_registry, device.id)
                 ):
-                    if registry_entry.domain == platform.domain:
-                        entity_registry.async_remove(registry_entry.entity_id)
-                if not er.async_entries_for_device(entity_registry, device.id):
                     device_registry.async_remove_device(device.id)
-                known_station_ids.discard(station_id)
-                pending_removals.discard(station_id)
 
     add_stations(coordinator.data or {})
 
