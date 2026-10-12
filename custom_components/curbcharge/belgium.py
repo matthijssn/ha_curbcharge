@@ -67,6 +67,7 @@ class BelgiumRequestLimiter:
         """Initialize limiter state for one Home Assistant instance."""
         self._lock = asyncio.Lock()
         self._last_request: float | None = None
+        self._retry_after_until = 0.0
         self._last_locations: dict[bytes, float] = {}
         self._last_evse_status: dict[tuple[bytes, str], float] = {}
 
@@ -74,31 +75,47 @@ class BelgiumRequestLimiter:
         """Wait until this token, EVSE, and IP may safely make another request."""
         token_key = hashlib.sha256(token.encode("ascii")).digest()
         async with self._lock:
-            now = time.monotonic()
-            allowed_at = now
-            if self._last_request is not None:
-                allowed_at = max(allowed_at, self._last_request + _IP_REQUEST_INTERVAL)
-            if evse_id is None:
-                last_location = self._last_locations.get(token_key)
-                if last_location is not None:
+            while True:
+                now = time.monotonic()
+                allowed_at = max(now, self._retry_after_until)
+                if self._last_request is not None:
                     allowed_at = max(
-                        allowed_at, last_location + _LOCATION_REQUEST_INTERVAL
+                        allowed_at, self._last_request + _IP_REQUEST_INTERVAL
                     )
-            else:
-                last_status = self._last_evse_status.get((token_key, evse_id))
-                if last_status is not None:
-                    allowed_at = max(allowed_at, last_status + _EVSE_STATUS_INTERVAL)
+                if evse_id is None:
+                    last_location = self._last_locations.get(token_key)
+                    if last_location is not None:
+                        allowed_at = max(
+                            allowed_at, last_location + _LOCATION_REQUEST_INTERVAL
+                        )
+                else:
+                    last_status = self._last_evse_status.get((token_key, evse_id))
+                    if last_status is not None:
+                        allowed_at = max(
+                            allowed_at, last_status + _EVSE_STATUS_INTERVAL
+                        )
 
-            delay = allowed_at - now
-            if delay > 0:
-                await asyncio.sleep(delay)
+                delay = allowed_at - now
+                if delay > 0:
+                    await asyncio.sleep(delay)
 
-            requested_at = time.monotonic()
-            self._last_request = requested_at
-            if evse_id is None:
-                self._last_locations[token_key] = requested_at
-            else:
-                self._last_evse_status[(token_key, evse_id)] = requested_at
+                if self._retry_after_until > time.monotonic():
+                    continue
+
+                requested_at = time.monotonic()
+                self._last_request = requested_at
+                if evse_id is None:
+                    self._last_locations[token_key] = requested_at
+                else:
+                    self._last_evse_status[(token_key, evse_id)] = requested_at
+                return
+
+    def defer_requests(self, seconds: int | None) -> None:
+        """Pause every client sharing this limiter for the provider's Retry-After."""
+        if seconds is not None and seconds > 0:
+            self._retry_after_until = max(
+                self._retry_after_until, time.monotonic() + seconds
+            )
 
 
 def _shared_request_limiter(hass: HomeAssistant) -> BelgiumRequestLimiter:
@@ -175,9 +192,13 @@ class BelgiumDatexClient:
                         "Eco-Movement rejected the Belgium API credentials"
                     )
                 if response.status == 429:
+                    retry_after = retry_after_seconds(
+                        response.headers.get("Retry-After")
+                    )
+                    self._request_limiter.defer_requests(retry_after)
                     raise ProviderRateLimitError(
                         "Eco-Movement rate-limited the Belgium API request",
-                        retry_after_seconds(response.headers.get("Retry-After")),
+                        retry_after,
                     )
                 if not 200 <= response.status < 300:
                     raise ProviderConnectionError(
