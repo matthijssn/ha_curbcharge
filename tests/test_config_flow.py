@@ -2,11 +2,13 @@
 
 import pytest
 import voluptuous as vol
+from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.curbcharge import config_flow
 from custom_components.curbcharge.const import (
+    CONF_API_TOKEN,
     CONF_INCLUDE_UNKNOWN,
     CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
@@ -16,6 +18,7 @@ from custom_components.curbcharge.const import (
     DOMAIN,
     LOCATION_HOME,
     LOCATION_MANUAL,
+    PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NDW_DOT_NL,
 )
 from custom_components.curbcharge.provider import (
@@ -32,11 +35,13 @@ from tests.conftest import FakeProvider
 pytestmark = pytest.mark.usefixtures("enable_custom_integrations")
 
 
-def _station_options() -> dict[str, int | str]:
+def _station_options(
+    provider: str = PROVIDER_NDW_DOT_NL,
+) -> dict[str, int | str]:
     return {
         CONF_SEARCH_RADIUS: 500,
         CONF_MAX_STATIONS: 10,
-        CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+        CONF_PROVIDER: provider,
     }
 
 
@@ -92,6 +97,350 @@ async def test_config_flow_uses_manual_coordinates(hass, monkeypatch):
     assert "5.654321" not in result["result"].unique_id
 
 
+@pytest.mark.asyncio
+async def test_belgium_config_flow_validates_and_stores_token(hass, monkeypatch):
+    hass.config.latitude = 50.85
+    hass.config.longitude = 4.35
+    provider = FakeProvider()
+    calls: list[tuple[object, ...]] = []
+
+    def create_provider(*args):
+        calls.append(args)
+        return provider
+
+    monkeypatch.setattr(config_flow, "create_provider", create_provider)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_HOME}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _station_options(PROVIDER_ECO_MOVEMENT_BE)
+    )
+    assert result["step_id"] == "belgium_credentials"
+
+    token = "test-belgium-token"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: token}
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_PROVIDER] == PROVIDER_ECO_MOVEMENT_BE
+    assert result["data"][CONF_API_TOKEN] == token
+    assert CONF_API_TOKEN not in result["result"].options
+    assert provider.validation_calls == [(50.85, 4.35, 500)]
+    assert calls[0][0] == PROVIDER_ECO_MOVEMENT_BE
+    assert calls[0][2:] == (hass, token)
+
+
+@pytest.mark.asyncio
+async def test_belgium_config_flow_rejects_malformed_token_before_network(
+    hass, monkeypatch
+):
+    hass.config.latitude = 50.85
+    hass.config.longitude = 4.35
+
+    def fail_provider(*_args):
+        raise AssertionError("Invalid tokens must not reach the provider")
+
+    monkeypatch.setattr(config_flow, "create_provider", fail_provider)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_HOME}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _station_options(PROVIDER_ECO_MOVEMENT_BE)
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: "bad\nheader"}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "belgium_credentials"
+    assert result["errors"]["base"] == "invalid_api_token"
+
+
+@pytest.mark.asyncio
+async def test_belgium_config_flow_keeps_token_form_on_auth_failure(hass, monkeypatch):
+    hass.config.latitude = 50.85
+    hass.config.longitude = 4.35
+    provider = FakeProvider()
+    provider.validation_error = AuthenticationError("private token details")
+    monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_HOME}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _station_options(PROVIDER_ECO_MOVEMENT_BE)
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: "test-belgium-token"}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "belgium_credentials"
+    assert result["errors"]["base"] == "auth"
+
+
+@pytest.mark.asyncio
+async def test_reauth_replaces_belgium_token_and_preserves_unique_id(hass, monkeypatch):
+    hass.config.latitude = 50.85
+    hass.config.longitude = 4.35
+    provider = FakeProvider()
+    monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
+    location_id = config_flow._config_unique_id(
+        PROVIDER_ECO_MOVEMENT_BE, 50.85, 4.35, 500
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=location_id,
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_HOME,
+            CONF_PROVIDER: PROVIDER_ECO_MOVEMENT_BE,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+            CONF_API_TOKEN: "old-token",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reauth", "entry_id": entry.entry_id},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: "replacement-token"}
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert entry.data[CONF_API_TOKEN] == "replacement-token"
+    assert entry.unique_id == location_id
+    assert provider.validation_calls == [(50.85, 4.35, 500)]
+
+
+@pytest.mark.asyncio
+async def test_reauth_keeps_form_open_when_provider_rejects_replacement(
+    hass, monkeypatch
+):
+    hass.config.latitude = 50.85
+    hass.config.longitude = 4.35
+    provider = FakeProvider()
+    provider.validation_error = AuthenticationError("private token details")
+    monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="belgium-search-area",
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_HOME,
+            CONF_PROVIDER: PROVIDER_ECO_MOVEMENT_BE,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+            CONF_API_TOKEN: "old-token",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reauth", "entry_id": entry.entry_id},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: "invalid-token"}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reauth_confirm"
+    assert result["errors"]["base"] == "auth"
+    assert entry.data[CONF_API_TOKEN] == "old-token"
+
+
+@pytest.mark.asyncio
+async def test_reauth_aborts_for_a_provider_without_credentials(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="dutch-search-area",
+        data={CONF_PROVIDER: PROVIDER_NDW_DOT_NL},
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reauth", "entry_id": entry.entry_id},
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "unsupported_provider"
+
+
+@pytest.mark.asyncio
+async def test_reauth_rejects_a_provider_changed_in_options(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="belgium-search-area",
+        data={CONF_PROVIDER: PROVIDER_ECO_MOVEMENT_BE},
+        options={CONF_PROVIDER: PROVIDER_NDW_DOT_NL},
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reauth", "entry_id": entry.entry_id},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: "replacement-token"}
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "unsupported_provider"
+
+
+@pytest.mark.asyncio
+async def test_reauth_requires_the_configured_location(hass):
+    hass.config.latitude = 0
+    hass.config.longitude = 0
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="belgium-search-area",
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_HOME,
+            CONF_PROVIDER: PROVIDER_ECO_MOVEMENT_BE,
+            CONF_API_TOKEN: "old-token",
+            CONF_SEARCH_RADIUS: 500,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reauth", "entry_id": entry.entry_id},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: "replacement-token"}
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "location_not_configured"
+
+
+@pytest.mark.asyncio
+async def test_reauth_rejects_a_malformed_token_before_provider_validation(
+    hass, monkeypatch
+):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="belgium-search-area",
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_HOME,
+            CONF_PROVIDER: PROVIDER_ECO_MOVEMENT_BE,
+            CONF_API_TOKEN: "old-token",
+            CONF_SEARCH_RADIUS: 500,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    def fail_provider(*_args):
+        raise AssertionError("Invalid tokens must not reach the provider")
+
+    monkeypatch.setattr(config_flow, "create_provider", fail_provider)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reauth", "entry_id": entry.entry_id},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: "bad\nheader"}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reauth_confirm"
+    assert result["errors"]["base"] == "invalid_api_token"
+
+
+@pytest.mark.asyncio
+async def test_belgium_reconfigure_reuses_saved_token(hass, monkeypatch):
+    hass.config.latitude = 52.3
+    hass.config.longitude = 5.3
+    old_location = (52.1, 5.1)
+    provider = FakeProvider()
+    calls: list[tuple[object, ...]] = []
+
+    def create_provider(*args):
+        calls.append(args)
+        return provider
+
+    monkeypatch.setattr(config_flow, "create_provider", create_provider)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=config_flow._config_unique_id(
+            PROVIDER_ECO_MOVEMENT_BE, *old_location, 500
+        ),
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_MANUAL,
+            CONF_PROVIDER: PROVIDER_ECO_MOVEMENT_BE,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+            CONF_API_TOKEN: "saved-token",
+            "latitude": old_location[0],
+            "longitude": old_location[1],
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reconfigure", "entry_id": entry.entry_id},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_HOME}
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert calls[0][0] == PROVIDER_ECO_MOVEMENT_BE
+    assert calls[0][2:] == (hass, "saved-token")
+    assert entry.data[CONF_API_TOKEN] == "saved-token"
+
+
+@pytest.mark.asyncio
+async def test_belgium_duplicate_search_area_aborts_before_asking_for_token(hass):
+    hass.config.latitude = 50.85
+    hass.config.longitude = 4.35
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=config_flow._config_unique_id(
+            PROVIDER_ECO_MOVEMENT_BE, 50.85, 4.35, 500
+        ),
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_HOME,
+            CONF_PROVIDER: PROVIDER_ECO_MOVEMENT_BE,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+            CONF_API_TOKEN: "existing-token",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_HOME}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _station_options(PROVIDER_ECO_MOVEMENT_BE)
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+
+
 def test_manual_coordinates_and_radius_are_range_validated():
     with pytest.raises(vol.Invalid):
         config_flow.manual_location_schema()({"latitude": 91, "longitude": 5})
@@ -105,6 +454,18 @@ def test_manual_coordinates_and_radius_are_range_validated():
                 CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
             }
         )
+    assert (
+        config_flow.options_schema({CONF_PROVIDER: "unsupported"})(
+            {
+                CONF_SCAN_INTERVAL: 5,
+                CONF_SEARCH_RADIUS: 500,
+                CONF_MAX_STATIONS: 10,
+                CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+                CONF_INCLUDE_UNKNOWN: True,
+            }
+        )[CONF_PROVIDER]
+        == PROVIDER_NDW_DOT_NL
+    )
     with pytest.raises(vol.Invalid):
         config_flow.station_options_schema()(
             {
@@ -128,6 +489,21 @@ def test_options_allow_one_minute_and_reject_zero():
     assert schema(valid)[CONF_SCAN_INTERVAL] == 1
     with pytest.raises(vol.Invalid):
         schema({**valid, CONF_SCAN_INTERVAL: 0})
+
+
+def test_entry_location_validates_manual_coordinates(hass):
+    assert config_flow._entry_location(hass, {}) is None
+    assert (
+        config_flow._entry_location(hass, {CONF_LATITUDE: True, CONF_LONGITUDE: 5})
+        is None
+    )
+    assert (
+        config_flow._entry_location(hass, {CONF_LATITUDE: 91, CONF_LONGITUDE: 5})
+        is None
+    )
+    assert config_flow._entry_location(
+        hass, {CONF_LATITUDE: 52.1, CONF_LONGITUDE: 5.1}
+    ) == (52.1, 5.1)
 
 
 @pytest.mark.asyncio

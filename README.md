@@ -43,23 +43,31 @@ normalizes values above 1000 as watts; values at or below 1000 are treated as
 kW. This follows the observed feed while accommodating the published unit
 description.
 
-### Belgium DATEX II (development only)
+### Belgium DATEX II (preview)
 
 The Belgium adapter targets Eco-Movement's [DATEX II API][belgium-datex-api],
-but Belgium is not selectable in the current config flow and is not yet
-supported for user setup. The API publishes a daily static location snapshot
-and separate status requests for each EVSE. Its documented limits are one
-request per 10 seconds per source IP, 30 location requests per hour per token,
-and two status requests per minute per EVSE per token. The provider uses a
-shared Home Assistant request limiter; a refresh can therefore take several
-minutes when many EVSEs need status updates. A `Retry-After` response pauses
-requests from all Belgium entries sharing that limiter.
+and can be selected in the config flow. Setup asks for an Eco-Movement API
+token as a password field, validates it before creating the entry, stores it
+only in config-entry data, and redacts it from diagnostics. Use this preview
+only if you are authorized to access the API and have reviewed the applicable
+terms.
 
-Belgian access approval, licensing terms, quotas, and live payload compatibility
-have not been verified. Treat them as release blockers; do not enable Belgium
-for users until they are confirmed. When status is missing, rate-limited, or
-unavailable, CurbCharge keeps availability unknown rather than inferring it.
-See the [Transportdata.be dataset][belgium-dataset].
+The API publishes a daily static location snapshot and separate status requests
+for each EVSE. Its documented limits are one request per 10 seconds per source
+IP, 30 location requests per hour per token, and two status requests per minute
+per EVSE per token. The provider uses a shared Home Assistant request limiter;
+a refresh can therefore take several minutes when many EVSEs need status
+updates. A `Retry-After` response pauses requests from all Belgium entries
+sharing that limiter. If a token expires or is revoked, the integration
+prompts for a replacement token and validates it before updating the entry.
+
+Eco-Movement access approval, applicable terms/licensing, and live Belgian
+payload compatibility have not been verified. Treat them as release blockers.
+Tests use sanitized synthetic examples based on the published DATEX profile;
+no recorded production response is committed.
+Missing status remains unknown; failed updates make coordinator entities
+unavailable instead of inferring charger state. See the
+[Transportdata.be dataset][belgium-dataset].
 
 ## Installation
 
@@ -87,19 +95,22 @@ longitude. Home coordinates are read at runtime and are not copied into the
 config entry. Manual coordinates are stored locally because they are needed to
 make each search.
 
-Choose a search radius from 100 to 10,000 metres, a maximum of 1 to 50 stations
-(default 10), and the NDW DOT-NL provider. CurbCharge verifies provider
-connectivity and the response format before creating the config entry. The
-default polling interval is five minutes; the options flow permits intervals
-of one minute or longer, plus changes to the radius, station limit, provider,
-and whether to include stations for which no availability data was returned.
+Choose a search radius from 100 to 10,000 metres and a maximum of 1 to 50
+stations (default 10), then select NDW DOT-NL or the Belgium preview. Belgium
+setup also asks for the Eco-Movement API token and validates connectivity
+before creating the entry. The default polling interval is five minutes; the
+options flow permits intervals of one minute or longer, plus changes to the
+radius, station limit, and whether to include stations for which no
+availability data was returned. The provider is selected during setup and
+cannot be switched from the options flow.
 
 ## Supported stations
 
-CurbCharge discovers publicly accessible charging points in the Netherlands
-that NDW DOT-NL publishes within the configured search area. It reports provider
-data; it does not connect to or control physical chargers. Stations outside
-the DOT-NL dataset are not discoverable through this integration.
+CurbCharge's supported live coverage is public charging points in the
+Netherlands published by NDW DOT-NL. Belgium DATEX II is available as a preview
+for authorized users, but is not considered release-ready until access,
+licensing, quotas, and real-payload compatibility are verified. CurbCharge
+reports provider data; it does not connect to or control physical chargers.
 
 ## Entities
 

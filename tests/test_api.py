@@ -21,6 +21,8 @@ from custom_components.curbcharge.api import (
     _station_from_feature,
     _with_station_tariff,
 )
+from custom_components.curbcharge.belgium import BelgiumChargingProvider
+from custom_components.curbcharge.const import PROVIDER_ECO_MOVEMENT_BE
 from custom_components.curbcharge.models import ChargingTariff, ConnectorStatus
 from custom_components.curbcharge.provider import (
     AuthenticationError,
@@ -656,6 +658,19 @@ def test_with_station_tariff_attaches_only_a_complete_matching_price(sample_stat
 def test_provider_factory_rejects_unimplemented_providers():
     with pytest.raises(UnsupportedProviderError):
         api.create_provider("unknown", FakeSession([]))
+
+
+def test_provider_factory_creates_belgium_with_home_assistant_limiter(hass):
+    provider = api.create_provider(
+        PROVIDER_ECO_MOVEMENT_BE,
+        FakeSession([]),
+        hass,
+        "test-token",
+    )
+
+    assert isinstance(provider, BelgiumChargingProvider)
+    assert provider.provider_id == PROVIDER_ECO_MOVEMENT_BE
+    assert provider.country_code == "BE"
 
 
 @pytest.mark.asyncio

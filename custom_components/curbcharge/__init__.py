@@ -12,6 +12,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import create_provider
 from .const import (
+    CONF_API_TOKEN,
     CONF_INCLUDE_UNKNOWN,
     CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
@@ -29,6 +30,7 @@ from .const import (
     MIN_SCAN_INTERVAL_MINUTES,
     MIN_SEARCH_RADIUS_M,
     PLATFORMS,
+    PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NDW_DOT_NL,
 )
 from .const import (
@@ -55,8 +57,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
     max_stations = options.get(CONF_MAX_STATIONS, DEFAULT_MAX_STATIONS)
     scan_interval = options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES)
     include_unknown = options.get(CONF_INCLUDE_UNKNOWN, DEFAULT_INCLUDE_UNKNOWN)
+    api_token = entry.data.get(CONF_API_TOKEN)
     if (
-        provider_id != PROVIDER_NDW_DOT_NL
+        provider_id not in (PROVIDER_NDW_DOT_NL, PROVIDER_ECO_MOVEMENT_BE)
+        or (
+            provider_id == PROVIDER_ECO_MOVEMENT_BE
+            and (not isinstance(api_token, str) or not api_token)
+        )
         or not isinstance(radius_m, int)
         or not MIN_SEARCH_RADIUS_M <= radius_m <= MAX_SEARCH_RADIUS_M
         or not isinstance(max_stations, int)
@@ -71,7 +78,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
         )
 
     try:
-        provider = create_provider(provider_id, async_get_clientsession(hass))
+        provider = create_provider(
+            provider_id, async_get_clientsession(hass), hass, api_token
+        )
+    except ValueError as err:
+        raise ConfigEntryNotReady(
+            translation_domain=DOMAIN,
+            translation_key="invalid_config",
+        ) from err
     except ChargingProviderError as err:
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN,

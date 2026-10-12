@@ -11,6 +11,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 import custom_components.curbcharge as curbcharge
 from custom_components.curbcharge.const import (
+    CONF_API_TOKEN,
     CONF_INCLUDE_UNKNOWN,
     CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
@@ -20,6 +21,7 @@ from custom_components.curbcharge.const import (
     DOMAIN,
     LOCATION_HOME,
     LOCATION_MANUAL,
+    PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NDW_DOT_NL,
 )
 from custom_components.curbcharge.provider import ChargingProviderError
@@ -195,6 +197,58 @@ async def test_setup_rejects_invalid_options(hass, key, value):
         await curbcharge.async_setup_entry(hass, entry)
 
     assert error.value.translation_key == "invalid_config"
+
+
+@pytest.mark.asyncio
+async def test_setup_requires_a_belgium_token(hass):
+    entry = _entry({CONF_PROVIDER: PROVIDER_ECO_MOVEMENT_BE})
+
+    with pytest.raises(ConfigEntryNotReady) as error:
+        await curbcharge.async_setup_entry(hass, entry)
+
+    assert error.value.translation_key == "invalid_config"
+
+
+@pytest.mark.asyncio
+async def test_setup_rejects_a_malformed_belgium_token(hass):
+    entry = _entry(
+        {
+            CONF_PROVIDER: PROVIDER_ECO_MOVEMENT_BE,
+            CONF_API_TOKEN: "bad\nheader",
+        }
+    )
+
+    with pytest.raises(ConfigEntryNotReady) as error:
+        await curbcharge.async_setup_entry(hass, entry)
+
+    assert error.value.translation_key == "invalid_config"
+
+
+@pytest.mark.asyncio
+async def test_setup_passes_belgium_token_to_provider_factory(hass, monkeypatch):
+    token = "test-belgium-token"
+    entry = _entry(
+        {
+            CONF_PROVIDER: PROVIDER_ECO_MOVEMENT_BE,
+            CONF_API_TOKEN: token,
+        }
+    )
+    provider = FakeProvider([()])
+    calls: list[tuple[object, ...]] = []
+
+    def create_provider(*args):
+        calls.append(args)
+        return provider
+
+    monkeypatch.setattr(curbcharge, "create_provider", create_provider)
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    assert calls[0][0] == PROVIDER_ECO_MOVEMENT_BE
+    assert calls[0][2:] == (hass, token)
+    assert entry.runtime_data.provider_id == PROVIDER_NDW_DOT_NL
 
 
 @pytest.mark.asyncio

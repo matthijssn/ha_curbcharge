@@ -1,0 +1,46 @@
+{
+  "messageContainer": {
+    "payload": [
+      {
+        "aegiEnergyInfrastructureStatusPublication": {
+          "energyInfrastructureSiteStatus": [
+            {
+              "energyInfrastructureStationStatus": [
+                {
+                  "refillPointStatus": [
+                    {
+                      "aegiElectricChargingPointStatus": {
+                        "reference": {
+                          "idG": "evse-internal-1"
+                        },
+                        "lastUpdated": "2026-10-11T12:01:00+02:00",
+                        "status": {
+                          "value": "available"
+                        },
+                        "energyRateUpdate": [
+                          {
+                            "energyPrice": [
+                              {
+                                "priceType": {
+                                  "value": "pricePerKWh"
+                                },
+                                "value": 0.42
+                              }
+                            ],
+                            "applicableCurrency": [
+                              "EUR"
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ]
+  }
+}

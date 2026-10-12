@@ -8,6 +8,7 @@ from homeassistant.core import HomeAssistant
 
 from . import CurbChargeConfigEntry
 from .const import (
+    CONF_API_TOKEN,
     CONF_INCLUDE_UNKNOWN,
     CONF_LOCATION_SOURCE,
     CONF_PROVIDER,
@@ -15,7 +16,7 @@ from .const import (
 )
 from .coordinator import CurbChargeCoordinator
 
-TO_REDACT = [CONF_LATITUDE, CONF_LONGITUDE]
+TO_REDACT = [CONF_LATITUDE, CONF_LONGITUDE, CONF_API_TOKEN]
 
 
 async def async_get_config_entry_diagnostics(

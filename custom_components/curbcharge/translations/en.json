@@ -58,12 +58,33 @@
           "max_stations": "Limit the number of stations and their entities.",
           "provider": "The data provider used to discover stations and availability."
         }
+      },
+      "belgium_credentials": {
+        "title": "Connect to Eco-Movement Belgium",
+        "description": "Enter the API token issued to you by Eco-Movement. The token is stored in this config entry and redacted from diagnostics.",
+        "data": {
+          "api_token": "Eco-Movement API token"
+        },
+        "data_description": {
+          "api_token": "Use only a token you are authorized to use. Do not share it in issue reports."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Update Eco-Movement credentials",
+        "description": "Enter a replacement API token issued to you by Eco-Movement.",
+        "data": {
+          "api_token": "Eco-Movement API token"
+        },
+        "data_description": {
+          "api_token": "The token is stored in this config entry and redacted from diagnostics."
+        }
       }
     },
     "error": {
       "auth": "The provider rejected authentication.",
       "cannot_connect": "Could not connect to the charging provider.",
       "invalid_location": "Enter valid coordinates and a supported search area.",
+      "invalid_api_token": "Enter a non-empty printable ASCII API token.",
       "invalid_response": "The provider returned data in an unexpected format.",
       "location_not_configured": "Home coordinates are not configured in Home Assistant.",
       "rate_limited": "The provider is rate limiting requests. Try again later.",
@@ -72,7 +93,8 @@
     "abort": {
       "already_configured": "This provider and search area are already configured.",
       "location_not_configured": "The search location is not configured.",
-      "reconfigure_successful": "Search location updated."
+      "reconfigure_successful": "Search location updated.",
+      "reauth_successful": "Eco-Movement credentials updated."
     }
   },
   "options": {
@@ -119,7 +141,8 @@
     },
     "provider": {
       "options": {
-        "ndw_dot_nl": "NDW DOT-NL"
+        "ndw_dot_nl": "NDW DOT-NL",
+        "eco_movement_be": "Eco-Movement Belgium (preview)"
       }
     }
   },

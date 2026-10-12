@@ -53,6 +53,16 @@ _EVSE_STATUS_INTERVAL = 30
 _REQUEST_LIMITER_DATA_KEY = "belgium_request_limiter"
 
 
+def is_valid_belgium_api_token(token: object) -> bool:
+    """Return whether a token can safely be sent as an HTTP header value."""
+    return (
+        isinstance(token, str)
+        and bool(token)
+        and token.isascii()
+        and all(33 <= ord(character) <= 126 for character in token)
+    )
+
+
 class BelgiumDatexDocument(TypedDict, total=False):
     """DATEX II v3 publication envelopes returned by the Belgium API."""
 
@@ -140,11 +150,7 @@ class BelgiumDatexClient:
         request_limiter: BelgiumRequestLimiter,
     ) -> None:
         """Initialize using Home Assistant's session and shared request limiter."""
-        if (
-            not token
-            or not token.isascii()
-            or any(not 33 <= ord(character) <= 126 for character in token)
-        ):
+        if not is_valid_belgium_api_token(token):
             raise ValueError("The Belgium API token must be printable ASCII.")
         self._session = session
         self._token = token
