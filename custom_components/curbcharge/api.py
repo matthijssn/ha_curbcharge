@@ -823,10 +823,10 @@ def _with_station_tariff(
     elif all(
         connector.tariff_status is TariffStatus.AVAILABLE for connector in connectors
     ):
-        group_tariffs = [connector.tariffs[0] for connector in connectors]
+        station_group_tariffs = [connector.tariffs[0] for connector in connectors]
         if all(
-            _tariff_signature(tariff) == _tariff_signature(group_tariffs[0])
-            for tariff in group_tariffs[1:]
+            _tariff_signature(tariff) == _tariff_signature(station_group_tariffs[0])
+            for tariff in station_group_tariffs[1:]
         ):
             linked_tariffs = [
                 tariff for connector in connectors for tariff in connector.tariffs
@@ -834,7 +834,7 @@ def _with_station_tariff(
             tariff_ids = {tariff.tariff_id for tariff in linked_tariffs}
             descriptions = {tariff.description for tariff in linked_tariffs}
             station_tariff = replace(
-                group_tariffs[0],
+                station_group_tariffs[0],
                 tariff_id=next(iter(tariff_ids)) if len(tariff_ids) == 1 else None,
                 description=(
                     next(iter(descriptions)) if len(descriptions) == 1 else None
