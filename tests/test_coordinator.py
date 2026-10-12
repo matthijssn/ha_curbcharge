@@ -98,13 +98,18 @@ async def test_rate_limit_retry_after_extends_update_interval(hass):
 
 
 @pytest.mark.asyncio
-async def test_authentication_failure_uses_home_assistant_exception(hass):
+async def test_authentication_failure_does_not_log_provider_message(hass, caplog):
+    token = "private-auth-token"
     coordinator = _coordinator(
-        hass, FakeProvider([AuthenticationError("private details")])
+        hass, FakeProvider([AuthenticationError(token)])
     )
 
-    with pytest.raises(ConfigEntryAuthFailed):
-        await coordinator._async_update_data()
+    with caplog.at_level(logging.WARNING):
+        with pytest.raises(ConfigEntryAuthFailed):
+            await coordinator._async_update_data()
+
+    assert token not in caplog.text
+    assert "CurbCharge data update failed (AuthenticationError)" in caplog.text
 
 
 @pytest.mark.asyncio
