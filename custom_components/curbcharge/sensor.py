@@ -213,17 +213,27 @@ class StatusSummarySensor(CurbChargeStationEntity, SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         station = self.station
         if station is None:
-            return {}
+            return {"provider_station_id": self._station_id}
         return {
+            "station_name": station.name,
             "available_connectors": station.available_connectors,
             "occupied_connectors": station.occupied_connectors,
             "unavailable_connectors": station.unavailable_connectors,
+            "total_connectors": station.total_connectors,
             "reserved_connectors": station.reserved_connectors,
             "out_of_service_connectors": station.out_of_service_connectors,
             "unknown_connectors": station.unknown_connectors,
             "connector_types": list(station.connector_types),
             "operator": station.operator,
             "address": station.address,
+            "distance_m": station.distance_m,
+            "max_power_kw": station.max_power_kw,
+            "price_per_kwh": (
+                float(station.tariff.price_per_kwh)
+                if station.tariff and station.tariff.price_per_kwh is not None
+                else None
+            ),
+            "currency": station.tariff.currency if station.tariff else None,
             "tariff_description": (
                 station.tariff.description if station.tariff else None
             ),

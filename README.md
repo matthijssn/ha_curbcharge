@@ -87,6 +87,23 @@ or:
 Copy `custom_components/curbcharge` into the Home Assistant configuration
 directory at `custom_components/curbcharge`, then restart Home Assistant.
 
+## Lovelace card
+
+The single-station card is bundled with the integration; it is not a separate
+HACS plugin. Copy
+`custom_components/curbcharge/www/curbcharge-card.js` into the Home Assistant
+configuration directory's `www` folder (create the folder if needed). In
+**Settings → Dashboards → Resources**, add `/local/curbcharge-card.js` as a
+JavaScript module.
+
+Add the card to a dashboard and set `entity` to the station's **Status summary**
+sensor:
+
+```yaml
+type: custom:curbcharge-card
+entity: sensor.your_station_status_summary
+```
+
 ## Configuration
 
 Add **CurbCharge** from **Settings → Devices & services → Add integration**.

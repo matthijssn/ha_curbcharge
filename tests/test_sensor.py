@@ -101,6 +101,10 @@ def test_status_summary_exposes_operational_and_provider_status(hass, sample_sta
     assert sensor.extra_state_attributes["is_open"] is True
     assert sensor.extra_state_attributes["latitude"] == 52.0
     assert sensor.extra_state_attributes["address"] == "Teststraat 1"
+    assert sensor.extra_state_attributes["station_name"] == station.name
+    assert sensor.extra_state_attributes["total_connectors"] == station.total_connectors
+    assert sensor.extra_state_attributes["distance_m"] == station.distance_m
+    assert sensor.extra_state_attributes["max_power_kw"] == station.max_power_kw
 
 
 def test_best_nearby_sensor_exposes_selection_reason(hass, sample_stations):
@@ -127,7 +131,9 @@ def test_entities_are_unavailable_without_current_station_data(hass, sample_stat
     coordinator.async_set_updated_data({})
     assert not connector_sensor.available
     assert StatusSummarySensor(coordinator, station).native_value == "unknown"
-    assert StatusSummarySensor(coordinator, station).extra_state_attributes == {}
+    assert StatusSummarySensor(coordinator, station).extra_state_attributes == {
+        "provider_station_id": station.provider_id
+    }
 
     entry = MockConfigEntry(domain=DOMAIN, unique_id="hashed-area")
     best_sensor = BestNearbyChargerSensor(coordinator, entry)
