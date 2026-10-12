@@ -98,6 +98,47 @@ async def test_config_flow_uses_manual_coordinates(hass, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_reconfigure_legacy_netherlands_entry_defaults_to_ndw(hass, monkeypatch):
+    hass.config.latitude = 52.3
+    hass.config.longitude = 5.3
+    provider = FakeProvider()
+    calls: list[tuple[object, ...]] = []
+
+    def create_provider(*args):
+        calls.append(args)
+        return provider
+
+    monkeypatch.setattr(config_flow, "create_provider", create_provider)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="legacy-dutch-search-area",
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_HOME,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reconfigure", "entry_id": entry.entry_id},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_HOME}
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert calls[0][0] == PROVIDER_NDW_DOT_NL
+    assert calls[0][2:] == (hass, None)
+    assert entry.unique_id == config_flow._config_unique_id(
+        PROVIDER_NDW_DOT_NL, 52.3, 5.3, 500
+    )
+    assert CONF_PROVIDER not in entry.data
+
+
+@pytest.mark.asyncio
 async def test_belgium_config_flow_validates_and_stores_token(hass, monkeypatch):
     hass.config.latitude = 50.85
     hass.config.longitude = 4.35

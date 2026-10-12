@@ -92,6 +92,38 @@ async def test_setup_unload_and_reload_keep_stable_entities(
 
 
 @pytest.mark.asyncio
+async def test_legacy_netherlands_entry_loads_without_provider_field(
+    hass, monkeypatch, sample_stations
+):
+    station = sample_stations[0]
+    provider = FakeProvider([(station,)])
+    calls: list[tuple[object, ...]] = []
+
+    def create_provider(*args):
+        calls.append(args)
+        return provider
+
+    monkeypatch.setattr(curbcharge, "create_provider", create_provider)
+    entry = _entry()
+    entry.data.pop(CONF_PROVIDER)
+    old_unique_id = entry.unique_id
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    device_identifier = (
+        DOMAIN,
+        f"{PROVIDER_NDW_DOT_NL}:{station.provider_id}",
+    )
+    assert calls[0][0] == PROVIDER_NDW_DOT_NL
+    assert entry.runtime_data.provider_id == PROVIDER_NDW_DOT_NL
+    assert entry.unique_id == old_unique_id
+    assert _has_device(dr.async_get(hass), entry.entry_id, device_identifier)
+    assert CONF_PROVIDER not in entry.data
+
+
+@pytest.mark.asyncio
 async def test_new_stations_are_added_and_removed_after_three_successful_polls(
     hass, monkeypatch, sample_stations
 ):
