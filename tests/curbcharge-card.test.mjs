@@ -137,24 +137,79 @@ test("keeps entity-only YAML compatible and exposes editor options", () => {
 
 test("localizes editor controls in every supported language", () => {
   const labels = {
-    en: ["Layout", "Show price", "Standard"],
-    nl: ["Weergave", "Toon prijs", "Standaard"],
-    fr: ["Présentation", "Afficher le prix", "Standard"],
-    de: ["Layout", "Preis anzeigen", "Standard"],
+    en: {
+      entity: "Station entity",
+      layout: "Layout",
+      standard: "Standard",
+      compact: "Compact",
+      show_price: "Show price",
+      show_connector_details: "Show connector details",
+      show_station_details: "Show station details",
+      show_update_times: "Show update times",
+      details: "More details",
+    },
+    nl: {
+      entity: "Station-entiteit",
+      layout: "Weergave",
+      standard: "Standaard",
+      compact: "Compact",
+      show_price: "Toon prijs",
+      show_connector_details: "Toon connectordetails",
+      show_station_details: "Toon stationdetails",
+      show_update_times: "Toon updatetijden",
+      details: "Meer details",
+    },
+    fr: {
+      entity: "Entité de station",
+      layout: "Présentation",
+      standard: "Standard",
+      compact: "Compact",
+      show_price: "Afficher le prix",
+      show_connector_details: "Afficher les détails des connecteurs",
+      show_station_details: "Afficher les détails de la station",
+      show_update_times: "Afficher les heures de mise à jour",
+      details: "Plus de détails",
+    },
+    de: {
+      entity: "Station-Entität",
+      layout: "Layout",
+      standard: "Standard",
+      compact: "Kompakt",
+      show_price: "Preis anzeigen",
+      show_connector_details: "Anschlussdetails anzeigen",
+      show_station_details: "Stationsdetails anzeigen",
+      show_update_times: "Aktualisierungszeiten anzeigen",
+      details: "Weitere Details",
+    },
   };
   const Editor = elements.get("curbcharge-card-editor");
 
-  for (const [language, [layoutLabel, priceLabel, standardLabel]] of Object.entries(
-    labels,
-  )) {
+  for (const [language, expected] of Object.entries(labels)) {
     const editor = new Editor();
     editor.setConfig({ entity: "sensor.station_status_summary" });
     editor.hass = { language };
     const form = editor.shadowRoot.children[0];
 
-    assert.equal(form.computeLabel({ name: "layout" }), layoutLabel);
-    assert.equal(form.computeLabel({ name: "show_price" }), priceLabel);
-    assert.equal(form.schema[1].selector.select.options[0].label, standardLabel);
+    for (const [name, label] of Object.entries(expected)) {
+      if (name !== "details" && name !== "standard" && name !== "compact") {
+        assert.equal(form.computeLabel({ name }), label);
+      }
+    }
+    assert.deepEqual(
+      form.schema[1].selector.select.options.map((option) => option.label),
+      [expected.standard, expected.compact],
+    );
+    assert.equal(
+      cardModule.buildCardData(
+        {
+          entity_id: "sensor.station_status_summary",
+          state: "unknown",
+          attributes: { provider_station_id: "station-1" },
+        },
+        { language },
+      ).detailsLabel,
+      expected.details,
+    );
   }
 });
 
