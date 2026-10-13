@@ -38,14 +38,14 @@ rules:
   log_when_unavailable: done
   parallel_updates: done
   reauthentication_flow:
-    status: exempt
-    comment: NDW DOT-NL's public data API requires no credentials.
+    status: done
+    comment: Belgium token failures use the tested reauthentication flow; the public NDW API requires no credentials.
   test_coverage: done
   devices: done
   diagnostics: done
   discovery:
     status: exempt
-    comment: This cloud data provider has no local discovery protocol; users select a location and stations are discovered from NDW DOT-NL.
+    comment: Providers return cloud records after users configure a search area; there is no local-network discovery protocol.
   discovery_update_info:
     status: exempt
     comment: Charging stations are cloud records, not network devices with Home Assistant connection information to update.
@@ -66,7 +66,7 @@ rules:
   reconfiguration_flow: done
   repair_issues:
     status: exempt
-    comment: There are no credential or hardware faults requiring manual repair; network errors recover automatically and location changes use the reconfigure flow.
+    comment: Credential failures use reauthentication, transient network/rate-limit errors recover automatically, and no separate manual repair action exists.
   stale_devices: done
   async_dependency: done
   inject_websession: done
