@@ -60,6 +60,15 @@ class ChargingConnector:
     tariffs: tuple[ChargingTariff, ...] = ()
     tariff_status: TariffStatus | None = None
 
+    @property
+    def known_available_count(self) -> int | None:
+        """Return reported availability, or infer it only from a known status."""
+        if self.available_count is not None:
+            return self.available_count
+        if self.status is ConnectorStatus.UNKNOWN:
+            return None
+        return self.count if self.status is ConnectorStatus.AVAILABLE else 0
+
 
 @dataclass(frozen=True, slots=True)
 class ChargingTariff:
@@ -137,12 +146,10 @@ class ChargingStation:
             return None
         total = 0
         for connector in self.connectors:
-            if connector.available_count is not None:
-                total += connector.available_count
-            elif connector.status is ConnectorStatus.AVAILABLE:
-                total += connector.count
-            elif connector.status is ConnectorStatus.UNKNOWN:
+            available = connector.known_available_count
+            if available is None:
                 return None
+            total += available
         return total
 
     @property

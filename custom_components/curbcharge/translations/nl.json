@@ -193,6 +193,9 @@
       },
       "nearby_available_connectors": {
         "name": "Beschikbare laadconnectoren in de buurt"
+      },
+      "nearby_availability_percentage": {
+        "name": "Beschikbaarheid laadconnectoren in de buurt"
       }
     }
   }
