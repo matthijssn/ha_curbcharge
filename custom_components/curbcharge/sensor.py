@@ -391,13 +391,9 @@ def _availability_percentage_summary(
             unreported_total_station_count += 1
             excluded_connector_group_count += len(station.connectors)
             continue
-
-        station_total = station.total_connectors
-        if station_total is None:
-            unreported_total_station_count += 1
-            excluded_connector_group_count += len(station.connectors)
-            continue
-        reported_total_connectors += station_total
+        reported_total_connectors += sum(
+            connector.count for connector in station.connectors
+        )
         if not station.availability_reported:
             excluded_connector_group_count += len(station.connectors)
             continue
