@@ -362,7 +362,9 @@ async def test_nl_and_be_entries_refresh_fail_recover_and_reload_independently(
 
     assert await hass.config_entries.async_unload(nl_entry.entry_id)
     await hass.async_block_till_done()
-    assert hass.states.get(nl_count.entity_id) is None
+    nl_unloaded_count = hass.states.get(nl_count.entity_id)
+    assert nl_unloaded_count is not None
+    assert nl_unloaded_count.state == "unavailable"
     assert hass.states.get(be_count.entity_id).state == "1"
     assert be_coordinator.last_update_success
 
@@ -377,7 +379,9 @@ async def test_nl_and_be_entries_refresh_fail_recover_and_reload_independently(
 
     assert await hass.config_entries.async_unload(be_entry.entry_id)
     await hass.async_block_till_done()
-    assert hass.states.get(be_count.entity_id) is None
+    be_unloaded_count = hass.states.get(be_count.entity_id)
+    assert be_unloaded_count is not None
+    assert be_unloaded_count.state == "unavailable"
     assert hass.states.get(nl_count.entity_id).state == "1"
 
     assert await hass.config_entries.async_setup(be_entry.entry_id)
