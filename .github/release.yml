@@ -1,0 +1,28 @@
+changelog:
+  categories:
+    - title: "Breaking changes"
+      labels:
+        - "breaking-change"
+    - title: "Bug fixes"
+      labels:
+        - "bug"
+    - title: "Features and provider improvements"
+      labels:
+        - "enhancement"
+        - "provider"
+        - "netherlands"
+        - "belgium"
+        - "internationalization"
+        - "diagnostics"
+        - "accessibility"
+    - title: "Documentation"
+      labels:
+        - "documentation"
+    - title: "Maintenance and quality"
+      labels:
+        - "test"
+        - "architecture"
+        - "quality-scale"
+    - title: "Other changes"
+      labels:
+        - "*"
