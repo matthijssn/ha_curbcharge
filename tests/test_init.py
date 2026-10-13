@@ -279,8 +279,9 @@ async def test_nl_and_be_entries_refresh_fail_recover_and_reload_independently(
     nl_entry.add_to_hass(hass)
     be_entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(nl_entry.entry_id)
-    assert await hass.config_entries.async_setup(be_entry.entry_id)
     await hass.async_block_till_done()
+    assert nl_entry.runtime_data.provider_id == PROVIDER_NDW_DOT_NL
+    assert be_entry.runtime_data.provider_id == PROVIDER_ECO_MOVEMENT_BE
 
     registry = er.async_get(hass)
     nl_entities = er.async_entries_for_config_entry(registry, nl_entry.entry_id)
