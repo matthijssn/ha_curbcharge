@@ -85,9 +85,7 @@ async def test_bundled_card_is_served_without_copying_to_www(
     card_path = Path(curbcharge.__file__).parent / "www" / "curbcharge-card.js"
     assert await response.read() == card_path.read_bytes()
     assert "Cache-Control" not in response.headers
-    assert not (
-        Path(hass.config.config_dir) / "www" / "curbcharge-card.js"
-    ).exists()
+    assert not (Path(hass.config.config_dir) / "www" / "curbcharge-card.js").exists()
 
 
 def _provider_station(station, provider_id, provider_name, country_code):
