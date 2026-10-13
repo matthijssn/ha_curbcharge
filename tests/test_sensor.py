@@ -92,6 +92,27 @@ def test_nearby_charging_units_handles_uninitialized_and_empty_data(
     assert len(provider.snapshots) == 1
 
 
+def test_nearby_charging_units_truncation_is_unknown_with_stale_records(
+    hass, sample_stations
+):
+    current, stale = sample_stations[:2]
+    coordinator = _coordinator(hass, current, max_stations=2)
+    coordinator.async_set_updated_data(
+        {
+            current.provider_id: current,
+            stale.provider_id: replace(stale, is_stale=True),
+        }
+    )
+    sensor = NearbyChargingUnitsSensor(
+        coordinator,
+        MockConfigEntry(domain=DOMAIN, unique_id="test-nearby-area"),
+    )
+
+    assert sensor.native_value == 1
+    assert sensor.extra_state_attributes["stale_station_count"] == 1
+    assert sensor.extra_state_attributes["results_may_be_truncated"] is None
+
+
 def test_nearby_charging_units_does_not_claim_truncation_after_filtering(
     hass, sample_stations
 ):
