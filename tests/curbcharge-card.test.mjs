@@ -2,11 +2,30 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-class FakeElement {
+class FakeEventTarget {
+  constructor() {
+    this.listeners = new Map();
+  }
+
+  addEventListener(type, listener) {
+    this.listeners.set(type, [...(this.listeners.get(type) || []), listener]);
+  }
+
+  dispatchEvent(event) {
+    for (const listener of this.listeners.get(event.type) || []) {
+      listener(event);
+    }
+    return true;
+  }
+}
+
+class FakeElement extends FakeEventTarget {
   constructor(tagName) {
+    super();
     this.tagName = tagName;
     this.children = [];
     this.textContent = "";
+    this.attributes = new Map();
   }
 
   append(...children) {
@@ -17,11 +36,17 @@ class FakeElement {
     this.children = children;
   }
 
-  setAttribute() {}
+  setAttribute(name, value) {
+    this.attributes.set(name, value);
+  }
 }
 
 const elements = new Map();
-globalThis.HTMLElement = class {
+globalThis.HTMLElement = class extends FakeEventTarget {
+  constructor() {
+    super();
+  }
+
   attachShadow() {
     this.shadowRoot = new FakeElement("shadow-root");
     return this.shadowRoot;
@@ -63,6 +88,76 @@ test("rejects invalid configuration and non-summary entities", () => {
   );
 });
 
+test("keeps entity-only YAML compatible and exposes editor options", () => {
+  const config = cardModule.validateConfig({
+    entity: "sensor.station_status_summary",
+  });
+  assert.deepEqual(config, {
+    entity: "sensor.station_status_summary",
+    layout: "standard",
+    show_price: true,
+    show_connector_details: true,
+    show_station_details: true,
+    show_update_times: true,
+  });
+
+  const Card = elements.get("curbcharge-card");
+  assert.equal(Card.getConfigElement().tagName, "curbcharge-card-editor");
+  const Editor = elements.get("curbcharge-card-editor");
+  const editor = new Editor();
+  editor.hass = { language: "nl" };
+  editor.setConfig({});
+  const form = editor.shadowRoot.children[0];
+
+  assert.equal(form.tagName, "ha-form");
+  assert.equal(form.schema.length, 6);
+  assert.equal(form.data.layout, "standard");
+  assert.equal(form.computeLabel({ name: "layout" }), "Weergave");
+
+  let changedConfig;
+  editor.addEventListener("config-changed", (event) => {
+    changedConfig = event.detail.config;
+  });
+  form.dispatchEvent({
+    type: "value-changed",
+    detail: {
+      value: {
+        entity: "sensor.station_status_summary",
+        layout: "compact",
+        show_price: false,
+      },
+    },
+    stopPropagation() {},
+  });
+
+  assert.equal(changedConfig.layout, "compact");
+  assert.equal(changedConfig.show_price, false);
+  assert.equal(changedConfig.show_connector_details, true);
+});
+
+test("localizes editor controls in every supported language", () => {
+  const labels = {
+    en: ["Layout", "Show price", "Standard"],
+    nl: ["Weergave", "Toon prijs", "Standaard"],
+    fr: ["Présentation", "Afficher le prix", "Standard"],
+    de: ["Layout", "Preis anzeigen", "Standard"],
+  };
+  const Editor = elements.get("curbcharge-card-editor");
+
+  for (const [language, [layoutLabel, priceLabel, standardLabel]] of Object.entries(
+    labels,
+  )) {
+    const editor = new Editor();
+    editor.setConfig({ entity: "sensor.station_status_summary" });
+    editor.hass = { language };
+    const form = editor.shadowRoot.children[0];
+
+    assert.equal(form.computeLabel({ name: "layout" }), layoutLabel);
+    assert.equal(form.computeLabel({ name: "show_price" }), priceLabel);
+    assert.equal(form.schema[1].selector.select.options[0].label, standardLabel);
+  }
+});
+
 test("shows reported zeroes and leaves unknown counts unknown", () => {
   const data = cardModule.buildCardData(
     {
@@ -88,9 +183,90 @@ test("shows reported zeroes and leaves unknown counts unknown", () => {
   assert.equal(data.title, "Station One");
   assert.equal(data.status, "Available");
   assert.deepEqual(
-    data.rows.slice(0, 8).map(([, value]) => value),
-    ["0", "Unknown", "0", "0", "0 kW", "0 EUR/kWh", "0 m", "Closed"],
+    data.primaryRows.map(([, value]) => value),
+    ["0", "0 EUR/kWh"],
   );
+  assert.deepEqual(
+    data.detailsRows.map(([, value]) => value),
+    ["Unknown", "0", "0", "0 kW", "0 m", "Closed", "Unknown", "Unknown"],
+  );
+});
+
+test("uses display options and starts details collapsed", () => {
+  const config = {
+    entity: "sensor.station_status_summary",
+    layout: "compact",
+    show_price: false,
+    show_connector_details: false,
+    show_station_details: false,
+    show_update_times: false,
+  };
+  const data = cardModule.buildCardData(
+    {
+      entity_id: config.entity,
+      state: "available",
+      attributes: {
+        provider_station_id: "station-1",
+        available_connectors: 2,
+        price_per_kwh: 0.4,
+        currency: "EUR",
+      },
+    },
+    { language: "en" },
+    config,
+  );
+  const Card = elements.get("curbcharge-card");
+  const card = new Card();
+  card.setConfig(config);
+  card.hass = {
+    language: "en",
+    states: {
+      [config.entity]: {
+        entity_id: config.entity,
+        state: "available",
+        attributes: {
+          provider_station_id: "station-1",
+          available_connectors: 2,
+          price_per_kwh: 0.4,
+          currency: "EUR",
+        },
+      },
+    },
+  };
+  const haCard = card.shadowRoot.children[1];
+
+  assert.deepEqual(data.primaryRows, [["Available connectors", "2"]]);
+  assert.deepEqual(data.detailsRows, []);
+  assert.equal(haCard.className, "card compact");
+  assert.doesNotMatch(visibleText(haCard), /Price per kWh|More details/);
+});
+
+test("renders keyboard-accessible details collapsed by default", () => {
+  const Card = elements.get("curbcharge-card");
+  const card = new Card();
+  card.setConfig({ entity: "sensor.station_status_summary" });
+  card.hass = {
+    language: "en",
+    states: {
+      "sensor.station_status_summary": {
+        entity_id: "sensor.station_status_summary",
+        state: "available",
+        attributes: {
+          provider_station_id: "station-1",
+          available_connectors: 2,
+        },
+      },
+    },
+  };
+
+  const haCard = card.shadowRoot.children[1];
+  const details = haCard.children.find((child) => child.tagName === "details");
+
+  assert.ok(details);
+  assert.equal(details.open, false);
+  assert.equal(details.children[0].tagName, "summary");
+  assert.equal(details.children[0].textContent, "More details");
+  assert.equal(haCard.children[0].children[1].attributes.get("role"), "status");
 });
 
 test("keeps availability separate and localizes status labels", () => {
@@ -107,12 +283,12 @@ test("keeps availability separate and localizes status labels", () => {
   const data = cardModule.buildCardData(state, { locale: { language: "fr-FR" } });
 
   assert.equal(data.status, "Aucun disponible");
-  assert.equal(data.rows[0][1], "Inconnu");
+  assert.equal(data.primaryRows[0][1], "Inconnu");
   assert.equal(
-    data.rows[7][0],
+    data.detailsRows[5][0],
     "Statut d'ouverture indiqué par le fournisseur",
   );
-  assert.equal(data.rows[7][1], "Ouverte");
+  assert.equal(data.detailsRows[5][1], "Ouverte");
 });
 
 test("labels the provider open flag separately from available connectors", () => {
@@ -131,8 +307,11 @@ test("labels the provider open flag separately from available connectors", () =>
   );
 
   assert.equal(data.status, "Available");
-  assert.deepEqual(data.rows[0], ["Available connectors", "2"]);
-  assert.deepEqual(data.rows[7], ["Provider-reported open status", "Closed"]);
+  assert.deepEqual(data.primaryRows[0], ["Available connectors", "2"]);
+  assert.deepEqual(data.detailsRows[5], [
+    "Provider-reported open status",
+    "Closed",
+  ]);
 });
 
 test("localizes the provider open-status label in every supported language", () => {
@@ -157,8 +336,8 @@ test("localizes the provider open-status label in every supported language", () 
       { language },
     );
 
-    assert.equal(data.rows[7][0], label);
-    assert.equal(data.rows[7][1], closed);
+    assert.equal(data.detailsRows[5][0], label);
+    assert.equal(data.detailsRows[5][1], closed);
   }
 });
 
@@ -180,7 +359,7 @@ test("shows unavailable station state without reusing stale measurements", () =>
 
   assert.equal(data.status, "Unavailable");
   assert.deepEqual(
-    data.rows.map(([, value]) => value),
+    [...data.primaryRows, ...data.detailsRows].map(([, value]) => value),
     Array(10).fill("Unknown"),
   );
 });

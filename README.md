@@ -126,6 +126,27 @@ type: custom:curbcharge-card
 entity: sensor.your_station_status_summary
 ```
 
+The card editor lets you choose the station entity, use the standard or compact
+layout, and show or hide price, connector details, station details, and update
+times. With only `entity` set, all metric groups are shown by default. The
+secondary details are available in an expandable section that starts collapsed.
+`show_price` controls the price metric; `show_connector_details` controls
+occupied, unavailable, and total counts;
+`show_station_details` controls maximum power, distance, and provider-reported
+open status; `show_update_times` controls the provider and Home Assistant
+timestamps.
+The same options can be set in YAML:
+
+```yaml
+type: custom:curbcharge-card
+entity: sensor.your_station_status_summary
+layout: compact
+show_price: true
+show_connector_details: true
+show_station_details: false
+show_update_times: false
+```
+
 The card reads only that Home Assistant entity; it makes no provider requests.
 It displays the station name, availability, available/occupied/unavailable/total
 connector counts, maximum power, price when known, distance, provider-reported

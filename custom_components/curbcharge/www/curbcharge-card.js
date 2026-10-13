@@ -1,4 +1,26 @@
 const CARD_TYPE = "curbcharge-card";
+const EDITOR_TYPE = `${CARD_TYPE}-editor`;
+const DEFAULT_CONFIG = Object.freeze({
+  layout: "standard",
+  show_price: true,
+  show_connector_details: true,
+  show_station_details: true,
+  show_update_times: true,
+});
+const BOOLEAN_OPTIONS = [
+  "show_price",
+  "show_connector_details",
+  "show_station_details",
+  "show_update_times",
+];
+const EDITOR_LABELS = {
+  entity: "entity",
+  layout: "layout",
+  show_price: "showPrice",
+  show_connector_details: "showConnectorDetails",
+  show_station_details: "showStationDetails",
+  show_update_times: "showUpdateTimes",
+};
 
 const TEXT = {
   en: {
@@ -18,9 +40,18 @@ const TEXT = {
     closed: "Closed",
     providerUpdated: "Provider station update",
     integrationUpdated: "Last successful update",
+    details: "More details",
+    entity: "Station entity",
+    layout: "Layout",
+    standard: "Standard",
+    compact: "Compact",
+    showPrice: "Show price",
+    showConnectorDetails: "Show connector details",
+    showStationDetails: "Show distance and provider status",
+    showUpdateTimes: "Show update times",
     entityMissing: "The configured entity was not found.",
     wrongEntity: "Choose a CurbCharge status summary sensor.",
-    invalidConfig: "Set entity to a CurbCharge status summary sensor entity ID.",
+    invalidConfig: "Use a CurbCharge status summary sensor and supported display options.",
   },
   nl: {
     available: "Beschikbaar",
@@ -39,9 +70,18 @@ const TEXT = {
     closed: "Gesloten",
     providerUpdated: "Laatste providerupdate",
     integrationUpdated: "Laatste geslaagde update",
+    details: "Meer details",
+    entity: "Station-entiteit",
+    layout: "Weergave",
+    standard: "Standaard",
+    compact: "Compact",
+    showPrice: "Toon prijs",
+    showConnectorDetails: "Toon connectordetails",
+    showStationDetails: "Toon afstand en providerstatus",
+    showUpdateTimes: "Toon updatetijden",
     entityMissing: "De ingestelde entiteit is niet gevonden.",
     wrongEntity: "Kies een CurbCharge-statussensor.",
-    invalidConfig: "Stel entity in op de ID van een CurbCharge-statussensor.",
+    invalidConfig: "Gebruik een CurbCharge-statussensor en ondersteunde weergaveopties.",
   },
   fr: {
     available: "Disponible",
@@ -60,9 +100,18 @@ const TEXT = {
     closed: "Fermée",
     providerUpdated: "Dernière mise à jour du fournisseur",
     integrationUpdated: "Dernière actualisation réussie",
+    details: "Plus de détails",
+    entity: "Entité de station",
+    layout: "Présentation",
+    standard: "Standard",
+    compact: "Compact",
+    showPrice: "Afficher le prix",
+    showConnectorDetails: "Afficher les détails des connecteurs",
+    showStationDetails: "Afficher la distance et le statut du fournisseur",
+    showUpdateTimes: "Afficher les heures de mise à jour",
     entityMissing: "L'entité configurée est introuvable.",
     wrongEntity: "Choisissez un capteur de résumé CurbCharge.",
-    invalidConfig: "Définissez entity sur l'identifiant d'un capteur de résumé CurbCharge.",
+    invalidConfig: "Utilisez un capteur de résumé CurbCharge et des options d'affichage prises en charge.",
   },
   de: {
     available: "Verfügbar",
@@ -81,9 +130,18 @@ const TEXT = {
     closed: "Geschlossen",
     providerUpdated: "Letzte Aktualisierung des Anbieters",
     integrationUpdated: "Letzte erfolgreiche Aktualisierung",
+    details: "Weitere Details",
+    entity: "Station-Entität",
+    layout: "Layout",
+    standard: "Standard",
+    compact: "Kompakt",
+    showPrice: "Preis anzeigen",
+    showConnectorDetails: "Anschlussdetails anzeigen",
+    showStationDetails: "Entfernung und Anbieterstatus anzeigen",
+    showUpdateTimes: "Aktualisierungszeiten anzeigen",
     entityMissing: "Die konfigurierte Entität wurde nicht gefunden.",
     wrongEntity: "Wählen Sie einen CurbCharge-Statussensor aus.",
-    invalidConfig: "Setzen Sie entity auf die ID eines CurbCharge-Statussensors.",
+    invalidConfig: "Verwenden Sie einen CurbCharge-Statussensor und unterstützte Anzeigeoptionen.",
   },
 };
 
@@ -137,15 +195,23 @@ export function validateConfig(config) {
   ) {
     throw new Error(TEXT.en.invalidConfig);
   }
-  return config;
+  const normalized = { ...DEFAULT_CONFIG, ...config };
+  if (
+    !["standard", "compact"].includes(normalized.layout) ||
+    BOOLEAN_OPTIONS.some((option) => typeof normalized[option] !== "boolean")
+  ) {
+    throw new Error(TEXT.en.invalidConfig);
+  }
+  return normalized;
 }
 
-export function buildCardData(entity, hass) {
+export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
   const text = getText(hass);
   if (!entity) {
     return { error: text.entityMissing };
   }
 
+  const options = { ...DEFAULT_CONFIG, ...config };
   const attributes = entity.attributes || {};
   if (typeof attributes.provider_station_id !== "string") {
     return { error: text.wrongEntity };
@@ -159,7 +225,10 @@ export function buildCardData(entity, hass) {
     unknown: text.unknown,
     unavailable: text.unavailable,
   };
-  const status = stateLabels[entity.state] || text.unknown;
+  const statusKey = Object.hasOwn(stateLabels, entity.state)
+    ? entity.state
+    : "unknown";
+  const status = stateLabels[statusKey];
   const openStatus =
     typeof values.is_open === "boolean"
       ? values.is_open
@@ -173,46 +242,126 @@ export function buildCardData(entity, hass) {
     values.currency
       ? `${formatNumber(values.price_per_kwh, hass, text.unknown)} ${values.currency}/kWh`
       : text.unknown;
+  const primaryRows = [
+    [
+    text.availableConnectors,
+    formatCount(values.available_connectors, hass, text.unknown),
+    ],
+  ];
+  if (options.show_price) {
+    primaryRows.push([text.price, price]);
+  }
+
+  const detailsRows = [];
+  if (options.show_connector_details) {
+    detailsRows.push(
+      [
+      text.occupiedConnectors,
+      formatCount(values.occupied_connectors, hass, text.unknown),
+    ],
+    [
+      text.unavailableConnectors,
+      formatCount(values.unavailable_connectors, hass, text.unknown),
+    ],
+    [
+      text.totalConnectors,
+      formatCount(values.total_connectors, hass, text.unknown),
+    ],
+    );
+  }
+  if (options.show_station_details) {
+    detailsRows.push(
+    [
+      text.maximumPower,
+      typeof values.max_power_kw === "number" &&
+      Number.isFinite(values.max_power_kw)
+        ? `${formatNumber(values.max_power_kw, hass, text.unknown)} kW`
+        : text.unknown,
+    ],
+    [
+      text.distance,
+      typeof values.distance_m === "number" &&
+      Number.isFinite(values.distance_m)
+        ? `${formatNumber(values.distance_m, hass, text.unknown)} m`
+        : text.unknown,
+    ],
+    [text.providerOpenStatus, openStatus],
+    );
+  }
+  if (options.show_update_times) {
+    detailsRows.push(
+    [
+      text.providerUpdated,
+      formatTimestamp(values.last_updated, hass, text.unknown),
+    ],
+    [
+      text.integrationUpdated,
+      formatTimestamp(values.last_successful_update, hass, text.unknown),
+    ],
+    );
+  }
 
   return {
     title:
-      attributes.station_name ||
-      attributes.friendly_name ||
-      entity.entity_id ||
-      "CurbCharge",
+    attributes.station_name ||
+    attributes.friendly_name ||
+    entity.entity_id ||
+    "CurbCharge",
     status,
-    rows: [
-      [text.availableConnectors, formatCount(values.available_connectors, hass, text.unknown)],
-      [text.occupiedConnectors, formatCount(values.occupied_connectors, hass, text.unknown)],
-      [text.unavailableConnectors, formatCount(values.unavailable_connectors, hass, text.unknown)],
-      [text.totalConnectors, formatCount(values.total_connectors, hass, text.unknown)],
-      [
-        text.maximumPower,
-        typeof values.max_power_kw === "number" && Number.isFinite(values.max_power_kw)
-          ? `${formatNumber(values.max_power_kw, hass, text.unknown)} kW`
-          : text.unknown,
-      ],
-      [text.price, price],
-      [
-        text.distance,
-        typeof values.distance_m === "number" && Number.isFinite(values.distance_m)
-          ? `${formatNumber(values.distance_m, hass, text.unknown)} m`
-          : text.unknown,
-      ],
-      [text.providerOpenStatus, openStatus],
-      [text.providerUpdated, formatTimestamp(attributes.last_updated, hass, text.unknown)],
-      [
-        text.integrationUpdated,
-        formatTimestamp(attributes.last_successful_update, hass, text.unknown),
-      ],
-    ],
+    statusKey,
+    layout: options.layout,
+    detailsLabel: text.details,
+    primaryRows,
+    detailsRows,
   };
+}
+
+function getEditorSchema(text) {
+  return [
+    {
+      name: "entity",
+      required: true,
+      selector: { entity: { domain: "sensor" } },
+    },
+    {
+      name: "layout",
+      selector: {
+        select: {
+          options: [
+            { value: "standard", label: text.standard },
+            { value: "compact", label: text.compact },
+          ],
+        },
+      },
+    },
+    ...BOOLEAN_OPTIONS.map((name) => ({
+      name,
+      selector: { boolean: {} },
+    })),
+  ];
+}
+
+function createMetric([labelText, valueText], primary = false) {
+  const metric = document.createElement("div");
+  metric.className = primary ? "metric primary-metric" : "metric";
+  const label = document.createElement("div");
+  label.className = "label";
+  label.textContent = labelText;
+  const value = document.createElement("div");
+  value.className = "value";
+  value.textContent = valueText;
+  metric.append(label, value);
+  return metric;
 }
 
 class CurbChargeCard extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
+  }
+
+  static getConfigElement() {
+    return document.createElement(EDITOR_TYPE);
   }
 
   setConfig(config) {
@@ -226,7 +375,7 @@ class CurbChargeCard extends HTMLElement {
   }
 
   getCardSize() {
-    return 5;
+    return this._config?.layout === "compact" ? 4 : 5;
   }
 
   _render() {
@@ -234,29 +383,79 @@ class CurbChargeCard extends HTMLElement {
       return;
     }
 
-    const text = getText(this._hass);
     const data = buildCardData(
       this._hass.states[this._config.entity],
       this._hass,
+      this._config,
     );
     const style = document.createElement("style");
     style.textContent = `
-      ha-card { padding: 16px; }
-      .header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-      h2 { font-size: 1.2em; margin: 0 0 12px; }
-      .status { font-weight: 600; }
-      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 12px; }
-      .metric { min-width: 0; }
+      ha-card {
+        display: grid;
+        gap: 16px;
+        padding: 18px;
+        color: var(--primary-text-color);
+      }
+      ha-card.compact { gap: 10px; padding: 12px; }
+      .header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+      h2 { font-size: 1.2em; line-height: 1.3; margin: 0; }
+      .status-badge {
+        flex: none;
+        border: 1px solid var(--divider-color);
+        border-radius: 999px;
+        color: var(--secondary-text-color);
+        font-size: 0.9em;
+        font-weight: 600;
+        padding: 4px 10px;
+      }
+      .status-available { border-color: var(--success-color); color: var(--success-color); }
+      .status-none_available { border-color: var(--warning-color); color: var(--warning-color); }
+      .primary-grid, .details-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr));
+        gap: 10px;
+      }
+      .metric {
+        background: var(--secondary-background-color);
+        border-radius: var(--ha-card-border-radius, 12px);
+        min-width: 0;
+        padding: 12px;
+      }
+      .compact .metric { padding: 9px; }
       .label { color: var(--secondary-text-color); font-size: 0.9em; }
-      .value { overflow-wrap: anywhere; }
+      .value { font-size: 1.05em; font-weight: 600; overflow-wrap: anywhere; }
+      .primary-metric .value {
+        font-size: clamp(1.4em, 4vw, 2em);
+        font-weight: 700;
+        line-height: 1.15;
+      }
+      .details > summary {
+        border-top: 1px solid var(--divider-color);
+        cursor: pointer;
+        font-weight: 600;
+        padding: 12px 0 2px;
+      }
+      .details > summary:focus-visible {
+        border-radius: 4px;
+        outline: 2px solid var(--primary-color);
+        outline-offset: 3px;
+      }
+      .details-grid { padding-top: 10px; }
       .error { color: var(--error-color); }
     `;
     const card = document.createElement("ha-card");
+    card.className = `card ${data.layout || this._config.layout}`;
     this.shadowRoot.replaceChildren(style, card);
 
     if (data.error) {
       const error = document.createElement("div");
       error.className = "error";
+      error.setAttribute("role", "alert");
       error.textContent = data.error;
       card.append(error);
       return;
@@ -267,30 +466,96 @@ class CurbChargeCard extends HTMLElement {
     const title = document.createElement("h2");
     title.textContent = data.title;
     const status = document.createElement("span");
-    status.className = "status";
+    status.className = `status-badge status-${data.statusKey}`;
     status.setAttribute("role", "status");
     status.textContent = data.status;
     header.append(title, status);
     card.append(header);
 
-    const grid = document.createElement("div");
-    grid.className = "grid";
-    for (const [labelText, valueText] of data.rows) {
-      const metric = document.createElement("div");
-      metric.className = "metric";
-      const label = document.createElement("div");
-      label.className = "label";
-      label.textContent = labelText;
-      const value = document.createElement("div");
-      value.className = "value";
-      value.textContent = valueText;
-      metric.append(label, value);
-      grid.append(metric);
+    const primaryGrid = document.createElement("div");
+    primaryGrid.className = "primary-grid";
+    for (const row of data.primaryRows) {
+      primaryGrid.append(createMetric(row, true));
     }
-    card.append(grid);
+    card.append(primaryGrid);
+
+    if (data.detailsRows.length > 0) {
+      const details = document.createElement("details");
+      details.className = "details";
+      details.open = false;
+      const summary = document.createElement("summary");
+      summary.textContent = data.detailsLabel;
+      const detailsGrid = document.createElement("div");
+      detailsGrid.className = "details-grid";
+      for (const row of data.detailsRows) {
+        detailsGrid.append(createMetric(row));
+      }
+      details.append(summary, detailsGrid);
+      card.append(details);
+    }
   }
 }
 
+class CurbChargeCardEditor extends HTMLElement {
+  constructor() {
+    super();
+    this.attachShadow({ mode: "open" });
+    this._form = undefined;
+  }
+
+  setConfig(config) {
+    this._config = { ...DEFAULT_CONFIG, ...(config || {}) };
+    if (this._form) {
+      this._form.data = { ...this._config };
+    } else {
+      this._render();
+    }
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    if (this._form) {
+      this._form.hass = hass;
+      this._form.schema = getEditorSchema(getText(hass));
+    } else {
+      this._render();
+    }
+  }
+
+  _render() {
+    if (!this._config || !this._hass || this._form) {
+      return;
+    }
+
+    const text = getText(this._hass);
+    const form = document.createElement("ha-form");
+    form.hass = this._hass;
+    form.data = { ...this._config };
+    form.schema = getEditorSchema(text);
+    form.computeLabel = (schema) =>
+      getText(this._hass)[EDITOR_LABELS[schema.name]] || schema.name;
+    form.addEventListener("value-changed", (event) => {
+      event.stopPropagation();
+      this._config = {
+        ...this._config,
+        ...(event.detail?.value || {}),
+      };
+      this.dispatchEvent(
+        new CustomEvent("config-changed", {
+          detail: { config: this._config },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    });
+    this._form = form;
+    this.shadowRoot.replaceChildren(form);
+  }
+}
+
+if (!customElements.get(EDITOR_TYPE)) {
+  customElements.define(EDITOR_TYPE, CurbChargeCardEditor);
+}
 if (!customElements.get(CARD_TYPE)) {
   customElements.define(CARD_TYPE, CurbChargeCard);
 }
