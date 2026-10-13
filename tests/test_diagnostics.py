@@ -88,6 +88,7 @@ async def test_diagnostics_redact_coordinates_and_addresses(hass, sample_station
     assert "52.123456" not in serialized
     assert "5.654321" not in serialized
     assert "Teststraat 1" not in serialized
+    assert stale.provider_id not in serialized
     assert "diagnostic-secret-token" not in serialized
     assert "nested-data-secret-token" not in serialized
     assert "options-secret-token" not in serialized
@@ -185,6 +186,7 @@ async def test_belgium_diagnostics_redact_nested_secrets_and_location(hass):
         "nested-belgium-secret-token",
         "belgium-options-secret-token",
         "nested-belgium-options-secret-token",
+        "evse-stale",
         "50.999999",
         "4.999999",
         "50.85",
