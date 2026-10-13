@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="780" viewBox="0 0 1200 780">
+  <rect width="1200" height="780" fill="#f2f4f8"/>
+  <rect x="44" y="36" width="1112" height="670" rx="18" fill="#fff" stroke="#d8dee8"/>
+  <text x="88" y="94" fill="#18212f" font-family="Arial, sans-serif" font-size="30" font-weight="700">CurbCharge</text>
+  <text x="88" y="128" fill="#586579" font-family="Arial, sans-serif" font-size="17">Add integration · Belgium preview</text>
+  <line x1="88" y1="158" x2="1112" y2="158" stroke="#e3e7ee"/>
+
+  <text x="88" y="206" fill="#18212f" font-family="Arial, sans-serif" font-size="20" font-weight="700">Search area</text>
+  <text x="88" y="246" fill="#586579" font-family="Arial, sans-serif" font-size="15">Location source</text>
+  <rect x="88" y="258" width="480" height="54" rx="8" fill="#fff" stroke="#b8c1ce"/>
+  <text x="108" y="292" fill="#18212f" font-family="Arial, sans-serif" font-size="17">Home Assistant home</text>
+  <text x="606" y="246" fill="#586579" font-family="Arial, sans-serif" font-size="15">Search radius</text>
+  <rect x="606" y="258" width="220" height="54" rx="8" fill="#fff" stroke="#b8c1ce"/>
+  <text x="626" y="292" fill="#18212f" font-family="Arial, sans-serif" font-size="17">500 m</text>
+  <text x="864" y="246" fill="#586579" font-family="Arial, sans-serif" font-size="15">Maximum stations</text>
+  <rect x="864" y="258" width="248" height="54" rx="8" fill="#fff" stroke="#b8c1ce"/>
+  <text x="884" y="292" fill="#18212f" font-family="Arial, sans-serif" font-size="17">10</text>
+
+  <text x="88" y="362" fill="#586579" font-family="Arial, sans-serif" font-size="15">Provider</text>
+  <rect x="88" y="374" width="1024" height="54" rx="8" fill="#fff" stroke="#168c83" stroke-width="2"/>
+  <text x="108" y="408" fill="#18212f" font-family="Arial, sans-serif" font-size="17">Eco-Movement Belgium (preview)</text>
+
+  <text x="88" y="478" fill="#18212f" font-family="Arial, sans-serif" font-size="20" font-weight="700">Credentials</text>
+  <text x="88" y="516" fill="#586579" font-family="Arial, sans-serif" font-size="15">Eco-Movement API token</text>
+  <rect x="88" y="528" width="1024" height="54" rx="8" fill="#fff" stroke="#b8c1ce"/>
+  <text x="108" y="562" fill="#18212f" font-family="Arial, sans-serif" font-size="18">**************</text>
+  <text x="88" y="614" fill="#365b57" font-family="Arial, sans-serif" font-size="15">Password field · stored in the config entry · redacted from diagnostics</text>
+
+  <rect x="948" y="632" width="164" height="48" rx="10" fill="#168c83"/>
+  <text x="1000" y="662" fill="#fff" font-family="Arial, sans-serif" font-size="16" font-weight="700">Submit</text>
+  <text x="600" y="748" text-anchor="middle" fill="#586579" font-family="Arial, sans-serif" font-size="14">Illustrative mockup · synthetic settings · not a live Home Assistant capture</text>
+</svg>

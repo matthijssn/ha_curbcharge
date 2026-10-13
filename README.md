@@ -168,6 +168,13 @@ provider.
    the token expires or is revoked, Home Assistant starts reauthentication so
    you can enter a replacement.
 
+The following original mockups use synthetic values; they are illustrative
+examples, not captures of a live Home Assistant session.
+
+![Illustrative Belgium setup with the provider selected and API token masked](./docs/images/belgium-setup-example.svg)
+
+![Illustrative Belgium entities with country/provider and search scope](./docs/images/belgium-entities-example.svg)
+
 ## Supported stations
 
 CurbCharge's supported live coverage is public charging points in the

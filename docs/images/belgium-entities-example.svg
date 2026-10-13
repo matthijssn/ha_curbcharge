@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="850" viewBox="0 0 1200 850">
+  <rect width="1200" height="850" fill="#f2f4f8"/>
+  <rect x="38" y="34" width="1124" height="760" rx="18" fill="#fff" stroke="#d8dee8"/>
+  <text x="78" y="88" fill="#18212f" font-family="Arial, sans-serif" font-size="28" font-weight="700">CurbCharge · Belgium preview</text>
+  <text x="78" y="124" fill="#586579" font-family="Arial, sans-serif" font-size="16">Eco-Movement Belgium · Country BE</text>
+  <text x="78" y="154" fill="#586579" font-family="Arial, sans-serif" font-size="14">Configured search area · 500 m radius · maximum 10 stations</text>
+  <rect x="78" y="180" width="1044" height="58" rx="10" fill="#e9f5f3"/>
+  <text x="100" y="216" fill="#24544f" font-family="Arial, sans-serif" font-size="16">Example values only · results are local to this entry and are not national totals</text>
+
+  <g font-family="Arial, sans-serif">
+    <rect x="78" y="270" width="500" height="92" rx="12" fill="#fff" stroke="#d8dee8"/>
+    <text x="104" y="308" fill="#586579" font-size="15">Available</text>
+    <text x="104" y="340" fill="#18212f" font-size="23" font-weight="700">Available</text>
+
+    <rect x="600" y="270" width="522" height="92" rx="12" fill="#fff" stroke="#d8dee8"/>
+    <text x="626" y="308" fill="#586579" font-size="15">Available connectors</text>
+    <text x="626" y="340" fill="#18212f" font-size="23" font-weight="700">2</text>
+
+    <rect x="78" y="380" width="500" height="92" rx="12" fill="#fff" stroke="#d8dee8"/>
+    <text x="104" y="418" fill="#586579" font-size="15">Nearby charging units</text>
+    <text x="104" y="450" fill="#18212f" font-size="23" font-weight="700">3</text>
+
+    <rect x="600" y="380" width="522" height="92" rx="12" fill="#fff" stroke="#d8dee8"/>
+    <text x="626" y="418" fill="#586579" font-size="15">Nearby available connectors</text>
+    <text x="626" y="450" fill="#18212f" font-size="23" font-weight="700">4</text>
+
+    <rect x="78" y="490" width="500" height="92" rx="12" fill="#fff" stroke="#d8dee8"/>
+    <text x="104" y="528" fill="#586579" font-size="15">Nearby connector availability</text>
+    <text x="104" y="560" fill="#18212f" font-size="23" font-weight="700">66.7%</text>
+
+    <rect x="600" y="490" width="522" height="92" rx="12" fill="#fff" stroke="#d8dee8"/>
+    <text x="626" y="528" fill="#586579" font-size="15">Maximum charging power</text>
+    <text x="626" y="560" fill="#18212f" font-size="23" font-weight="700">22 kW</text>
+
+    <rect x="78" y="600" width="500" height="92" rx="12" fill="#fff" stroke="#d8dee8"/>
+    <text x="104" y="638" fill="#586579" font-size="15">Price per kWh</text>
+    <text x="104" y="670" fill="#586579" font-size="20" font-weight="700">Unknown</text>
+
+    <rect x="600" y="600" width="522" height="92" rx="12" fill="#fff" stroke="#d8dee8"/>
+    <text x="626" y="638" fill="#586579" font-size="15">Provider station update</text>
+    <text x="626" y="670" fill="#18212f" font-size="19" font-weight="700">12 Oct 2026, 10:05</text>
+  </g>
+
+  <text x="600" y="744" text-anchor="middle" fill="#586579" font-family="Arial, sans-serif" font-size="14">Illustrative mockup with synthetic values · no token, address, or coordinates</text>
+</svg>
