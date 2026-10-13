@@ -36,7 +36,10 @@ pytestmark = pytest.mark.usefixtures("enable_custom_integrations")
 
 
 def _entry(
-    overrides: dict[str, object] | None = None, *, unique_id: str = "test-search-area"
+    overrides: dict[str, object] | None = None,
+    *,
+    unique_id: str = "test-search-area",
+    entry_id: str | None = None,
 ) -> MockConfigEntry:
     data: dict[str, object] = {
         CONF_LOCATION_SOURCE: LOCATION_MANUAL,
@@ -50,6 +53,7 @@ def _entry(
         data.update(overrides)
     return MockConfigEntry(
         domain=DOMAIN,
+        entry_id=entry_id,
         unique_id=unique_id,
         data=data,
     )
@@ -258,14 +262,20 @@ async def test_nl_and_be_entries_refresh_fail_recover_and_reload_independently(
         lambda provider_id, *_args: providers[provider_id],
     )
 
-    nl_entry = _entry({CONF_PROVIDER: PROVIDER_NDW_DOT_NL}, unique_id="nl-search-area")
+    nl_entry = _entry(
+        {CONF_PROVIDER: PROVIDER_NDW_DOT_NL},
+        unique_id="nl-search-area",
+        entry_id="nl-entry",
+    )
     be_entry = _entry(
         {
             CONF_PROVIDER: PROVIDER_ECO_MOVEMENT_BE,
             CONF_API_TOKEN: "test-token",
         },
         unique_id="be-search-area",
+        entry_id="be-entry",
     )
+    assert nl_entry.entry_id != be_entry.entry_id
     nl_entry.add_to_hass(hass)
     be_entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(nl_entry.entry_id)
