@@ -190,6 +190,9 @@
       },
       "nearby_charging_units": {
         "name": "Unités de recharge à proximité"
+      },
+      "nearby_available_connectors": {
+        "name": "Connecteurs disponibles à proximité"
       }
     }
   }

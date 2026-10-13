@@ -300,6 +300,16 @@ async def test_nl_and_be_entries_refresh_fail_recover_and_reload_independently(
         for entity in be_entities
         if entity.unique_id == "be-search-area_nearby_charging_units"
     )
+    nl_available_connectors = next(
+        entity
+        for entity in nl_entities
+        if entity.unique_id == "nl-search-area_nearby_available_connectors"
+    )
+    be_available_connectors = next(
+        entity
+        for entity in be_entities
+        if entity.unique_id == "be-search-area_nearby_available_connectors"
+    )
     nl_available = next(
         entity
         for entity in nl_entities
@@ -314,8 +324,18 @@ async def test_nl_and_be_entries_refresh_fail_recover_and_reload_independently(
     )
     nl_count_state = hass.states.get(nl_count.entity_id)
     be_count_state = hass.states.get(be_count.entity_id)
+    nl_available_connectors_state = hass.states.get(nl_available_connectors.entity_id)
+    be_available_connectors_state = hass.states.get(be_available_connectors.entity_id)
     assert nl_count_state is not None and nl_count_state.state == "1"
     assert be_count_state is not None and be_count_state.state == "1"
+    assert (
+        nl_available_connectors_state is not None
+        and nl_available_connectors_state.state == "2"
+    )
+    assert (
+        be_available_connectors_state is not None
+        and be_available_connectors_state.state == "2"
+    )
     assert nl_count_state.attributes["country_code"] == "NL"
     assert be_count_state.attributes["country_code"] == "BE"
     assert nl_count_state.attributes["provider_id"] == PROVIDER_NDW_DOT_NL
@@ -334,8 +354,10 @@ async def test_nl_and_be_entries_refresh_fail_recover_and_reload_independently(
     assert not nl_coordinator.last_update_success
     assert be_coordinator.last_update_success
     assert hass.states.get(nl_count.entity_id).state == "unavailable"
+    assert hass.states.get(nl_available_connectors.entity_id).state == "unavailable"
     assert hass.states.get(nl_available.entity_id).state == "unavailable"
     assert hass.states.get(be_count.entity_id).state == "1"
+    assert hass.states.get(be_available_connectors.entity_id).state == "2"
     assert hass.states.get(be_available.entity_id).state == "on"
 
     await asyncio.gather(
@@ -346,8 +368,10 @@ async def test_nl_and_be_entries_refresh_fail_recover_and_reload_independently(
     assert nl_coordinator.last_update_success
     assert not be_coordinator.last_update_success
     assert hass.states.get(nl_count.entity_id).state == "1"
+    assert hass.states.get(nl_available_connectors.entity_id).state == "2"
     assert hass.states.get(nl_available.entity_id).state == "on"
     assert hass.states.get(be_count.entity_id).state == "unavailable"
+    assert hass.states.get(be_available_connectors.entity_id).state == "unavailable"
     assert hass.states.get(be_available.entity_id).state == "unavailable"
 
     await asyncio.gather(
@@ -359,13 +383,21 @@ async def test_nl_and_be_entries_refresh_fail_recover_and_reload_independently(
     assert be_coordinator.last_update_success
     assert hass.states.get(nl_count.entity_id).state == "1"
     assert hass.states.get(be_count.entity_id).state == "1"
+    assert hass.states.get(nl_available_connectors.entity_id).state == "2"
+    assert hass.states.get(be_available_connectors.entity_id).state == "2"
 
     assert await hass.config_entries.async_unload(nl_entry.entry_id)
     await hass.async_block_till_done()
     nl_unloaded_count = hass.states.get(nl_count.entity_id)
     assert nl_unloaded_count is not None
     assert nl_unloaded_count.state == "unavailable"
+    nl_unloaded_available_connectors = hass.states.get(
+        nl_available_connectors.entity_id
+    )
+    assert nl_unloaded_available_connectors is not None
+    assert nl_unloaded_available_connectors.state == "unavailable"
     assert hass.states.get(be_count.entity_id).state == "1"
+    assert hass.states.get(be_available_connectors.entity_id).state == "2"
     assert be_coordinator.last_update_success
 
     assert await hass.config_entries.async_setup(nl_entry.entry_id)
@@ -376,13 +408,21 @@ async def test_nl_and_be_entries_refresh_fail_recover_and_reload_independently(
     } == nl_unique_ids
     assert hass.states.get(nl_count.entity_id).state == "1"
     assert hass.states.get(be_count.entity_id).state == "1"
+    assert hass.states.get(nl_available_connectors.entity_id).state == "2"
+    assert hass.states.get(be_available_connectors.entity_id).state == "2"
 
     assert await hass.config_entries.async_unload(be_entry.entry_id)
     await hass.async_block_till_done()
     be_unloaded_count = hass.states.get(be_count.entity_id)
     assert be_unloaded_count is not None
     assert be_unloaded_count.state == "unavailable"
+    be_unloaded_available_connectors = hass.states.get(
+        be_available_connectors.entity_id
+    )
+    assert be_unloaded_available_connectors is not None
+    assert be_unloaded_available_connectors.state == "unavailable"
     assert hass.states.get(nl_count.entity_id).state == "1"
+    assert hass.states.get(nl_available_connectors.entity_id).state == "2"
 
     assert await hass.config_entries.async_setup(be_entry.entry_id)
     await hass.async_block_till_done()
@@ -392,6 +432,8 @@ async def test_nl_and_be_entries_refresh_fail_recover_and_reload_independently(
     } == be_unique_ids
     assert hass.states.get(be_count.entity_id).state == "1"
     assert hass.states.get(nl_count.entity_id).state == "1"
+    assert hass.states.get(be_available_connectors.entity_id).state == "2"
+    assert hass.states.get(nl_available_connectors.entity_id).state == "2"
 
 
 @pytest.mark.asyncio

@@ -40,6 +40,7 @@ async def async_setup_entry(
         [
             BestNearbyChargerSensor(coordinator, entry),
             NearbyChargingUnitsSensor(coordinator, entry),
+            NearbyAvailableConnectorsSensor(coordinator, entry),
         ]
     )
 
@@ -347,6 +348,48 @@ def _decimal_attribute(value: Decimal | None) -> float | None:
     return float(value) if value is not None else None
 
 
+def _current_stations(
+    coordinator: CurbChargeCoordinator,
+) -> tuple[ChargingStation, ...] | None:
+    """Return non-stale coordinator records, or None before the first update."""
+    stations = coordinator.data
+    if stations is None:
+        return None
+    return tuple(station for station in stations.values() if not station.is_stale)
+
+
+def _nearby_aggregate_attributes(
+    coordinator: CurbChargeCoordinator,
+    current_stations: tuple[ChargingStation, ...] | None,
+) -> dict[str, Any]:
+    """Return search scope and freshness attributes shared by aggregate sensors."""
+    stale_station_count = (
+        None
+        if current_stations is None
+        else len(coordinator.data or {}) - len(current_stations)
+    )
+    if current_stations is None:
+        results_may_be_truncated = None
+    elif len(current_stations) >= coordinator.max_stations:
+        results_may_be_truncated = True
+    elif stale_station_count == 0 and coordinator.include_unknown:
+        results_may_be_truncated = False
+    else:
+        results_may_be_truncated = None
+
+    return {
+        "provider": coordinator.provider_name,
+        "provider_id": coordinator.provider_id,
+        "country_code": coordinator.country_code,
+        "search_radius_m": coordinator.radius_m,
+        "max_stations": coordinator.max_stations,
+        "include_unknown": coordinator.include_unknown,
+        "stale_station_count": stale_station_count,
+        "results_may_be_truncated": results_may_be_truncated,
+        "last_successful_update": _isoformat(coordinator.last_successful_update),
+    }
+
+
 class NearbyChargingUnitsSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEntity):
     """Count current provider charging units in the configured search area."""
 
@@ -364,53 +407,85 @@ class NearbyChargingUnitsSensor(CoordinatorEntity[CurbChargeCoordinator], Sensor
 
     @property
     def native_value(self) -> int | None:
-        stations = self.coordinator.data
-        if stations is None:
+        current_stations = _current_stations(self.coordinator)
+        if current_stations is None:
             return None
-        return sum(not station.is_stale for station in stations.values())
+        return len(current_stations)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        stations = self.coordinator.data
-        current_stations = (
-            ()
-            if stations is None
-            else tuple(station for station in stations.values() if not station.is_stale)
+        current_stations = _current_stations(self.coordinator)
+        attributes = _nearby_aggregate_attributes(self.coordinator, current_stations)
+        attributes["counted_unit"] = "charging_station"
+        attributes["unknown_availability_count"] = (
+            None
+            if current_stations is None
+            else sum(
+                station.has_available_connectors is None for station in current_stations
+            )
         )
-        stale_station_count = (
-            None if stations is None else len(stations) - len(current_stations)
-        )
-        if stations is None:
-            results_may_be_truncated = None
-        elif len(current_stations) >= self.coordinator.max_stations:
-            results_may_be_truncated = True
-        elif stale_station_count == 0 and self.coordinator.include_unknown:
-            results_may_be_truncated = False
-        else:
-            results_may_be_truncated = None
+        return attributes
 
-        return {
-            "provider": self.coordinator.provider_name,
-            "provider_id": self.coordinator.provider_id,
-            "country_code": self.coordinator.country_code,
-            "search_radius_m": self.coordinator.radius_m,
-            "max_stations": self.coordinator.max_stations,
-            "counted_unit": "charging_station",
-            "include_unknown": self.coordinator.include_unknown,
-            "unknown_availability_count": (
-                None
-                if stations is None
-                else sum(
-                    station.has_available_connectors is None
-                    for station in current_stations
-                )
-            ),
-            "stale_station_count": stale_station_count,
-            "results_may_be_truncated": results_may_be_truncated,
-            "last_successful_update": _isoformat(
-                self.coordinator.last_successful_update
-            ),
-        }
+
+class NearbyAvailableConnectorsSensor(
+    CoordinatorEntity[CurbChargeCoordinator], SensorEntity
+):
+    """Count explicitly reported available connectors at current nearby stations."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "nearby_available_connectors"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self, coordinator: CurbChargeCoordinator, entry: ConfigEntry[Any]
+    ) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = (
+            f"{entry.unique_id or entry.entry_id}_nearby_available_connectors"
+        )
+
+    @property
+    def native_value(self) -> int | None:
+        current_stations = _current_stations(self.coordinator)
+        if current_stations is None:
+            return None
+
+        available_counts = []
+        for station in current_stations:
+            count = station.available_connectors
+            if count is not None:
+                available_counts.append(count)
+        return sum(available_counts) if available_counts else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        current_stations = _current_stations(self.coordinator)
+        attributes = _nearby_aggregate_attributes(self.coordinator, current_stations)
+        attributes.update(
+            {
+                "counted_unit": "connector",
+                "fresh_station_count": (
+                    None if current_stations is None else len(current_stations)
+                ),
+                "known_availability_station_count": (
+                    None
+                    if current_stations is None
+                    else sum(
+                        station.available_connectors is not None
+                        for station in current_stations
+                    )
+                ),
+                "unknown_availability_station_count": (
+                    None
+                    if current_stations is None
+                    else sum(
+                        station.available_connectors is None
+                        for station in current_stations
+                    )
+                ),
+            }
+        )
+        return attributes
 
 
 class BestNearbyChargerSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEntity):
