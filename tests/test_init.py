@@ -125,6 +125,9 @@ async def test_setup_unload_and_reload_keep_stable_entities(
             device for device in devices if parent_identifier in device.identifiers
         )
         assert len(devices) == 2
+        assert parent_device.name == (
+            f"{station.location.name} ({provider_id}:{station.location.provider_id})"
+        )
         assert (
             getattr(station_device, "parent_device_id", None) == parent_device.id
             or getattr(station_device, "via_device_id", None) == parent_device.id
