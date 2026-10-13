@@ -2,13 +2,16 @@
 
 import math
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.typing import ConfigType
 
 from .api import create_provider
 from .const import (
@@ -40,6 +43,21 @@ from .coordinator import CurbChargeCoordinator
 from .provider import ChargingProviderError
 
 type CurbChargeConfigEntry = ConfigEntry[CurbChargeCoordinator]
+
+
+async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
+    """Serve the bundled Lovelace card without copying it into the config dir."""
+    card_path = Path(__file__).parent / "www" / "curbcharge-card.js"
+    await hass.http.async_register_static_paths(
+        [
+            StaticPathConfig(
+                "/curbcharge/curbcharge-card.js",
+                str(card_path),
+                cache_headers=False,
+            )
+        ]
+    )
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -> bool:

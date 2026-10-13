@@ -2,6 +2,7 @@
 
 import asyncio
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
@@ -64,6 +65,29 @@ def _has_device(device_registry, entry_id: str, identifier: tuple[str, str]) -> 
         identifier in device.identifiers
         for device in dr.async_entries_for_config_entry(device_registry, entry_id)
     )
+
+
+@pytest.mark.asyncio
+async def test_bundled_card_is_served_without_copying_to_www(
+    hass, hass_client, monkeypatch, sample_stations
+):
+    provider = FakeProvider([(sample_stations[0],)])
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    entry = _entry()
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    client = await hass_client()
+
+    response = await client.get("/curbcharge/curbcharge-card.js")
+
+    assert response.status == 200
+    card_path = Path(curbcharge.__file__).parent / "www" / "curbcharge-card.js"
+    assert await response.read() == card_path.read_bytes()
+    assert "Cache-Control" not in response.headers
+    assert not (
+        Path(hass.config.config_dir) / "www" / "curbcharge-card.js"
+    ).exists()
 
 
 def _provider_station(station, provider_id, provider_name, country_code):

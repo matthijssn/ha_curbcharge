@@ -108,15 +108,15 @@ directory at `custom_components/curbcharge`, then restart Home Assistant.
 ## Lovelace card
 
 The single-station card is bundled with the integration; it is not a separate
-HACS plugin. HACS installs it alongside the integration but does not serve it
-as a dashboard resource. Copy
-`custom_components/curbcharge/www/curbcharge-card.js` to
-`<config>/www/curbcharge-card.js`; for Home Assistant OS, use
-`/config/www/curbcharge-card.js`.
-If `www` does not exist yet, create it and restart Home Assistant. In
-**Settings → Dashboards → Resources**, add `/local/curbcharge-card.js` as a
-JavaScript module. Opening that URL on the Home Assistant host should return
-the JavaScript file.
+HACS plugin or a file that needs to be copied into `www`. The integration
+serves it at `/curbcharge/curbcharge-card.js`. In **Settings → Dashboards →
+Resources**, add that URL as a JavaScript module.
+
+Existing dashboards using `/local/curbcharge-card.js` only need a one-time
+resource URL change to `/curbcharge/curbcharge-card.js`; the card configuration
+does not need to change. After updating the resource, you can remove
+`/config/www/curbcharge-card.js` if no other dashboard uses it. Future card
+updates arrive with the integration after Home Assistant reloads or restarts.
 
 Add the card to a dashboard and set `entity` to the station's **Status summary**
 sensor:
