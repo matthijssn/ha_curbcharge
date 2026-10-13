@@ -205,7 +205,7 @@ async def test_belgium_diagnostics_redact_nested_secrets_and_location(hass):
     evse_diagnostics = next(
         station
         for station in diagnostics["stations"]
-        if station["provider_station_id"] == "evse-private"
+        if station["provider_station_id"] == "evse-internal-1"
     )
     assert evse_diagnostics["evse_status"] == "AVAILABLE"
     assert evse_diagnostics["available_connectors"] is None
