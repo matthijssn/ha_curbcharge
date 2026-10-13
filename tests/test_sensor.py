@@ -3,6 +3,7 @@
 from dataclasses import replace
 from decimal import Decimal
 
+from homeassistant.components.sensor import SensorStateClass
 from homeassistant.const import EntityCategory
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -15,6 +16,7 @@ from custom_components.curbcharge.sensor import (
     ConnectorGroupSensor,
     DistanceSensor,
     MaximumChargingPowerSensor,
+    NearbyChargingUnitsSensor,
     OccupiedConnectorsSensor,
     PricePerKwhSensor,
     StatusSummarySensor,
@@ -24,12 +26,85 @@ from custom_components.curbcharge.sensor import (
 from tests.conftest import FakeProvider
 
 
-def _coordinator(hass, station):
+def _coordinator(hass, station, *, max_stations=10, include_unknown=True):
     coordinator = CurbChargeCoordinator(
-        hass, FakeProvider(), 52.0, 5.0, 500, 10, 5, True
+        hass, FakeProvider(), 52.0, 5.0, 500, max_stations, 5, include_unknown
     )
     coordinator.async_set_updated_data({station.provider_id: station})
     return coordinator
+
+
+def test_nearby_charging_units_counts_current_records_and_reports_scope(
+    hass, sample_stations
+):
+    current, stale, unknown_availability = sample_stations
+    coordinator = _coordinator(hass, current, max_stations=2)
+    coordinator.async_set_updated_data(
+        {
+            current.provider_id: current,
+            stale.provider_id: replace(stale, is_stale=True),
+            unknown_availability.provider_id: unknown_availability,
+        }
+    )
+    sensor = NearbyChargingUnitsSensor(
+        coordinator,
+        MockConfigEntry(domain=DOMAIN, unique_id="test-nearby-area"),
+    )
+
+    assert sensor.native_value == 2
+    assert sensor.unique_id == "test-nearby-area_nearby_charging_units"
+    assert sensor.state_class is SensorStateClass.MEASUREMENT
+    assert sensor.extra_state_attributes == {
+        "provider": "NDW DOT-NL",
+        "provider_id": "ndw_dot_nl",
+        "country_code": "NL",
+        "search_radius_m": 500,
+        "max_stations": 2,
+        "counted_unit": "charging_station",
+        "include_unknown": True,
+        "unknown_availability_count": 1,
+        "stale_station_count": 1,
+        "results_may_be_truncated": True,
+        "last_successful_update": None,
+    }
+
+
+def test_nearby_charging_units_handles_uninitialized_and_empty_data(
+    hass, sample_stations
+):
+    provider = FakeProvider([(sample_stations[0],)])
+    coordinator = CurbChargeCoordinator(hass, provider, 52.0, 5.0, 500, 2, 5, True)
+    sensor = NearbyChargingUnitsSensor(
+        coordinator,
+        MockConfigEntry(domain=DOMAIN, unique_id="test-nearby-area"),
+    )
+
+    assert sensor.native_value is None
+    assert sensor.extra_state_attributes["unknown_availability_count"] is None
+    assert sensor.extra_state_attributes["results_may_be_truncated"] is None
+    assert len(provider.snapshots) == 1
+
+    coordinator.async_set_updated_data({})
+    assert sensor.native_value == 0
+    assert sensor.extra_state_attributes["unknown_availability_count"] == 0
+    assert sensor.extra_state_attributes["stale_station_count"] == 0
+    assert sensor.extra_state_attributes["results_may_be_truncated"] is False
+    assert len(provider.snapshots) == 1
+
+
+def test_nearby_charging_units_does_not_claim_truncation_after_filtering(
+    hass, sample_stations
+):
+    coordinator = _coordinator(
+        hass, sample_stations[0], max_stations=2, include_unknown=False
+    )
+    sensor = NearbyChargingUnitsSensor(
+        coordinator,
+        MockConfigEntry(domain=DOMAIN, unique_id="test-nearby-area"),
+    )
+
+    assert sensor.native_value == 1
+    assert sensor.extra_state_attributes["results_may_be_truncated"] is None
 
 
 def test_connector_sensors_do_not_infer_occupancy(hass, sample_stations):

@@ -187,6 +187,9 @@
       },
       "best_nearby_charger": {
         "name": "Beste Ladestation in der Nähe"
+      },
+      "nearby_charging_units": {
+        "name": "Ladeeinheiten in der Nähe"
       }
     }
   }

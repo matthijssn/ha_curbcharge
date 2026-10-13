@@ -187,6 +187,9 @@
       },
       "best_nearby_charger": {
         "name": "Meilleure borne à proximité"
+      },
+      "nearby_charging_units": {
+        "name": "Unités de recharge à proximité"
       }
     }
   }
