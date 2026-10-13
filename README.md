@@ -278,7 +278,7 @@ conditions. Use its entities in Home Assistant automations as shown above.
 ## Troubleshooting
 
 - **No stations appear:** Check the configured home/manual location, radius,
-  and that public stations are listed in NDW DOT-NL for that area.
+  and that the selected provider has coverage for that area.
 - **Setup cannot connect:** Check Home Assistant internet access and retry
   after a provider rate limit expires.
 - **Belgium token rejected:** Confirm Eco-Movement issued the token for your
@@ -290,7 +290,7 @@ conditions. Use its entities in Home Assistant automations as shown above.
 - **Belgium availability is unknown:** Static location data refreshes daily and
   dynamic status is requested per EVSE. A location can exist without a current
   status report; CurbCharge leaves that availability unknown.
-- **Availability is unknown:** NDW may not have supplied connector availability
+- **NDW availability is unknown:** NDW may not have supplied connector availability
   for that station. CurbCharge does not infer it from operational status.
 - **Price is unknown:** The provider may omit the tariff or publish conditional,
   conflicting, mixed-currency, or incomplete tax data.
