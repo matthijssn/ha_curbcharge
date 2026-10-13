@@ -161,21 +161,26 @@ async def test_setup_unload_and_reload_keep_stable_entities(
         for item in er.async_entries_for_config_entry(registry, entry.entry_id)
         if item.unique_id == f"{provider_id}_{station.provider_id}_status_summary"
     )
-    assert (
-        station.name
-        in hass.states[summary_entity.entity_id].attributes["friendly_name"]
-    )
-    assert hass.states[available_entity.entity_id].state == "on"
+    summary_state = hass.states.get(summary_entity.entity_id)
+    available_state = hass.states.get(available_entity.entity_id)
+    assert summary_state is not None
+    assert available_state is not None
+    assert station.name in summary_state.attributes["friendly_name"]
+    assert available_state.state == "on"
 
     coordinator = entry.runtime_data
     coordinator.async_set_updated_data(
         {station.provider_id: replace(station, is_stale=True)}
     )
     await hass.async_block_till_done()
-    assert hass.states[available_entity.entity_id].state == "unavailable"
+    stale_state = hass.states.get(available_entity.entity_id)
+    assert stale_state is not None
+    assert stale_state.state == "unavailable"
     coordinator.async_set_updated_data({station.provider_id: station})
     await hass.async_block_till_done()
-    assert hass.states[available_entity.entity_id].state == "on"
+    restored_state = hass.states.get(available_entity.entity_id)
+    assert restored_state is not None
+    assert restored_state.state == "on"
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     assert await hass.config_entries.async_setup(entry.entry_id)
