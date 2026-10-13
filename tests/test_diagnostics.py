@@ -8,6 +8,10 @@ import pytest
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.curbcharge.belgium import (
+    BelgiumChargingProvider,
+    BelgiumDatexClient,
+)
 from custom_components.curbcharge.const import (
     CONF_API_TOKEN,
     CONF_LOCATION_SOURCE,
@@ -24,11 +28,17 @@ from custom_components.curbcharge.diagnostics import (
     async_get_config_entry_diagnostics,
 )
 from custom_components.curbcharge.models import (
-    ChargingLocation,
     ChargingTariff,
     EVSEStatus,
 )
 from tests.conftest import FakeProvider
+from tests.test_belgium import (
+    FakeResponse,
+    FakeSession,
+    NoWaitLimiter,
+    _locations_document,
+    _status_document,
+)
 
 
 @pytest.mark.asyncio
@@ -102,38 +112,20 @@ async def test_diagnostics_redact_coordinates_and_addresses(hass, sample_station
 
 
 @pytest.mark.asyncio
-async def test_belgium_diagnostics_redact_nested_secrets_and_location(
-    hass, sample_stations
-):
-    location = ChargingLocation(
-        provider_id="site-private",
-        provider=PROVIDER_ECO_MOVEMENT_BE,
-        provider_name="Eco-Movement Belgium",
-        country_code="BE",
-        name="Private BE site",
-        latitude=50.850123,
-        longitude=4.351234,
-        address="Private BE address",
-        operator="Example CPO",
-        last_updated=None,
+async def test_belgium_diagnostics_redact_nested_secrets_and_location(hass):
+    token = "belgium-secret-token"
+    session = FakeSession(
+        [
+            FakeResponse(_locations_document()),
+            FakeResponse(_status_document()),
+        ]
     )
-    station = replace(
-        sample_stations[0],
-        provider_id="evse-private",
-        provider=PROVIDER_ECO_MOVEMENT_BE,
-        provider_name="Eco-Movement Belgium",
-        country_code="BE",
-        name="Private BE EVSE",
-        latitude=50.851234,
-        longitude=4.352345,
-        address="Private EVSE address",
-        location=location,
-        evse_id="BE*PRIVATE*EVSE",
-        evse_status=EVSEStatus.AVAILABLE,
-        tariff=ChargingTariff(
-            "EUR", Decimal("0.42"), None, None, None, "Eco-Movement Belgium"
-        ),
+    provider = BelgiumChargingProvider(
+        BelgiumDatexClient(session, token, NoWaitLimiter())
     )
+    stations = await provider.async_get_stations(50.85, 4.35, 1000, 10)
+    assert len(stations) == 1
+    station = stations[0]
     stale = replace(
         station,
         provider_id="evse-stale",
@@ -141,15 +133,8 @@ async def test_belgium_diagnostics_redact_nested_secrets_and_location(
         is_stale=True,
     )
     unknown = replace(
-        sample_stations[2],
+        station,
         provider_id="evse-unknown",
-        provider=PROVIDER_ECO_MOVEMENT_BE,
-        provider_name="Eco-Movement Belgium",
-        country_code="BE",
-        latitude=50.853210,
-        longitude=4.353210,
-        address="Private unknown EVSE address",
-        location=location,
         evse_id="BE*UNKNOWN*EVSE",
         evse_status=EVSEStatus.UNKNOWN,
         availability_reported=False,
@@ -177,7 +162,7 @@ async def test_belgium_diagnostics_redact_nested_secrets_and_location(
             CONF_MAX_STATIONS: 10,
             CONF_LATITUDE: 50.999999,
             CONF_LONGITUDE: 4.999999,
-            CONF_API_TOKEN: "belgium-secret-token",
+            CONF_API_TOKEN: token,
             "provider_credentials": {
                 CONF_API_TOKEN: "nested-belgium-secret-token",
             },
@@ -191,6 +176,7 @@ async def test_belgium_diagnostics_redact_nested_secrets_and_location(
     )
     entry.runtime_data = coordinator
 
+    request_count = len(session.requests)
     diagnostics = await async_get_config_entry_diagnostics(hass, entry)
     serialized = json.dumps(diagnostics)
 
@@ -201,18 +187,14 @@ async def test_belgium_diagnostics_redact_nested_secrets_and_location(
         "nested-belgium-options-secret-token",
         "50.999999",
         "4.999999",
-        "50.850123",
-        "4.351234",
-        "50.851234",
-        "4.352345",
-        "50.853210",
-        "4.353210",
-        "Private BE site",
-        "Private BE address",
-        "Private EVSE address",
-        "Private unknown EVSE address",
+        "50.85",
+        "4.35",
+        "Main Street 1, 1000 Brussels",
+        "aegiEnergyInfrastructureTablePublication",
     ):
         assert private_value not in serialized
+    for url, _headers in session.requests:
+        assert url not in serialized
 
     assert diagnostics["provider"] == "Eco-Movement Belgium"
     assert diagnostics["provider_id"] == PROVIDER_ECO_MOVEMENT_BE
@@ -226,7 +208,9 @@ async def test_belgium_diagnostics_redact_nested_secrets_and_location(
         if station["provider_station_id"] == "evse-private"
     )
     assert evse_diagnostics["evse_status"] == "AVAILABLE"
-    assert evse_diagnostics["available_connectors"] == 2
+    assert evse_diagnostics["available_connectors"] is None
+    assert evse_diagnostics["total_connectors"] == 2
+    assert evse_diagnostics["unknown_connectors"] == 2
     assert evse_diagnostics["tariff"]["price_per_kwh"] == "0.42"
     unknown_diagnostics = next(
         station
@@ -236,4 +220,4 @@ async def test_belgium_diagnostics_redact_nested_secrets_and_location(
     assert unknown_diagnostics["availability_reported"] is False
     assert unknown_diagnostics["evse_status"] == "UNKNOWN"
     assert unknown_diagnostics["available_connectors"] is None
-    assert len(provider.snapshots) == 1
+    assert len(session.requests) == request_count
