@@ -166,13 +166,18 @@ Each charging point is one Home Assistant device. CurbCharge creates:
 - **Maximum charging power**, **Price per kWh**, and **Distance**.
 - **Status summary**, including connector types, operator, address, provider
   status, tariff details, coordinates, and provider update timestamps.
-- One integration-level **Best nearby charger** sensor and a **Nearby charging
-  units** count. The count covers current, non-stale charging-unit records in
-  that entry's configured search area (NDW charge-point records in the
-  Netherlands and EVSEs in Belgium), not physical sites, available chargers,
-  or nationwide coverage. Its attributes report unknown availability and stale
-  records separately, along with the provider, search radius, result cap, and
-  whether the result may be truncated.
+- Integration-level **Best nearby charger**, **Nearby charging units**, and
+  **Nearby available connectors** sensors. The charging-unit count covers
+  current, non-stale records in that entry's configured search area (NDW
+  charge-point records in the Netherlands and EVSEs in Belgium), not physical
+  sites, available chargers, or nationwide coverage. Its attributes report
+  unknown availability and stale records, provider, search radius, result cap,
+  and whether results may be truncated.
+- The available-connectors count sums only connector counts explicitly reported
+  as available at current stations. It exposes known, unknown, and stale
+  station counts; missing fresh availability is unknown, not zero. A Belgian
+  EVSE's overall available status does not imply that its connector count is
+  known.
 
 For each availability group reported by NDW, the station also has a
 disabled-by-default connector-group sensor. The provider groups connectors by type and

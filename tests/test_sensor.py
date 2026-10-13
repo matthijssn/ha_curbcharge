@@ -7,15 +7,23 @@ from homeassistant.components.sensor import SensorStateClass
 from homeassistant.const import EntityCategory
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.curbcharge.const import DOMAIN
+from custom_components.curbcharge.const import DOMAIN, PROVIDER_ECO_MOVEMENT_BE
 from custom_components.curbcharge.coordinator import CurbChargeCoordinator
-from custom_components.curbcharge.models import ChargingTariff, TariffStatus
+from custom_components.curbcharge.models import (
+    ChargingConnector,
+    ChargingLocation,
+    ChargingTariff,
+    ConnectorStatus,
+    EVSEStatus,
+    TariffStatus,
+)
 from custom_components.curbcharge.sensor import (
     AvailableConnectorsSensor,
     BestNearbyChargerSensor,
     ConnectorGroupSensor,
     DistanceSensor,
     MaximumChargingPowerSensor,
+    NearbyAvailableConnectorsSensor,
     NearbyChargingUnitsSensor,
     OccupiedConnectorsSensor,
     PricePerKwhSensor,
@@ -26,12 +34,43 @@ from custom_components.curbcharge.sensor import (
 from tests.conftest import FakeProvider
 
 
-def _coordinator(hass, station, *, max_stations=10, include_unknown=True):
+def _coordinator(
+    hass, station, *, max_stations=10, include_unknown=True, provider=None
+):
+    if provider is None:
+        provider = FakeProvider()
     coordinator = CurbChargeCoordinator(
-        hass, FakeProvider(), 52.0, 5.0, 500, max_stations, 5, include_unknown
+        hass, provider, 52.0, 5.0, 500, max_stations, 5, include_unknown
     )
     coordinator.async_set_updated_data({station.provider_id: station})
     return coordinator
+
+
+def _belgian_evse(
+    station, location, evse_id, connector_count, available_count, *, count_reported=True
+):
+    connector = ChargingConnector(
+        provider_connector_id=f"{evse_id}:connector-group",
+        connector_type="TYPE2",
+        status=ConnectorStatus.UNKNOWN,
+        max_power_kw=22.0,
+        count=connector_count,
+        available_count=available_count,
+    )
+    return replace(
+        station,
+        provider_id=evse_id,
+        name=evse_id,
+        connectors=(connector,),
+        provider=PROVIDER_ECO_MOVEMENT_BE,
+        provider_name="Eco-Movement Belgium",
+        country_code="BE",
+        location=location,
+        evse_id=evse_id,
+        evse_status=EVSEStatus.AVAILABLE,
+        availability_reported=True,
+        connector_count_reported=count_reported,
+    )
 
 
 def test_nearby_charging_units_counts_current_records_and_reports_scope(
@@ -126,6 +165,168 @@ def test_nearby_charging_units_does_not_claim_truncation_after_filtering(
 
     assert sensor.native_value == 1
     assert sensor.extra_state_attributes["results_may_be_truncated"] is None
+
+
+def test_nearby_available_connectors_sums_nl_groups_and_reports_coverage(
+    hass, sample_stations
+):
+    first, zero, unknown = sample_stations
+    stale = replace(first, provider_id="NL-STALE", is_stale=True)
+    coordinator = _coordinator(hass, first, max_stations=3)
+    coordinator.async_set_updated_data(
+        {
+            first.provider_id: first,
+            zero.provider_id: zero,
+            unknown.provider_id: unknown,
+            stale.provider_id: stale,
+        }
+    )
+    sensor = NearbyAvailableConnectorsSensor(
+        coordinator,
+        MockConfigEntry(domain=DOMAIN, unique_id="nl-search-area"),
+    )
+
+    assert sensor.native_value == 2
+    assert sensor.unique_id == "nl-search-area_nearby_available_connectors"
+    assert sensor.state_class is SensorStateClass.MEASUREMENT
+    attributes = sensor.extra_state_attributes
+    assert attributes["provider_id"] == "ndw_dot_nl"
+    assert attributes["country_code"] == "NL"
+    assert attributes["counted_unit"] == "connector"
+    assert attributes["fresh_station_count"] == 3
+    assert attributes["known_availability_station_count"] == 2
+    assert attributes["unknown_availability_station_count"] == 1
+    assert attributes["stale_station_count"] == 1
+    assert attributes["max_stations"] == 3
+    assert attributes["results_may_be_truncated"] is True
+
+
+def test_nearby_available_connectors_returns_unknown_without_fresh_counts(
+    hass, sample_stations
+):
+    unknown = sample_stations[2]
+    provider = FakeProvider([(sample_stations[0],)])
+    coordinator = CurbChargeCoordinator(hass, provider, 52.0, 5.0, 500, 10, 5, True)
+    sensor = NearbyAvailableConnectorsSensor(
+        coordinator,
+        MockConfigEntry(domain=DOMAIN, unique_id="test-nearby-area"),
+    )
+
+    assert sensor.native_value is None
+    assert sensor.extra_state_attributes["fresh_station_count"] is None
+    assert sensor.extra_state_attributes["unknown_availability_station_count"] is None
+    assert len(provider.snapshots) == 1
+
+    coordinator.async_set_updated_data({})
+    assert sensor.native_value is None
+    assert sensor.available
+    assert sensor.extra_state_attributes["fresh_station_count"] == 0
+    assert sensor.extra_state_attributes["known_availability_station_count"] == 0
+    assert sensor.extra_state_attributes["unknown_availability_station_count"] == 0
+
+    coordinator.async_set_updated_data({unknown.provider_id: unknown})
+    assert sensor.native_value is None
+    assert sensor.extra_state_attributes["unknown_availability_station_count"] == 1
+
+    coordinator.async_set_updated_data(
+        {unknown.provider_id: replace(unknown, is_stale=True)}
+    )
+    assert sensor.native_value is None
+    assert sensor.extra_state_attributes["fresh_station_count"] == 0
+    assert sensor.extra_state_attributes["unknown_availability_station_count"] == 0
+    assert sensor.extra_state_attributes["stale_station_count"] == 1
+    assert len(provider.snapshots) == 1
+
+
+def test_nearby_available_connectors_distinguishes_known_zero(hass, sample_stations):
+    station = sample_stations[1]
+    coordinator = _coordinator(hass, station)
+    sensor = NearbyAvailableConnectorsSensor(
+        coordinator,
+        MockConfigEntry(domain=DOMAIN, unique_id="test-nearby-area"),
+    )
+
+    assert sensor.native_value == 0
+    assert sensor.extra_state_attributes["known_availability_station_count"] == 1
+    assert sensor.extra_state_attributes["unknown_availability_station_count"] == 0
+
+
+def test_nearby_available_connectors_sums_be_evse_counts_once_per_unit(
+    hass, sample_stations
+):
+    location = ChargingLocation(
+        provider_id="site-1",
+        provider=PROVIDER_ECO_MOVEMENT_BE,
+        provider_name="Eco-Movement Belgium",
+        country_code="BE",
+        name="Example site",
+        latitude=50.85,
+        longitude=4.35,
+        address=None,
+        operator="Example CPO",
+        last_updated=None,
+    )
+    first = _belgian_evse(sample_stations[0], location, "evse-1", 2, 1)
+    second = _belgian_evse(sample_stations[0], location, "evse-2", 3, 2)
+    provider = FakeProvider()
+    provider.provider_id = PROVIDER_ECO_MOVEMENT_BE
+    provider.provider_name = "Eco-Movement Belgium"
+    provider.country_code = "BE"
+    coordinator = _coordinator(hass, first, provider=provider)
+    coordinator.async_set_updated_data(
+        {first.provider_id: first, second.provider_id: second}
+    )
+    sensor = NearbyAvailableConnectorsSensor(
+        coordinator,
+        MockConfigEntry(domain=DOMAIN, unique_id="be-search-area"),
+    )
+
+    assert first.location is second.location
+    assert sensor.native_value == 3
+    assert sensor.extra_state_attributes["provider_id"] == PROVIDER_ECO_MOVEMENT_BE
+    assert sensor.extra_state_attributes["country_code"] == "BE"
+    assert sensor.extra_state_attributes["fresh_station_count"] == 2
+    assert sensor.extra_state_attributes["known_availability_station_count"] == 2
+    assert sensor.extra_state_attributes["unknown_availability_station_count"] == 0
+
+
+def test_nearby_available_connectors_does_not_infer_from_be_evse_status(
+    hass, sample_stations
+):
+    location = ChargingLocation(
+        provider_id="site-1",
+        provider=PROVIDER_ECO_MOVEMENT_BE,
+        provider_name="Eco-Movement Belgium",
+        country_code="BE",
+        name="Example site",
+        latitude=50.85,
+        longitude=4.35,
+        address=None,
+        operator="Example CPO",
+        last_updated=None,
+    )
+    station = _belgian_evse(
+        sample_stations[0],
+        location,
+        "evse-unknown-count",
+        2,
+        None,
+        count_reported=False,
+    )
+    provider = FakeProvider()
+    provider.provider_id = PROVIDER_ECO_MOVEMENT_BE
+    provider.provider_name = "Eco-Movement Belgium"
+    provider.country_code = "BE"
+    coordinator = _coordinator(hass, station, provider=provider)
+    sensor = NearbyAvailableConnectorsSensor(
+        coordinator,
+        MockConfigEntry(domain=DOMAIN, unique_id="be-search-area"),
+    )
+
+    assert station.has_available_connectors is True
+    assert station.available_connectors is None
+    assert sensor.native_value is None
+    assert sensor.extra_state_attributes["unknown_availability_station_count"] == 1
 
 
 def test_connector_sensors_do_not_infer_occupancy(hass, sample_stations):
