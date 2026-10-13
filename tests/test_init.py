@@ -60,25 +60,122 @@ def _has_device(device_registry, entry_id: str, identifier: tuple[str, str]) -> 
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("provider_id", "provider_name", "country_code"),
+    [
+        (PROVIDER_NDW_DOT_NL, "NDW DOT-NL", "NL"),
+        (PROVIDER_ECO_MOVEMENT_BE, "Eco-Movement Belgium", "BE"),
+    ],
+)
 async def test_setup_unload_and_reload_keep_stable_entities(
-    hass, monkeypatch, sample_stations
+    hass, monkeypatch, sample_stations, provider_id, provider_name, country_code
 ):
-    provider = FakeProvider([(sample_stations[0],)])
+    station = sample_stations[0]
+    if provider_id == PROVIDER_ECO_MOVEMENT_BE:
+        assert station.location is not None
+        location = replace(
+            station.location,
+            provider_id="site-1",
+            provider=provider_id,
+            provider_name=provider_name,
+            country_code=country_code,
+            name="Example site",
+        )
+        station = replace(
+            station,
+            provider_id="evse-1",
+            provider=provider_id,
+            provider_name=provider_name,
+            country_code=country_code,
+            location=location,
+        )
+
+    provider = FakeProvider([(station,)])
+    provider.provider_id = provider_id
+    provider.provider_name = provider_name
+    provider.country_code = country_code
     monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
-    entry = _entry()
+    overrides: dict[str, object] = {CONF_PROVIDER: provider_id}
+    if provider_id == PROVIDER_ECO_MOVEMENT_BE:
+        overrides[CONF_API_TOKEN] = "test-token"
+    entry = _entry(overrides)
     entry.add_to_hass(hass)
 
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     registry = er.async_get(hass)
-    assert (
-        len(dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)) == 1
+    device_registry = dr.async_get(hass)
+    devices = dr.async_entries_for_config_entry(device_registry, entry.entry_id)
+    station_identifier = station_device_identifier(provider_id, station.provider_id)
+    station_device = next(
+        device for device in devices if station_identifier in device.identifiers
     )
+    assert (
+        station_device.name == f"{station.name} ({provider_id}:{station.provider_id})"
+    )
+
+    if (
+        station.location is not None
+        and station.location.provider_id != station.provider_id
+    ):
+        parent_identifier = location_device_identifier(
+            provider_id, station.location.provider_id
+        )
+        parent_device = next(
+            device for device in devices if parent_identifier in device.identifiers
+        )
+        assert len(devices) == 2
+        assert (
+            getattr(station_device, "parent_device_id", None) == parent_device.id
+            or getattr(station_device, "via_device_id", None) == parent_device.id
+        )
+    else:
+        assert len(devices) == 1
+
     before = {
         item.unique_id
         for item in er.async_entries_for_config_entry(registry, entry.entry_id)
     }
-    assert before
+    expected_station_entities = {
+        f"{provider_id}_{station.provider_id}_available",
+        f"{provider_id}_{station.provider_id}_price_per_kwh",
+        f"{provider_id}_{station.provider_id}_status_summary",
+    }
+    expected_connector_entities = {
+        (
+            f"{provider_id}_{station.provider_id}_connector_group_"
+            f"{connector.provider_connector_id.rsplit(':', 1)[-1]}"
+        )
+        for connector in station.connectors
+    }
+    assert expected_station_entities <= before
+    assert expected_connector_entities <= before
+
+    available_entity = next(
+        item
+        for item in er.async_entries_for_config_entry(registry, entry.entry_id)
+        if item.unique_id == f"{provider_id}_{station.provider_id}_available"
+    )
+    summary_entity = next(
+        item
+        for item in er.async_entries_for_config_entry(registry, entry.entry_id)
+        if item.unique_id == f"{provider_id}_{station.provider_id}_status_summary"
+    )
+    assert (
+        station.name
+        in hass.states[summary_entity.entity_id].attributes["friendly_name"]
+    )
+    assert hass.states[available_entity.entity_id].state == "on"
+
+    coordinator = entry.runtime_data
+    coordinator.async_set_updated_data(
+        {station.provider_id: replace(station, is_stale=True)}
+    )
+    await hass.async_block_till_done()
+    assert hass.states[available_entity.entity_id].state == "unavailable"
+    coordinator.async_set_updated_data({station.provider_id: station})
+    await hass.async_block_till_done()
+    assert hass.states[available_entity.entity_id].state == "on"
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     assert await hass.config_entries.async_setup(entry.entry_id)
