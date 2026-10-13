@@ -209,8 +209,8 @@ async def test_belgium_diagnostics_redact_nested_secrets_and_location(hass):
     )
     assert evse_diagnostics["evse_status"] == "AVAILABLE"
     assert evse_diagnostics["available_connectors"] is None
-    assert evse_diagnostics["total_connectors"] == 2
     assert evse_diagnostics["unknown_connectors"] == 2
+    assert sum(connector["count"] for connector in evse_diagnostics["connectors"]) == 2
     assert evse_diagnostics["tariff"]["price_per_kwh"] == "0.42"
     unknown_diagnostics = next(
         station
