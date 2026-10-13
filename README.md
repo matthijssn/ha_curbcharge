@@ -178,6 +178,14 @@ Each charging point is one Home Assistant device. CurbCharge creates:
   station counts; missing fresh availability is unknown, not zero. A Belgian
   EVSE's overall available status does not imply that its connector count is
   known.
+- **Nearby connector availability** is the weighted percentage of known
+  available connectors over the corresponding known total counts, rounded to
+  one decimal place; it is a ratio of summed counts, not an average of station
+  percentages. Connector groups with unknown availability and stale stations
+  are excluded. Coverage is the known denominator over all fresh,
+  provider-reported connector totals; attributes also disclose unreported
+  totals. If no known denominator remains, the sensor is unknown rather than
+  0%.
 
 For each availability group reported by NDW, the station also has a
 disabled-by-default connector-group sensor. The provider groups connectors by type and

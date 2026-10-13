@@ -193,6 +193,9 @@
       },
       "nearby_available_connectors": {
         "name": "Nearby available connectors"
+      },
+      "nearby_availability_percentage": {
+        "name": "Nearby connector availability"
       }
     }
   }

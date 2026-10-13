@@ -4,7 +4,7 @@ from dataclasses import replace
 from decimal import Decimal
 
 from homeassistant.components.sensor import SensorStateClass
-from homeassistant.const import EntityCategory
+from homeassistant.const import PERCENTAGE, EntityCategory
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.curbcharge.const import DOMAIN, PROVIDER_ECO_MOVEMENT_BE
@@ -23,6 +23,7 @@ from custom_components.curbcharge.sensor import (
     ConnectorGroupSensor,
     DistanceSensor,
     MaximumChargingPowerSensor,
+    NearbyAvailabilityPercentageSensor,
     NearbyAvailableConnectorsSensor,
     NearbyChargingUnitsSensor,
     OccupiedConnectorsSensor,
@@ -327,6 +328,183 @@ def test_nearby_available_connectors_does_not_infer_from_be_evse_status(
     assert station.available_connectors is None
     assert sensor.native_value is None
     assert sensor.extra_state_attributes["unknown_availability_station_count"] == 1
+
+
+def test_nearby_availability_percentage_sums_known_groups_and_reports_coverage(
+    hass, sample_stations
+):
+    first, zero, _unknown = sample_stations
+    partial = replace(
+        first,
+        provider_id="NL-PARTIAL",
+        connectors=(
+            ChargingConnector(
+                "known-group",
+                None,
+                ConnectorStatus.UNKNOWN,
+                None,
+                count=3,
+                available_count=1,
+            ),
+            ChargingConnector(
+                "unknown-group",
+                None,
+                ConnectorStatus.UNKNOWN,
+                None,
+                count=2,
+            ),
+        ),
+    )
+    stale = replace(first, provider_id="NL-STALE", is_stale=True)
+    coordinator = _coordinator(hass, first, max_stations=3)
+    coordinator.async_set_updated_data(
+        {
+            first.provider_id: first,
+            zero.provider_id: zero,
+            partial.provider_id: partial,
+            stale.provider_id: stale,
+        }
+    )
+    sensor = NearbyAvailabilityPercentageSensor(
+        coordinator,
+        MockConfigEntry(domain=DOMAIN, unique_id="nl-search-area"),
+    )
+
+    assert partial.available_connectors is None
+    assert sensor.native_value == 33.3
+    assert sensor.native_unit_of_measurement == PERCENTAGE
+    assert sensor.state_class is SensorStateClass.MEASUREMENT
+    assert sensor.unique_id == "nl-search-area_nearby_availability_percentage"
+    attributes = sensor.extra_state_attributes
+    assert attributes["available_connectors"] == 3
+    assert attributes["total_connectors"] == 9
+    assert attributes["reported_total_connectors"] == 11
+    assert attributes["availability_coverage_percent"] == 81.8
+    assert attributes["unknown_availability_connector_count"] == 2
+    assert attributes["known_connector_group_count"] == 4
+    assert attributes["excluded_connector_group_count"] == 1
+    assert attributes["unknown_availability_station_count"] == 1
+    assert attributes["unreported_total_station_count"] == 0
+    assert attributes["fresh_station_count"] == 3
+    assert attributes["stale_station_count"] == 1
+
+
+def test_nearby_availability_percentage_reports_full_and_zero(hass, sample_stations):
+    full = sample_stations[0]
+    full = replace(
+        full,
+        connectors=tuple(
+            replace(
+                connector,
+                status=ConnectorStatus.AVAILABLE,
+                available_count=None,
+            )
+            for connector in full.connectors
+        ),
+    )
+    full_sensor = NearbyAvailabilityPercentageSensor(
+        _coordinator(hass, full),
+        MockConfigEntry(domain=DOMAIN, unique_id="full-area"),
+    )
+    zero_sensor = NearbyAvailabilityPercentageSensor(
+        _coordinator(hass, sample_stations[1]),
+        MockConfigEntry(domain=DOMAIN, unique_id="zero-area"),
+    )
+
+    assert full_sensor.native_value == 100.0
+    assert zero_sensor.native_value == 0.0
+
+
+def test_nearby_availability_percentage_is_unknown_without_a_denominator(
+    hass, sample_stations
+):
+    provider = FakeProvider([(sample_stations[0],)])
+    coordinator = CurbChargeCoordinator(hass, provider, 52.0, 5.0, 500, 10, 5, True)
+    sensor = NearbyAvailabilityPercentageSensor(
+        coordinator,
+        MockConfigEntry(domain=DOMAIN, unique_id="test-nearby-area"),
+    )
+
+    assert sensor.native_value is None
+    assert sensor.extra_state_attributes["total_connectors"] is None
+    coordinator.async_set_updated_data({})
+    assert sensor.native_value is None
+    assert sensor.available
+    assert sensor.extra_state_attributes["total_connectors"] == 0
+    assert sensor.extra_state_attributes["availability_coverage_percent"] is None
+
+    unknown = replace(
+        sample_stations[0],
+        connectors=(
+            ChargingConnector(
+                "unknown-group",
+                None,
+                ConnectorStatus.UNKNOWN,
+                None,
+                count=2,
+            ),
+        ),
+    )
+    coordinator.async_set_updated_data({unknown.provider_id: unknown})
+    assert sensor.native_value is None
+    assert sensor.extra_state_attributes["reported_total_connectors"] == 2
+    assert sensor.extra_state_attributes["unknown_availability_connector_count"] == 2
+    assert sensor.extra_state_attributes["availability_coverage_percent"] == 0.0
+
+    unreported_availability = replace(unknown, availability_reported=False)
+    coordinator.async_set_updated_data(
+        {unreported_availability.provider_id: unreported_availability}
+    )
+    assert sensor.native_value is None
+    assert sensor.extra_state_attributes["reported_total_connectors"] == 2
+    assert sensor.extra_state_attributes["unknown_availability_connector_count"] == 2
+    assert sensor.extra_state_attributes["unknown_availability_station_count"] == 1
+
+    unreported_total = replace(unknown, connector_count_reported=False)
+    coordinator.async_set_updated_data({unreported_total.provider_id: unreported_total})
+    assert sensor.native_value is None
+    assert sensor.extra_state_attributes["unreported_total_station_count"] == 1
+    assert sensor.extra_state_attributes["total_connectors"] == 0
+
+    coordinator.async_set_updated_data(
+        {unknown.provider_id: replace(unknown, is_stale=True)}
+    )
+    assert sensor.native_value is None
+    assert sensor.extra_state_attributes["fresh_station_count"] == 0
+    assert sensor.extra_state_attributes["stale_station_count"] == 1
+    assert len(provider.snapshots) == 1
+
+
+def test_nearby_availability_percentage_does_not_infer_be_evse_status(
+    hass, sample_stations
+):
+    location = ChargingLocation(
+        provider_id="site-1",
+        provider=PROVIDER_ECO_MOVEMENT_BE,
+        provider_name="Eco-Movement Belgium",
+        country_code="BE",
+        name="Example site",
+        latitude=50.85,
+        longitude=4.35,
+        address=None,
+        operator="Example CPO",
+        last_updated=None,
+    )
+    station = _belgian_evse(sample_stations[0], location, "evse-available", 2, None)
+    provider = FakeProvider()
+    provider.provider_id = PROVIDER_ECO_MOVEMENT_BE
+    provider.provider_name = "Eco-Movement Belgium"
+    provider.country_code = "BE"
+    sensor = NearbyAvailabilityPercentageSensor(
+        _coordinator(hass, station, provider=provider),
+        MockConfigEntry(domain=DOMAIN, unique_id="be-search-area"),
+    )
+
+    assert station.has_available_connectors is True
+    assert sensor.native_value is None
+    assert sensor.extra_state_attributes["reported_total_connectors"] == 2
+    assert sensor.extra_state_attributes["unknown_availability_connector_count"] == 2
+    assert sensor.extra_state_attributes["availability_coverage_percent"] == 0.0
 
 
 def test_connector_sensors_do_not_infer_occupancy(hass, sample_stations):

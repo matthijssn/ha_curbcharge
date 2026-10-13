@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, NamedTuple
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -10,7 +10,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import EntityCategory, UnitOfLength, UnitOfPower
+from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfLength, UnitOfPower
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -41,6 +41,7 @@ async def async_setup_entry(
             BestNearbyChargerSensor(coordinator, entry),
             NearbyChargingUnitsSensor(coordinator, entry),
             NearbyAvailableConnectorsSensor(coordinator, entry),
+            NearbyAvailabilityPercentageSensor(coordinator, entry),
         ]
     )
 
@@ -358,6 +359,69 @@ def _current_stations(
     return tuple(station for station in stations.values() if not station.is_stale)
 
 
+class _AvailabilityPercentageSummary(NamedTuple):
+    available_connectors: int | None
+    total_connectors: int | None
+    reported_total_connectors: int | None
+    known_connector_group_count: int | None
+    excluded_connector_group_count: int | None
+    unknown_availability_station_count: int | None
+    unreported_total_station_count: int | None
+
+
+def _availability_percentage_summary(
+    current_stations: tuple[ChargingStation, ...] | None,
+) -> _AvailabilityPercentageSummary:
+    if current_stations is None:
+        return _AvailabilityPercentageSummary(None, None, None, None, None, None, None)
+
+    available_connectors = 0
+    total_connectors = 0
+    reported_total_connectors = 0
+    known_connector_group_count = 0
+    excluded_connector_group_count = 0
+    unknown_availability_station_count = 0
+    unreported_total_station_count = 0
+    for station in current_stations:
+        if not station.availability_reported or any(
+            connector.known_available_count is None for connector in station.connectors
+        ):
+            unknown_availability_station_count += 1
+        if not station.connector_count_reported:
+            unreported_total_station_count += 1
+            excluded_connector_group_count += len(station.connectors)
+            continue
+
+        station_total = station.total_connectors
+        if station_total is None:
+            unreported_total_station_count += 1
+            excluded_connector_group_count += len(station.connectors)
+            continue
+        reported_total_connectors += station_total
+        if not station.availability_reported:
+            excluded_connector_group_count += len(station.connectors)
+            continue
+
+        for connector in station.connectors:
+            available = connector.known_available_count
+            if available is None:
+                excluded_connector_group_count += 1
+                continue
+            available_connectors += available
+            total_connectors += connector.count
+            known_connector_group_count += 1
+
+    return _AvailabilityPercentageSummary(
+        available_connectors,
+        total_connectors,
+        reported_total_connectors,
+        known_connector_group_count,
+        excluded_connector_group_count,
+        unknown_availability_station_count,
+        unreported_total_station_count,
+    )
+
+
 def _nearby_aggregate_attributes(
     coordinator: CurbChargeCoordinator,
     current_stations: tuple[ChargingStation, ...] | None,
@@ -482,6 +546,77 @@ class NearbyAvailableConnectorsSensor(
                         station.available_connectors is None
                         for station in current_stations
                     )
+                ),
+            }
+        )
+        return attributes
+
+
+class NearbyAvailabilityPercentageSensor(
+    CoordinatorEntity[CurbChargeCoordinator], SensorEntity
+):
+    """Report the weighted share of fresh connectors known to be available."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "nearby_availability_percentage"
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self, coordinator: CurbChargeCoordinator, entry: ConfigEntry[Any]
+    ) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = (
+            f"{entry.unique_id or entry.entry_id}_nearby_availability_percentage"
+        )
+
+    @property
+    def native_value(self) -> float | None:
+        summary = _availability_percentage_summary(_current_stations(self.coordinator))
+        if summary.available_connectors is None or not summary.total_connectors:
+            return None
+        return round(100 * summary.available_connectors / summary.total_connectors, 1)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        current_stations = _current_stations(self.coordinator)
+        summary = _availability_percentage_summary(current_stations)
+        coverage = (
+            None
+            if not summary.reported_total_connectors or summary.total_connectors is None
+            else round(
+                100 * summary.total_connectors / summary.reported_total_connectors, 1
+            )
+        )
+        unknown_availability_connectors = (
+            None
+            if summary.total_connectors is None
+            or summary.reported_total_connectors is None
+            else summary.reported_total_connectors - summary.total_connectors
+        )
+        attributes = _nearby_aggregate_attributes(self.coordinator, current_stations)
+        attributes.update(
+            {
+                "counted_unit": "connector",
+                "available_connectors": summary.available_connectors,
+                "total_connectors": summary.total_connectors,
+                "reported_total_connectors": summary.reported_total_connectors,
+                "availability_coverage_percent": coverage,
+                "unknown_availability_connector_count": (
+                    unknown_availability_connectors
+                ),
+                "known_connector_group_count": summary.known_connector_group_count,
+                "excluded_connector_group_count": (
+                    summary.excluded_connector_group_count
+                ),
+                "unknown_availability_station_count": (
+                    summary.unknown_availability_station_count
+                ),
+                "unreported_total_station_count": (
+                    summary.unreported_total_station_count
+                ),
+                "fresh_station_count": (
+                    None if current_stations is None else len(current_stations)
                 ),
             }
         )

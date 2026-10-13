@@ -193,6 +193,9 @@
       },
       "nearby_available_connectors": {
         "name": "Verfügbare Ladeanschlüsse in der Nähe"
+      },
+      "nearby_availability_percentage": {
+        "name": "Verfügbarkeit der Ladeanschlüsse in der Nähe"
       }
     }
   }
