@@ -187,6 +187,9 @@
       },
       "best_nearby_charger": {
         "name": "Beste laadpunt in de buurt"
+      },
+      "nearby_charging_units": {
+        "name": "Laadpunten in de buurt"
       }
     }
   }

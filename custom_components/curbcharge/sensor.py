@@ -36,7 +36,12 @@ async def async_setup_entry(
         async_add_entities,
         lambda station: create_station_sensors(coordinator, station),
     )
-    async_add_entities([BestNearbyChargerSensor(coordinator, entry)])
+    async_add_entities(
+        [
+            BestNearbyChargerSensor(coordinator, entry),
+            NearbyChargingUnitsSensor(coordinator, entry),
+        ]
+    )
 
 
 class AvailableConnectorsSensor(CurbChargeStationEntity, SensorEntity):
@@ -340,6 +345,72 @@ def _tariff_record_attributes(tariff: ChargingTariff) -> dict[str, Any]:
 
 def _decimal_attribute(value: Decimal | None) -> float | None:
     return float(value) if value is not None else None
+
+
+class NearbyChargingUnitsSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEntity):
+    """Count current provider charging units in the configured search area."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "nearby_charging_units"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self, coordinator: CurbChargeCoordinator, entry: ConfigEntry[Any]
+    ) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = (
+            f"{entry.unique_id or entry.entry_id}_nearby_charging_units"
+        )
+
+    @property
+    def native_value(self) -> int | None:
+        stations = self.coordinator.data
+        if stations is None:
+            return None
+        return sum(not station.is_stale for station in stations.values())
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        stations = self.coordinator.data
+        current_stations = (
+            ()
+            if stations is None
+            else tuple(station for station in stations.values() if not station.is_stale)
+        )
+        stale_station_count = (
+            None if stations is None else len(stations) - len(current_stations)
+        )
+        if stations is None:
+            results_may_be_truncated = None
+        elif len(current_stations) >= self.coordinator.max_stations:
+            results_may_be_truncated = True
+        elif stale_station_count == 0 and self.coordinator.include_unknown:
+            results_may_be_truncated = False
+        else:
+            results_may_be_truncated = None
+
+        return {
+            "provider": self.coordinator.provider_name,
+            "provider_id": self.coordinator.provider_id,
+            "country_code": self.coordinator.country_code,
+            "search_radius_m": self.coordinator.radius_m,
+            "max_stations": self.coordinator.max_stations,
+            "counted_unit": "charging_station",
+            "include_unknown": self.coordinator.include_unknown,
+            "unknown_availability_count": (
+                None
+                if stations is None
+                else sum(
+                    station.has_available_connectors is None
+                    for station in current_stations
+                )
+            ),
+            "stale_station_count": stale_station_count,
+            "results_may_be_truncated": results_may_be_truncated,
+            "last_successful_update": _isoformat(
+                self.coordinator.last_successful_update
+            ),
+        }
 
 
 class BestNearbyChargerSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEntity):
