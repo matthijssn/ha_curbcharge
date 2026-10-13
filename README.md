@@ -65,16 +65,19 @@ and can be selected in the config flow. Setup asks for an Eco-Movement API
 token as a password field, validates it before creating the entry, stores it
 only in config-entry data, and redacts it from diagnostics. Use this preview
 only if you are authorized to access the API and have reviewed the applicable
-terms.
+terms. Eco-Movement issues these tokens; request access by emailing
+[Eco-Movement support](mailto:support@eco-movement.com).
 
-The API publishes a daily static location snapshot and separate status requests
-for each EVSE. Its documented limits are one request per 10 seconds per source
-IP, 30 location requests per hour per token, and two status requests per minute
-per EVSE per token. The provider uses a shared Home Assistant request limiter;
-a refresh can therefore take several minutes when many EVSEs need status
-updates. A `Retry-After` response pauses requests from all Belgium entries
-sharing that limiter. If a token expires or is revoked, the integration
-prompts for a replacement token and validates it before updating the entry.
+The `/locations` snapshot refreshes every 24 hours. Eco-Movement documents
+status updates on change and within one minute, but CurbCharge reads them on
+its scheduled polls; the default interval is five minutes and quotas may add
+further delay. The limits are one request per 10 seconds per source IP, 30
+location requests per hour per token, and two status requests per minute per
+EVSE per token. The provider uses a shared Home Assistant request limiter; a
+refresh can therefore take several minutes when many EVSEs need status updates.
+A `Retry-After` response pauses requests from all Belgium entries sharing that
+limiter. If a token expires or is revoked, the integration prompts for a
+replacement token and validates it before updating the entry.
 
 Eco-Movement access approval, applicable terms/licensing, and live Belgian
 payload compatibility have not been verified. Treat them as release blockers.
@@ -146,7 +149,24 @@ before creating the entry. The default polling interval is five minutes; the
 options flow permits intervals of one minute or longer, plus changes to the
 radius, station limit, and whether to include stations for which no
 availability data was returned. The provider is selected during setup and
-cannot be switched from the options flow.
+cannot be switched from the options flow. See the
+[Belgium preview setup](#belgium-preview-setup) steps before choosing that
+provider.
+
+### Belgium preview setup
+
+1. Request an authorized token from [Eco-Movement support](mailto:support@eco-movement.com)
+   before setup. CurbCharge cannot issue a token; see the official
+   [DATEX II API documentation][belgium-datex-api] for access and terms.
+2. Add CurbCharge from **Settings → Devices & services → Add integration**.
+   Choose Home Assistant's home location or enter a manual location, then set
+   the search radius and maximum station count.
+3. Select **Eco-Movement Belgium**. On the next step, paste the token into the
+   password field; CurbCharge validates it before creating the config entry.
+4. Keep the token private. It is stored in the config entry and redacted from
+   diagnostics; never include it in screenshots, logs, or issue reports. If
+   the token expires or is revoked, Home Assistant starts reauthentication so
+   you can enter a replacement.
 
 ## Supported stations
 
@@ -254,6 +274,15 @@ conditions. Use its entities in Home Assistant automations as shown above.
   and that public stations are listed in NDW DOT-NL for that area.
 - **Setup cannot connect:** Check Home Assistant internet access and retry
   after a provider rate limit expires.
+- **Belgium token rejected:** Confirm Eco-Movement issued the token for your
+  account and that it has not expired or been revoked. Use the reauthentication
+  flow for a replacement; do not include the token in a support request.
+- **Belgium requests are rate limited:** Wait for the provider's `Retry-After`
+  interval. All Belgium entries on the same Home Assistant host share the
+  per-IP limiter; see the documented per-token limits above.
+- **Belgium availability is unknown:** Static location data refreshes daily and
+  dynamic status is requested per EVSE. A location can exist without a current
+  status report; CurbCharge leaves that availability unknown.
 - **Availability is unknown:** NDW may not have supplied connector availability
   for that station. CurbCharge does not infer it from operational status.
 - **Price is unknown:** The provider may omit the tariff or publish conditional,
@@ -274,9 +303,10 @@ integration menu, and select **Download diagnostics**.
 
 ## Removing CurbCharge
 
-Remove the integration from **Settings → Devices & services**. For a manual
-installation, delete `custom_components/curbcharge` from the Home Assistant
-configuration directory and restart Home Assistant.
+Remove the integration from **Settings → Devices & services**; this also
+removes its stored Belgium token. For a manual installation, delete
+`custom_components/curbcharge` from the Home Assistant configuration directory
+and restart Home Assistant.
 
 ## Development
 
