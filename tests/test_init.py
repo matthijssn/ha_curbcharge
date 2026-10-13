@@ -356,6 +356,10 @@ async def test_nl_and_be_entries_refresh_fail_recover_and_reload_independently(
     assert be_count_state.attributes["country_code"] == "BE"
     assert nl_count_state.attributes["provider_id"] == PROVIDER_NDW_DOT_NL
     assert be_count_state.attributes["provider_id"] == PROVIDER_ECO_MOVEMENT_BE
+    assert nl_count_state.attributes["supported_country_codes"] == ["NL", "BE"]
+    assert be_count_state.attributes["supported_country_codes"] == ["NL", "BE"]
+    assert nl_count_state.attributes["coverage_scope"] == "configured_search_area"
+    assert be_count_state.attributes["coverage_scope"] == "configured_search_area"
 
     nl_coordinator = nl_entry.runtime_data
     be_coordinator = be_entry.runtime_data
@@ -468,6 +472,62 @@ async def test_nl_and_be_entries_refresh_fail_recover_and_reload_independently(
     assert hass.states.get(nl_available_connectors.entity_id).state == "2"
     assert float(hass.states.get(be_availability_percentage.entity_id).state) == 50.0
     assert float(hass.states.get(nl_availability_percentage.entity_id).state) == 50.0
+
+
+@pytest.mark.asyncio
+async def test_same_country_entries_keep_coverage_counts_per_search_area(
+    hass, monkeypatch, sample_stations
+):
+    first, second = sample_stations[:2]
+    providers = iter((FakeProvider([(first,)]), FakeProvider([(second,)])))
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: next(providers))
+
+    first_entry = _entry(
+        unique_id="nl-area-one",
+        entry_id="nl-area-one-entry",
+    )
+    first_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(first_entry.entry_id)
+    await hass.async_block_till_done()
+
+    second_entry = _entry(
+        unique_id="nl-area-two",
+        entry_id="nl-area-two-entry",
+    )
+    second_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(second_entry.entry_id)
+    await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    first_entities = er.async_entries_for_config_entry(registry, first_entry.entry_id)
+    second_entities = er.async_entries_for_config_entry(registry, second_entry.entry_id)
+    first_unique_ids = {entity.unique_id for entity in first_entities}
+    second_unique_ids = {entity.unique_id for entity in second_entities}
+    assert first_unique_ids.isdisjoint(second_unique_ids)
+
+    first_count = next(
+        entity
+        for entity in first_entities
+        if entity.unique_id == "nl-area-one_nearby_charging_units"
+    )
+    second_count = next(
+        entity
+        for entity in second_entities
+        if entity.unique_id == "nl-area-two_nearby_charging_units"
+    )
+    first_state = hass.states.get(first_count.entity_id)
+    second_state = hass.states.get(second_count.entity_id)
+    assert first_state is not None and first_state.state == "1"
+    assert second_state is not None and second_state.state == "1"
+    assert first_state.attributes["country_code"] == "NL"
+    assert second_state.attributes["country_code"] == "NL"
+    assert first_state.attributes["coverage_scope"] == "configured_search_area"
+    assert second_state.attributes["coverage_scope"] == "configured_search_area"
+
+    first_coordinator = first_entry.runtime_data
+    second_coordinator = second_entry.runtime_data
+    assert set(first_coordinator.data) == {first.provider_id}
+    assert set(second_coordinator.data) == {second.provider_id}
 
 
 @pytest.mark.asyncio
