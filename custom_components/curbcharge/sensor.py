@@ -15,6 +15,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .const import COUNTRY_BE, COUNTRY_NL
 from .coordinator import CurbChargeCoordinator
 from .entity import CurbChargeStationEntity, setup_dynamic_station_entities
 from .models import ChargingConnector, ChargingStation, ChargingTariff, TariffStatus
@@ -441,6 +442,8 @@ def _nearby_aggregate_attributes(
         "provider": coordinator.provider_name,
         "provider_id": coordinator.provider_id,
         "country_code": coordinator.country_code,
+        "supported_country_codes": [COUNTRY_NL, COUNTRY_BE],
+        "coverage_scope": "configured_search_area",
         "search_radius_m": coordinator.radius_m,
         "max_stations": coordinator.max_stations,
         "include_unknown": coordinator.include_unknown,

@@ -187,6 +187,10 @@ Each charging point is one Home Assistant device. CurbCharge creates:
   totals. If no known denominator remains, the sensor is unknown rather than
   0%.
 
+These statistics are scoped to one config entry's bounded search area.
+Separate entries, including overlapping searches in the same country, remain
+separate and must not be summed as national coverage.
+
 For each availability group reported by NDW, the station also has a
 disabled-by-default connector-group sensor. The provider groups connectors by type and
 power characteristics; these are not individual physical connector IDs.
