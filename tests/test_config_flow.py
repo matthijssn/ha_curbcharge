@@ -1,5 +1,7 @@
 """Tests for CurbCharge setup and options flows."""
 
+from dataclasses import replace
+
 import pytest
 import voluptuous as vol
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
@@ -661,6 +663,180 @@ async def test_options_flow_saves_favourites_by_station_name(hass, sample_statio
     ]
 
 
+def test_favourite_options_use_readable_disambiguated_labels_and_skip_stale(
+    hass, sample_stations
+):
+    first = replace(
+        sample_stations[0],
+        provider_id="station-one",
+        name="EVSE",
+        address="Main Street",
+        operator="Operator",
+    )
+    second = replace(first, provider_id="station-two")
+    stale = replace(first, provider_id="stale-station", is_stale=True)
+    coordinator = CurbChargeCoordinator(
+        hass, FakeProvider(), 52.0, 5.0, 500, 10, 5, True
+    )
+    coordinator.async_set_updated_data(
+        {
+            first.provider_id: first,
+            second.provider_id: second,
+            stale.provider_id: stale,
+        }
+    )
+
+    options, references = config_flow._favourite_selector_options(coordinator, ())
+
+    assert [option["value"] for option in options] == ["station-one", "station-two"]
+    assert all("Main Street - EVSE - Operator" in item["label"] for item in options)
+    assert first.provider_id[-6:] in options[0]["label"]
+    assert second.provider_id[-6:] in options[1]["label"]
+    assert "stale-station" not in references
+
+
+def test_favourite_reference_keeps_belgium_parent_identity(sample_stations):
+    station = sample_stations[0]
+    assert station.location is not None
+    site = replace(
+        station.location,
+        provider_id="site-1",
+        name="Charging site",
+        operator="Site operator",
+    )
+
+    favourite = config_flow._favourite_reference(replace(station, location=site))
+
+    assert favourite.location_id == "site-1"
+    assert favourite.location_name == "Charging site"
+    assert favourite.location_operator == "Site operator"
+    assert config_flow._favourite_reference(station).location_id is None
+
+
+@pytest.mark.parametrize(
+    "selection",
+    (None, "station-one", [1], ["station-one", "station-one"], ["missing"]),
+)
+def test_selected_favourites_rejects_invalid_or_missing_values(selection):
+    favourite = FavouriteStationReference(
+        PROVIDER_NDW_DOT_NL, "station-one", "Station", 52.0, 5.0
+    )
+
+    with pytest.raises(ValueError):
+        config_flow._selected_favourites(
+            selection, {"station-one": favourite}, (), None
+        )
+
+
+def test_selected_saved_favourite_remains_selectable_without_live_data():
+    favourite = FavouriteStationReference(
+        PROVIDER_NDW_DOT_NL, "station-one", "Station", 52.0, 5.0
+    )
+
+    assert config_flow._selected_favourites(
+        ["station-one"], {"station-one": favourite}, (favourite,), None
+    ) == (favourite,)
+
+
+@pytest.mark.asyncio
+async def test_options_flow_shows_error_for_stale_new_favourite(hass, sample_stations):
+    station = sample_stations[0]
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="invalid-favourite-area",
+        data={
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+        },
+    )
+    entry.add_to_hass(hass)
+    coordinator = CurbChargeCoordinator(
+        hass, FakeProvider(), 52.0, 5.0, 500, 10, 5, True
+    )
+    coordinator.async_set_updated_data({station.provider_id: station})
+    entry.runtime_data = coordinator
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+
+    coordinator.async_set_updated_data({})
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_SCAN_INTERVAL: 5,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+            CONF_INCLUDE_UNKNOWN: True,
+            CONF_FAVOURITES: [station.provider_id],
+        },
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["errors"] == {"base": "invalid_favourites"}
+
+
+@pytest.mark.asyncio
+async def test_options_flow_defaults_unknown_provider_to_ndw(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="unknown-provider",
+        data={
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+            CONF_PROVIDER: "not_a_provider",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+
+    assert result["type"] is FlowResultType.FORM
+    assert (
+        result["data_schema"](
+            {
+                CONF_SCAN_INTERVAL: 5,
+                CONF_SEARCH_RADIUS: 500,
+                CONF_MAX_STATIONS: 10,
+                CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+                CONF_INCLUDE_UNKNOWN: True,
+                CONF_FAVOURITES: [],
+            }
+        )[CONF_PROVIDER]
+        == PROVIDER_NDW_DOT_NL
+    )
+
+
+@pytest.mark.asyncio
+async def test_options_flow_falls_back_to_ndw_for_an_unknown_saved_provider(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="unknown-provider",
+        data={
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+            CONF_PROVIDER: "not_a_provider",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+
+    assert result["type"] is FlowResultType.FORM
+    assert (
+        result["data_schema"](
+            {
+                CONF_SCAN_INTERVAL: 5,
+                CONF_SEARCH_RADIUS: 500,
+                CONF_MAX_STATIONS: 10,
+                CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+                CONF_INCLUDE_UNKNOWN: True,
+                CONF_FAVOURITES: [],
+            }
+        )[CONF_PROVIDER]
+        == PROVIDER_NDW_DOT_NL
+    )
+
+
 def test_stale_favourite_remains_selectable_for_removal(hass):
     favourite = FavouriteStationReference(
         provider=PROVIDER_NDW_DOT_NL,
@@ -682,6 +858,9 @@ def test_stale_favourite_remains_selectable_for_removal(hass):
         config_flow._selected_favourites([], references, (favourite,), coordinator)
         == ()
     )
+    assert config_flow._selected_favourites(
+        ["remote-station"], references, (favourite,), coordinator
+    ) == (favourite,)
 
 
 @pytest.mark.asyncio
