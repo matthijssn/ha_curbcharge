@@ -24,6 +24,7 @@ from custom_components.curbcharge.api import (
 )
 from custom_components.curbcharge.belgium import BelgiumChargingProvider
 from custom_components.curbcharge.const import (
+    DOMAIN,
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NDW_DOT_NL,
 )
@@ -186,6 +187,75 @@ async def test_favourite_beyond_nearby_cap_reuses_the_normal_geojson_page(
     assert [station.provider_id for station in result.nearby] == ["NL-TEST-001"]
     assert [station.provider_id for station in result.favourites] == ["NL-TEST-002"]
     assert len(session.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_favourite_already_in_nearby_results_is_not_duplicated(sample_geojson):
+    session = FakeSession([FakeResponse(_without_tariffs(sample_geojson))])
+    provider = NdwDotNlProvider(session)
+    favourite = FavouriteStationReference(
+        provider=provider.provider_id,
+        provider_id="NL-TEST-001",
+        name="Teststraat 1",
+        latitude=52.0,
+        longitude=5.0,
+    )
+
+    result = await provider.async_get_stations(52.0, 5.0, 500, 10, (favourite,))
+
+    assert "NL-TEST-001" in {station.provider_id for station in result.nearby}
+    assert result.favourites == ()
+    assert len(session.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_provider_rejects_favourite_from_a_different_provider(sample_geojson):
+    provider = NdwDotNlProvider(
+        FakeSession([FakeResponse(_without_tariffs(sample_geojson))])
+    )
+    favourite = FavouriteStationReference(
+        provider=PROVIDER_ECO_MOVEMENT_BE,
+        provider_id="station-1",
+        name="Station",
+        latitude=52.0,
+        longitude=5.0,
+    )
+
+    with pytest.raises(InvalidProviderResponseError):
+        await provider.async_get_stations(52.0, 5.0, 500, 10, (favourite,))
+
+
+@pytest.mark.asyncio
+async def test_ndw_rate_limit_deferral_retries_waiting_requests(monkeypatch):
+    limiter = api.NdwRequestLimiter()
+    limiter._last_request = 0.0
+    clock = [0.0]
+    sleeps = 0
+
+    def monotonic() -> float:
+        return clock[0]
+
+    async def sleep(delay: float) -> None:
+        nonlocal sleeps
+        sleeps += 1
+        clock[0] += delay + 0.001
+        if sleeps == 1:
+            limiter.defer_requests(1)
+
+    monkeypatch.setattr(api.time, "monotonic", monotonic)
+    monkeypatch.setattr(api.asyncio, "sleep", sleep)
+
+    await limiter.async_wait()
+
+    assert sleeps == 2
+    assert limiter._last_request == clock[0]
+
+
+def test_shared_ndw_limiter_rejects_invalid_hass_data(hass):
+    hass.data.setdefault(DOMAIN, {})[api._NDW_REQUEST_LIMITER_DATA_KEY] = object()
+
+    with pytest.raises(RuntimeError, match="NDW request limiter"):
+        api._shared_ndw_request_limiter(hass)
 
 
 def test_ndw_provider_exposes_stable_country_identity():

@@ -274,6 +274,27 @@ async def test_belgium_favourite_outside_radius_uses_cached_location_and_status(
 
 
 @pytest.mark.asyncio
+async def test_belgium_provider_rejects_favourite_from_another_provider():
+    provider = BelgiumChargingProvider(
+        BelgiumDatexClient(
+            FakeSession([FakeResponse(_locations_document())]),
+            "token",
+            NoWaitLimiter(),
+        )
+    )
+    favourite = FavouriteStationReference(
+        provider="ndw_dot_nl",
+        provider_id="station-1",
+        name="Station",
+        latitude=50.85,
+        longitude=4.35,
+    )
+
+    with pytest.raises(InvalidProviderResponseError):
+        await provider.async_get_stations(50.85, 4.35, 1000, 10, (favourite,))
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("status", "expected", "available"),
     [

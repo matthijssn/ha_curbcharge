@@ -1114,6 +1114,40 @@ async def test_options_update_reloads_the_entry(hass, monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "options",
+    [
+        {CONF_SEARCH_RADIUS: 1},
+        {CONF_FAVOURITES: "invalid"},
+    ],
+)
+async def test_invalid_live_options_reload_the_entry(hass, monkeypatch, options):
+    entry = _entry(options=options)
+    entry.add_to_hass(hass)
+    entry.runtime_data = CurbChargeCoordinator(
+        hass,
+        FakeProvider(),
+        52.0,
+        5.0,
+        500,
+        10,
+        5,
+        True,
+        config_entry=entry,
+    )
+    reloaded: list[str] = []
+
+    async def reload_entry(entry_id: str) -> None:
+        reloaded.append(entry_id)
+
+    monkeypatch.setattr(hass.config_entries, "async_reload", reload_entry)
+
+    await curbcharge._async_options_updated(hass, entry)
+
+    assert reloaded == [entry.entry_id]
+
+
+@pytest.mark.asyncio
 async def test_location_change_still_reloads_entry(hass, monkeypatch):
     entry = _entry()
     entry.add_to_hass(hass)

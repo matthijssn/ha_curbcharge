@@ -9,7 +9,10 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from custom_components.curbcharge.coordinator import CurbChargeCoordinator
-from custom_components.curbcharge.models import FavouriteStationReference
+from custom_components.curbcharge.models import (
+    FavouriteStationReference,
+    StationDiscoveryResult,
+)
 from custom_components.curbcharge.provider import (
     AuthenticationError,
     ProviderConnectionError,
@@ -170,6 +173,22 @@ async def test_favourite_is_included_when_unknown_availability_is_disabled(
 
     assert set(coordinator.data) == {nearby.provider_id, favourite.provider_id}
     assert coordinator.nearby_station_ids == {nearby.provider_id}
+
+
+@pytest.mark.asyncio
+async def test_coordinator_rejects_unconfigured_favourite_result(hass, sample_stations):
+    station = sample_stations[0]
+
+    class UnexpectedFavouriteProvider(FakeProvider):
+        async def async_get_stations(
+            self, latitude, longitude, radius_m, max_stations, favourites=()
+        ):
+            return StationDiscoveryResult(nearby=(), favourites=(station,))
+
+    coordinator = _coordinator(hass, UnexpectedFavouriteProvider())
+
+    with pytest.raises(UpdateFailed, match="unexpected favourite"):
+        await coordinator._async_update_data()
 
 
 @pytest.mark.asyncio
