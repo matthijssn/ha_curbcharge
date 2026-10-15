@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import math
 from collections.abc import Mapping
+from dataclasses import asdict
 from typing import TYPE_CHECKING, Any, cast
 
 import voluptuous as vol
@@ -24,6 +25,7 @@ from .api import create_provider
 from .belgium import is_valid_belgium_api_token
 from .const import (
     CONF_API_TOKEN,
+    CONF_FAVOURITES,
     CONF_INCLUDE_UNKNOWN,
     CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
@@ -44,6 +46,12 @@ from .const import (
     MIN_SEARCH_RADIUS_M,
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NDW_DOT_NL,
+)
+from .coordinator import CurbChargeCoordinator
+from .models import (
+    ChargingStation,
+    FavouriteStationReference,
+    parse_favourite_references,
 )
 from .provider import (
     AuthenticationError,
@@ -140,11 +148,18 @@ def station_options_schema(
     )
 
 
-def options_schema(defaults: dict[str, Any]) -> vol.Schema:
+def options_schema(
+    defaults: dict[str, Any],
+    *,
+    favourite_options: list[selector.SelectOptionDict] | None = None,
+) -> vol.Schema:
     """Return the editable runtime options schema."""
     provider_id = defaults.get(CONF_PROVIDER, PROVIDER_NDW_DOT_NL)
     if provider_id not in (PROVIDER_NDW_DOT_NL, PROVIDER_ECO_MOVEMENT_BE):
         provider_id = PROVIDER_NDW_DOT_NL
+    favourites = parse_favourite_references(
+        defaults.get(CONF_FAVOURITES, []), provider_id
+    )
     return vol.Schema(
         {
             vol.Required(
@@ -190,6 +205,16 @@ def options_schema(defaults: dict[str, Any]) -> vol.Schema:
                 CONF_INCLUDE_UNKNOWN,
                 default=defaults.get(CONF_INCLUDE_UNKNOWN, DEFAULT_INCLUDE_UNKNOWN),
             ): selector.BooleanSelector(),
+            vol.Required(
+                CONF_FAVOURITES,
+                default=[favourite.provider_id for favourite in favourites],
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=favourite_options or [],
+                    multiple=True,
+                    mode=selector.SelectSelectorMode.LIST,
+                )
+            ),
         }
     )
 
@@ -574,13 +599,40 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class CurbChargeOptionsFlow(config_entries.OptionsFlow):
-    """Edit refresh and search behavior."""
+    """Edit refresh, search, and favourite behavior."""
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Save options or show their current values."""
+        defaults = {**self.config_entry.data, **self.config_entry.options}
+        provider_id = defaults.get(CONF_PROVIDER, PROVIDER_NDW_DOT_NL)
+        if provider_id not in (PROVIDER_NDW_DOT_NL, PROVIDER_ECO_MOVEMENT_BE):
+            provider_id = PROVIDER_NDW_DOT_NL
+        saved_favourites = parse_favourite_references(
+            defaults.get(CONF_FAVOURITES, []), provider_id
+        )
+        favourite_options, favourite_references = _favourite_selector_options(
+            getattr(self.config_entry, "runtime_data", None), saved_favourites
+        )
+
         if user_input is not None:
+            try:
+                favourites = _selected_favourites(
+                    user_input.get(CONF_FAVOURITES),
+                    favourite_references,
+                    saved_favourites,
+                    getattr(self.config_entry, "runtime_data", None),
+                )
+            except ValueError:
+                return _show_form(
+                    self,
+                    step_id="init",
+                    data_schema=options_schema(
+                        defaults, favourite_options=favourite_options
+                    ),
+                    errors={"base": "invalid_favourites"},
+                )
             return self.async_create_entry(
                 title="",
                 data={
@@ -589,11 +641,116 @@ class CurbChargeOptionsFlow(config_entries.OptionsFlow):
                     CONF_MAX_STATIONS: int(user_input[CONF_MAX_STATIONS]),
                     CONF_PROVIDER: user_input[CONF_PROVIDER],
                     CONF_INCLUDE_UNKNOWN: user_input[CONF_INCLUDE_UNKNOWN],
+                    CONF_FAVOURITES: [asdict(favourite) for favourite in favourites],
                 },
             )
 
-        defaults = {**self.config_entry.data, **self.config_entry.options}
-        return _show_form(self, step_id="init", data_schema=options_schema(defaults))
+        return _show_form(
+            self,
+            step_id="init",
+            data_schema=options_schema(defaults, favourite_options=favourite_options),
+        )
+
+
+def _favourite_selector_options(
+    coordinator: CurbChargeCoordinator | None,
+    saved_favourites: tuple[FavouriteStationReference, ...],
+) -> tuple[list[selector.SelectOptionDict], dict[str, FavouriteStationReference]]:
+    """Build human-readable options while retaining saved out-of-radius entries."""
+    references = {favourite.provider_id: favourite for favourite in saved_favourites}
+    labels = {favourite.provider_id: favourite.name for favourite in saved_favourites}
+    if coordinator is not None:
+        for station in (coordinator.data or {}).values():
+            if station.is_stale:
+                continue
+            references[station.provider_id] = _favourite_reference(station)
+            labels[station.provider_id] = _favourite_label(station)
+
+    counts: dict[str, int] = {}
+    for label in labels.values():
+        counts[label] = counts.get(label, 0) + 1
+    options: list[selector.SelectOptionDict] = [
+        {
+            "value": provider_id,
+            "label": (f"{label} ({provider_id[-6:]})" if counts[label] > 1 else label),
+        }
+        for provider_id, label in sorted(
+            labels.items(), key=lambda item: (item[1].casefold(), item[0])
+        )
+    ]
+    return options, references
+
+
+def _favourite_reference(station: ChargingStation) -> FavouriteStationReference:
+    location = station.location
+    location_id = None
+    location_name = None
+    location_operator = None
+    if (
+        location is not None
+        and location.provider == station.provider
+        and location.provider_id != station.provider_id
+    ):
+        location_id = location.provider_id
+        location_name = location.name
+        location_operator = location.operator
+    return FavouriteStationReference(
+        provider=station.provider,
+        provider_id=station.provider_id,
+        name=station.address or station.name,
+        latitude=station.latitude,
+        longitude=station.longitude,
+        location_id=location_id,
+        location_name=location_name,
+        location_operator=location_operator,
+    )
+
+
+def _favourite_label(station: ChargingStation) -> str:
+    """Describe a station by its address/name and distance, not its raw ID."""
+    label = station.address or station.name
+    if station.name != label:
+        label = f"{label} - {station.name}"
+    if station.operator:
+        label = f"{label} - {station.operator}"
+    if station.distance_m is not None:
+        label = f"{label} ({station.distance_m} m)"
+    return label
+
+
+def _selected_favourites(
+    selected_ids: object,
+    available_references: dict[str, FavouriteStationReference],
+    saved_favourites: tuple[FavouriteStationReference, ...],
+    coordinator: CurbChargeCoordinator | None,
+) -> tuple[FavouriteStationReference, ...]:
+    """Resolve selector values and reject selections no longer present."""
+    if not isinstance(selected_ids, list) or any(
+        not isinstance(provider_id, str) for provider_id in selected_ids
+    ):
+        raise ValueError("Favourite selection must be a list of station IDs")
+    if len(set(selected_ids)) != len(selected_ids):
+        raise ValueError("Favourite selection contains duplicate station IDs")
+
+    saved_ids = {favourite.provider_id for favourite in saved_favourites}
+    current_ids = (
+        {
+            station.provider_id
+            for station in (coordinator.data or {}).values()
+            if not station.is_stale
+        }
+        if coordinator is not None
+        else set()
+    )
+    favourites: list[FavouriteStationReference] = []
+    for provider_id in selected_ids:
+        favourite = available_references.get(provider_id)
+        if favourite is None or (
+            provider_id not in saved_ids and provider_id not in current_ids
+        ):
+            raise ValueError("Selected favourite is no longer available")
+        favourites.append(favourite)
+    return tuple(favourites)
 
 
 def _location_source_schema(

@@ -106,16 +106,21 @@
           "search_radius": "Zoekradius (m)",
           "max_stations": "Maximumaantal laadpunten",
           "provider": "Provider",
-          "include_unknown": "Laadpunten zonder beschikbaarheidsgegevens opnemen"
+          "include_unknown": "Laadpunten zonder beschikbaarheidsgegevens opnemen",
+          "favourites": "Favoriete laadpunten"
         },
         "data_description": {
           "scan_interval": "Hoe vaak Home Assistant de laadpuntgegevens vernieuwt.",
           "search_radius": "Neem alleen openbare laadpunten binnen deze afstand op.",
           "max_stations": "Beperk het aantal laadpunten en bijbehorende entiteiten.",
           "provider": "De gegevensprovider voor het vinden van laadpunten en beschikbaarheid.",
-          "include_unknown": "Neem laadpunten op als de provider geen connectorbeschikbaarheid meldt."
+          "include_unknown": "Neem laadpunten op als de provider geen connectorbeschikbaarheid meldt.",
+          "favourites": "Selecteer laadpunten op naam. Favorieten blijven beschikbaar buiten de zoekradius en worden toegevoegd boven op de limiet voor laadpunten in de buurt."
         }
       }
+    },
+    "error": {
+      "invalid_favourites": "Een of meer geselecteerde favorieten zijn niet meer beschikbaar. Vernieuw de opties en probeer het opnieuw."
     }
   },
   "exceptions": {

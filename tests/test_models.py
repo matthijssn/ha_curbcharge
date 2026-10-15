@@ -2,11 +2,15 @@
 
 from dataclasses import replace
 
+import pytest
+
 from custom_components.curbcharge.models import (
     ChargingConnector,
     ChargingLocation,
     ConnectorStatus,
     EVSEStatus,
+    FavouriteStationReference,
+    parse_favourite_references,
 )
 
 
@@ -109,6 +113,37 @@ def test_location_model_is_country_and_provider_independent():
     assert location.provider_id == "site-123"
     assert location.country_code == "BE"
     assert location.provider == "example_provider"
+
+
+def test_parse_favourite_references_defaults_empty_and_validates_values():
+    favourite = {
+        "provider": "ndw_dot_nl",
+        "provider_id": "station-1",
+        "name": "Example address",
+        "latitude": 52.0,
+        "longitude": 5.0,
+    }
+
+    assert parse_favourite_references(None, "ndw_dot_nl") == ()
+    assert parse_favourite_references([favourite], "ndw_dot_nl") == (
+        FavouriteStationReference(
+            "ndw_dot_nl", "station-1", "Example address", 52.0, 5.0
+        ),
+    )
+
+    for invalid in (
+        "not a list",
+        [None],
+        [{**favourite, "provider": "eco_movement_be"}],
+        [{**favourite, "provider_id": ""}],
+        [{**favourite, "name": " "}],
+        [{**favourite, "latitude": True}],
+        [{**favourite, "latitude": float("nan")}],
+        [{**favourite, "longitude": 181}],
+        [favourite, favourite],
+    ):
+        with pytest.raises(ValueError):
+            parse_favourite_references(invalid, "ndw_dot_nl")
 
 
 def test_evse_availability_does_not_invent_connector_counts(sample_stations):

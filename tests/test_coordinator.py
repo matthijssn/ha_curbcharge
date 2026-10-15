@@ -1,6 +1,7 @@
 """Tests for coordinated data updates and station retention."""
 
 import logging
+from dataclasses import replace
 from datetime import timedelta
 
 import pytest
@@ -8,6 +9,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from custom_components.curbcharge.coordinator import CurbChargeCoordinator
+from custom_components.curbcharge.models import FavouriteStationReference
 from custom_components.curbcharge.provider import (
     AuthenticationError,
     ProviderConnectionError,
@@ -16,7 +18,7 @@ from custom_components.curbcharge.provider import (
 from tests.conftest import FakeProvider
 
 
-def _coordinator(hass, provider, *, include_unknown=True):
+def _coordinator(hass, provider, *, include_unknown=True, favourites=()):
     return CurbChargeCoordinator(
         hass,
         provider,
@@ -26,6 +28,17 @@ def _coordinator(hass, provider, *, include_unknown=True):
         10,
         5,
         include_unknown,
+        favourites,
+    )
+
+
+def _favourite(station):
+    return FavouriteStationReference(
+        provider=station.provider,
+        provider_id=station.provider_id,
+        name=station.name,
+        latitude=station.latitude,
+        longitude=station.longitude,
     )
 
 
@@ -87,6 +100,21 @@ async def test_provider_failure_does_not_remove_cached_stations(hass, sample_sta
 
 
 @pytest.mark.asyncio
+async def test_provider_failure_preserves_favourite_station_data(hass, sample_stations):
+    station = sample_stations[0]
+    provider = FakeProvider([(station,), ProviderConnectionError("offline")])
+    coordinator = _coordinator(hass, provider, favourites=(_favourite(station),))
+    await coordinator.async_refresh()
+    previous = coordinator.data.copy()
+
+    await coordinator.async_refresh()
+
+    assert not coordinator.last_update_success
+    assert coordinator.data == previous
+    assert station.provider_id not in coordinator.removed_station_ids
+
+
+@pytest.mark.asyncio
 async def test_rate_limit_retry_after_extends_update_interval(hass):
     provider = FakeProvider([ProviderRateLimitError("limited", retry_after=600)])
     coordinator = _coordinator(hass, provider)
@@ -122,6 +150,99 @@ async def test_unknown_status_option_excludes_stations_without_availability(
     assert sample_stations[0].provider_id in coordinator.data
     assert sample_stations[1].provider_id in coordinator.data
     assert sample_stations[2].provider_id not in coordinator.data
+
+
+@pytest.mark.asyncio
+async def test_favourite_is_included_when_unknown_availability_is_disabled(
+    hass, sample_stations
+):
+    nearby, _, unknown = sample_stations
+    favourite = replace(unknown, distance_m=1_000)
+    provider = FakeProvider([(nearby, favourite)])
+    coordinator = _coordinator(
+        hass,
+        provider,
+        include_unknown=False,
+        favourites=(_favourite(favourite),),
+    )
+
+    await coordinator.async_refresh()
+
+    assert set(coordinator.data) == {nearby.provider_id, favourite.provider_id}
+    assert coordinator.nearby_station_ids == {nearby.provider_id}
+
+
+@pytest.mark.asyncio
+async def test_missing_saved_favourite_is_placeholder_then_recovers(
+    hass, sample_stations
+):
+    favourite = sample_stations[0]
+    provider = FakeProvider([(), (favourite,)])
+    coordinator = _coordinator(hass, provider, favourites=(_favourite(favourite),))
+
+    await coordinator.async_refresh()
+
+    placeholder = coordinator.data[favourite.provider_id]
+    assert placeholder.is_stale
+    assert placeholder.name == favourite.name
+    assert placeholder.latitude == favourite.latitude
+    assert favourite.provider_id not in coordinator.removed_station_ids
+
+    await coordinator.async_refresh()
+
+    recovered = coordinator.data[favourite.provider_id]
+    assert not recovered.is_stale
+    assert recovered.available_connectors == favourite.available_connectors
+
+
+@pytest.mark.asyncio
+async def test_favourites_are_retained_but_unfavourited_stations_use_three_misses(
+    hass, sample_stations
+):
+    favourite, ordinary = sample_stations[:2]
+    provider = FakeProvider([(favourite, ordinary), (), (), ()])
+    coordinator = _coordinator(hass, provider, favourites=(_favourite(favourite),))
+    await coordinator.async_refresh()
+
+    for _ in range(2):
+        await coordinator.async_refresh()
+        assert coordinator.data[favourite.provider_id].is_stale
+        assert coordinator.data[ordinary.provider_id].is_stale
+        assert ordinary.provider_id not in coordinator.removed_station_ids
+
+    await coordinator.async_refresh()
+
+    assert favourite.provider_id in coordinator.data
+    assert coordinator.data[favourite.provider_id].is_stale
+    assert ordinary.provider_id not in coordinator.data
+    assert coordinator.removed_station_ids == {ordinary.provider_id}
+
+
+@pytest.mark.asyncio
+async def test_unfavouriting_resumes_three_successful_miss_removal(
+    hass, sample_stations
+):
+    favourite = sample_stations[0]
+    provider = FakeProvider([(favourite,), (), (), ()])
+    coordinator = _coordinator(hass, provider, favourites=(_favourite(favourite),))
+    await coordinator.async_refresh()
+
+    coordinator.update_options(
+        radius_m=500,
+        max_stations=10,
+        scan_interval_minutes=5,
+        include_unknown=True,
+        favourites=(),
+    )
+    for _ in range(2):
+        await coordinator.async_refresh()
+        assert coordinator.data[favourite.provider_id].is_stale
+        assert favourite.provider_id not in coordinator.removed_station_ids
+
+    await coordinator.async_refresh()
+
+    assert favourite.provider_id not in coordinator.data
+    assert coordinator.removed_station_ids == {favourite.provider_id}
 
 
 @pytest.mark.asyncio

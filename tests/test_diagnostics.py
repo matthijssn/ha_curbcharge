@@ -14,6 +14,7 @@ from custom_components.curbcharge.belgium import (
 )
 from custom_components.curbcharge.const import (
     CONF_API_TOKEN,
+    CONF_FAVOURITES,
     CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
     CONF_PROVIDER,
@@ -30,6 +31,7 @@ from custom_components.curbcharge.diagnostics import (
 from custom_components.curbcharge.models import (
     ChargingTariff,
     EVSEStatus,
+    FavouriteStationReference,
 )
 from tests.conftest import FakeProvider
 from tests.test_belgium import (
@@ -113,6 +115,74 @@ async def test_diagnostics_redact_coordinates_and_addresses(hass, sample_station
 
 
 @pytest.mark.asyncio
+async def test_diagnostics_redact_favourite_references_and_station_details(
+    hass, sample_stations
+):
+    station = replace(
+        sample_stations[0],
+        provider_id="private-favourite-id",
+        name="Private favourite name",
+        address="Private favourite address",
+        latitude=52.123456,
+        longitude=5.654321,
+    )
+    favourite = FavouriteStationReference(
+        provider=station.provider,
+        provider_id=station.provider_id,
+        name=station.name,
+        latitude=station.latitude,
+        longitude=station.longitude,
+    )
+    provider = FakeProvider([(station,)])
+    coordinator = CurbChargeCoordinator(
+        hass,
+        provider,
+        52.0,
+        5.0,
+        500,
+        10,
+        5,
+        True,
+        (favourite,),
+    )
+    coordinator.async_set_updated_data({station.provider_id: station})
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="favorite-area",
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_MANUAL,
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+        },
+        options={
+            CONF_FAVOURITES: [
+                {
+                    "provider": favourite.provider,
+                    "provider_id": favourite.provider_id,
+                    "name": favourite.name,
+                    "latitude": favourite.latitude,
+                    "longitude": favourite.longitude,
+                }
+            ]
+        },
+    )
+    entry.runtime_data = coordinator
+
+    diagnostics = await async_get_config_entry_diagnostics(hass, entry)
+    serialized = json.dumps(diagnostics)
+
+    assert "private-favourite-id" not in serialized
+    assert "Private favourite name" not in serialized
+    assert "Private favourite address" not in serialized
+    assert "52.123456" not in serialized
+    assert "5.654321" not in serialized
+    assert diagnostics["discovered_stations"] == 1
+    assert diagnostics["favourite_count"] == 1
+    assert diagnostics["stations"] == []
+
+
+@pytest.mark.asyncio
 async def test_belgium_diagnostics_redact_nested_secrets_and_location(hass):
     token = "belgium-secret-token"
     session = FakeSession(
@@ -124,7 +194,7 @@ async def test_belgium_diagnostics_redact_nested_secrets_and_location(hass):
     provider = BelgiumChargingProvider(
         BelgiumDatexClient(session, token, NoWaitLimiter())
     )
-    stations = await provider.async_get_stations(50.85, 4.35, 1000, 10)
+    stations = (await provider.async_get_stations(50.85, 4.35, 1000, 10)).nearby
     assert len(stations) == 1
     station = stations[0]
     stale = replace(

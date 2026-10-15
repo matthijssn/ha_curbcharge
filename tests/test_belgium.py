@@ -17,7 +17,11 @@ from custom_components.curbcharge.belgium import (
     BelgiumDatexClient,
     BelgiumRequestLimiter,
 )
-from custom_components.curbcharge.models import ConnectorStatus, EVSEStatus
+from custom_components.curbcharge.models import (
+    ConnectorStatus,
+    EVSEStatus,
+    FavouriteStationReference,
+)
 from custom_components.curbcharge.provider import (
     AuthenticationError,
     InvalidProviderResponseError,
@@ -215,7 +219,7 @@ async def test_belgium_provider_maps_location_evse_connectors_and_status():
     client = BelgiumDatexClient(session, "token", NoWaitLimiter())
     provider = BelgiumChargingProvider(client)
 
-    stations = await provider.async_get_stations(50.85, 4.35, 1000, 10)
+    stations = (await provider.async_get_stations(50.85, 4.35, 1000, 10)).nearby
 
     assert len(stations) == 1
     station = stations[0]
@@ -244,6 +248,32 @@ async def test_belgium_provider_maps_location_evse_connectors_and_status():
 
 
 @pytest.mark.asyncio
+async def test_belgium_favourite_outside_radius_uses_cached_location_and_status():
+    session = FakeSession(
+        [FakeResponse(_locations_document()), FakeResponse(_status_document())]
+    )
+    provider = BelgiumChargingProvider(
+        BelgiumDatexClient(session, "token", NoWaitLimiter())
+    )
+    favourite = FavouriteStationReference(
+        provider=provider.provider_id,
+        provider_id="evse-internal-1",
+        name="BE*EXAMPLE*1",
+        latitude=50.85,
+        longitude=4.35,
+    )
+
+    result = await provider.async_get_stations(51.0, 4.5, 100, 1, (favourite,))
+
+    assert result.nearby == ()
+    assert len(result.favourites) == 1
+    assert result.favourites[0].provider_id == favourite.provider_id
+    assert result.favourites[0].distance_m > 100
+    assert result.favourites[0].evse_status is EVSEStatus.AVAILABLE
+    assert len(session.requests) == 2
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("status", "expected", "available"),
     [
@@ -266,7 +296,7 @@ async def test_belgium_evse_statuses_preserve_unknown_connector_counts(
         BelgiumDatexClient(session, "token", NoWaitLimiter())
     )
 
-    station = (await provider.async_get_stations(50.85, 4.35, 1000, 10))[0]
+    station = (await provider.async_get_stations(50.85, 4.35, 1000, 10)).nearby[0]
 
     assert station.evse_status is expected
     assert station.has_available_connectors is available
@@ -286,7 +316,7 @@ async def test_belgium_provider_does_not_use_price_without_currency():
         BelgiumDatexClient(session, "token", NoWaitLimiter())
     )
 
-    station = (await provider.async_get_stations(50.85, 4.35, 1000, 10))[0]
+    station = (await provider.async_get_stations(50.85, 4.35, 1000, 10)).nearby[0]
 
     assert station.tariff is None
 
@@ -303,7 +333,7 @@ async def test_belgium_unmatched_status_keeps_availability_unknown():
         BelgiumDatexClient(session, "token", NoWaitLimiter())
     )
 
-    station = (await provider.async_get_stations(50.85, 4.35, 1000, 10))[0]
+    station = (await provider.async_get_stations(50.85, 4.35, 1000, 10)).nearby[0]
 
     assert not station.availability_reported
     assert station.evse_status is None
@@ -348,7 +378,7 @@ async def test_belgium_provider_uses_only_unambiguous_ad_hoc_static_price():
         BelgiumDatexClient(session, "token", NoWaitLimiter())
     )
 
-    station = (await provider.async_get_stations(50.85, 4.35, 1000, 10))[0]
+    station = (await provider.async_get_stations(50.85, 4.35, 1000, 10)).nearby[0]
 
     assert station.tariff is not None
     assert station.tariff.currency == "EUR"
@@ -367,7 +397,7 @@ async def test_belgium_removed_evse_is_omitted_after_a_successful_status_poll():
         BelgiumDatexClient(session, "token", NoWaitLimiter())
     )
 
-    assert await provider.async_get_stations(50.85, 4.35, 1000, 10) == ()
+    assert (await provider.async_get_stations(50.85, 4.35, 1000, 10)).nearby == ()
 
 
 @pytest.mark.asyncio
@@ -377,7 +407,7 @@ async def test_belgium_static_evse_without_external_id_remains_unknown():
         BelgiumDatexClient(session, "token", NoWaitLimiter())
     )
 
-    station = (await provider.async_get_stations(50.85, 4.35, 1000, 10))[0]
+    station = (await provider.async_get_stations(50.85, 4.35, 1000, 10)).nearby[0]
 
     assert station.evse_id is None
     assert station.evse_status is None
@@ -414,7 +444,7 @@ async def test_belgium_provider_filters_by_radius_before_status_requests():
         BelgiumDatexClient(session, "token", NoWaitLimiter())
     )
 
-    stations = await provider.async_get_stations(50.85, 4.35, 1000, 1)
+    stations = (await provider.async_get_stations(50.85, 4.35, 1000, 1)).nearby
 
     assert [station.provider_id for station in stations] == ["evse-internal-1"]
     assert len(session.requests) == 2

@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -17,7 +17,12 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from .const import DOMAIN, MISSING_STATION_REFRESHES
-from .models import ChargingStation
+from .geography import distance_m
+from .models import (
+    ChargingLocation,
+    ChargingStation,
+    FavouriteStationReference,
+)
 from .provider import (
     AuthenticationError,
     BaseChargingProvider,
@@ -41,6 +46,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         max_stations: int,
         scan_interval_minutes: int,
         include_unknown: bool,
+        favourites: tuple[FavouriteStationReference, ...] = (),
         config_entry: ConfigEntry[Any] | None = None,
     ) -> None:
         """Initialize the shared coordinator."""
@@ -54,6 +60,12 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         self.max_stations = max_stations
         self.scan_interval_minutes = scan_interval_minutes
         self.include_unknown = include_unknown
+        self.favourites = favourites
+        self.favourite_ids = {favourite.provider_id for favourite in favourites}
+        self.nearby_station_ids: set[str] | None = None
+        self._config_entry_data = (
+            dict(config_entry.data) if config_entry is not None else None
+        )
         self._default_update_interval = timedelta(minutes=scan_interval_minutes)
         self._missing_refreshes: dict[str, int] = {}
         self.station_removal_lock = asyncio.Lock()
@@ -76,6 +88,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
                 self.longitude,
                 self.radius_m,
                 self.max_stations,
+                self.favourites,
             )
         except AuthenticationError as err:
             self._log_update_unavailable(type(err).__name__)
@@ -100,11 +113,38 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
             _LOGGER.info("CurbCharge data updates have recovered")
             self._update_unavailable = False
         self.update_interval = self._default_update_interval
+        self.nearby_station_ids = {station.provider_id for station in stations.nearby}
         current = {
             station.provider_id: station
-            for station in stations
-            if self.include_unknown or station.availability_reported
+            for station in stations.nearby
+            if (
+                self.include_unknown
+                or station.availability_reported
+                or station.provider_id in self.favourite_ids
+            )
         }
+        for station in stations.favourites:
+            if station.provider_id not in self.favourite_ids:
+                raise UpdateFailed("Provider returned an unexpected favourite")
+            current[station.provider_id] = station
+
+        for favourite in self.favourites:
+            if favourite.provider_id in current:
+                continue
+            previous = (self.data or {}).get(favourite.provider_id)
+            current[favourite.provider_id] = (
+                replace(previous, is_stale=True)
+                if previous is not None
+                else _favourite_placeholder(
+                    favourite,
+                    self.provider_id,
+                    self.provider_name,
+                    self.country_code,
+                    self.latitude,
+                    self.longitude,
+                )
+            )
+
         missing_refreshes: dict[str, int] = {}
         removed: set[str] = set()
         for station_id, previous in (self.data or {}).items():
@@ -122,6 +162,37 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         self.last_successful_update = datetime.now(UTC)
         return current
 
+    def update_options(
+        self,
+        *,
+        radius_m: int,
+        max_stations: int,
+        scan_interval_minutes: int,
+        include_unknown: bool,
+        favourites: tuple[FavouriteStationReference, ...],
+    ) -> None:
+        """Apply options without discarding station-missing history."""
+        previous_default_interval = self._default_update_interval
+        current_interval = self.update_interval
+        self.radius_m = radius_m
+        self.max_stations = max_stations
+        self.scan_interval_minutes = scan_interval_minutes
+        self.include_unknown = include_unknown
+        self.favourites = favourites
+        self.favourite_ids = {favourite.provider_id for favourite in favourites}
+        self._default_update_interval = timedelta(minutes=scan_interval_minutes)
+        self.update_interval = (
+            self._default_update_interval
+            if current_interval is None or current_interval == previous_default_interval
+            else max(current_interval, self._default_update_interval)
+        )
+
+    def entry_data_changed(self, data: Mapping[str, Any]) -> bool:
+        """Return whether setup-only config data differs from its snapshot."""
+        return self._config_entry_data is not None and self._config_entry_data != dict(
+            data
+        )
+
     def _log_update_unavailable(self, error_type: str) -> None:
         """Log only the transition to an unavailable provider."""
         if self._update_unavailable:
@@ -132,14 +203,70 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
     @property
     def best_station(self) -> ChargingStation | None:
         """Return the recommended currently reported station."""
-        station, _ = recommend_station((self.data or {}).values())
+        station, _ = recommend_station(
+            station
+            for station in (self.data or {}).values()
+            if station.distance_m is not None and station.distance_m <= self.radius_m
+        )
         return station
 
     @property
     def best_station_reason(self) -> str | None:
         """Return a stable reason code for the recommendation."""
-        _, reason = recommend_station((self.data or {}).values())
+        _, reason = recommend_station(
+            station
+            for station in (self.data or {}).values()
+            if station.distance_m is not None and station.distance_m <= self.radius_m
+        )
         return reason
+
+
+def _favourite_placeholder(
+    favourite: FavouriteStationReference,
+    provider: str,
+    provider_name: str,
+    country_code: str,
+    latitude: float,
+    longitude: float,
+) -> ChargingStation:
+    """Create an unavailable station from saved identity/location only."""
+    location = (
+        ChargingLocation(
+            provider_id=favourite.location_id,
+            provider=provider,
+            provider_name=provider_name,
+            country_code=country_code,
+            name=favourite.location_name or favourite.name,
+            latitude=favourite.latitude,
+            longitude=favourite.longitude,
+            address=favourite.location_name,
+            operator=favourite.location_operator,
+            last_updated=None,
+        )
+        if favourite.location_id is not None
+        else None
+    )
+    return ChargingStation(
+        provider_id=favourite.provider_id,
+        name=favourite.name,
+        latitude=favourite.latitude,
+        longitude=favourite.longitude,
+        address=favourite.name,
+        operator=favourite.location_operator,
+        distance_m=distance_m(
+            latitude, longitude, favourite.latitude, favourite.longitude
+        ),
+        connectors=(),
+        tariff=None,
+        last_updated=None,
+        provider=provider,
+        availability_reported=False,
+        is_stale=True,
+        country_code=country_code,
+        location=location,
+        provider_name=provider_name,
+        connector_count_reported=False,
+    )
 
 
 def recommend_station(

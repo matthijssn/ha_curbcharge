@@ -14,6 +14,7 @@ CONF_SEARCH_RADIUS = "search_radius"
 CONF_MAX_STATIONS = "max_stations"
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_INCLUDE_UNKNOWN = "include_unknown"
+CONF_FAVOURITES = "favourites"
 
 LOCATION_HOME = "home"
 LOCATION_MANUAL = "manual"

@@ -33,6 +33,8 @@ from .models import (
     ChargingTariff,
     ConnectorStatus,
     EVSEStatus,
+    FavouriteStationReference,
+    StationDiscoveryResult,
 )
 from .provider import (
     AuthenticationError,
@@ -277,55 +279,82 @@ class BelgiumChargingProvider(BaseChargingProvider):
         longitude: float,
         radius_m: int,
         max_stations: int,
-    ) -> tuple[ChargingStation, ...]:
-        """Fetch nearby EVSEs and update their separately published status."""
-        stations = [
+        favourites: tuple[FavouriteStationReference, ...] = (),
+    ) -> StationDiscoveryResult:
+        """Fetch nearby EVSEs and separately selected favourites."""
+        all_stations = _parse_static_stations(
+            await self._client.async_get_locations(), latitude, longitude
+        )
+        stations_by_id = {station.provider_id: station for station in all_stations}
+        nearby = [
             station
-            for station in _parse_static_stations(
-                await self._client.async_get_locations(), latitude, longitude
-            )
+            for station in all_stations
             if station.distance_m is not None and station.distance_m <= radius_m
         ]
-        stations.sort(
+        nearby.sort(
             key=lambda station: (
                 station.distance_m is None,
                 station.distance_m if station.distance_m is not None else 0,
                 station.provider_id,
             )
         )
+        nearby = nearby[:max_stations]
+        nearby_ids = {station.provider_id for station in nearby}
 
-        updated: list[ChargingStation] = []
-        for station in stations[:max_stations]:
-            if station.evse_id is None:
-                updated.append(station)
-                continue
-            document = await self._client.async_get_evse_status(station.evse_id)
-            status_record = _evse_status_record(document, station.provider_id)
-            if status_record is None:
-                updated.append(station)
-                continue
-            status = _evse_status(status_record.get("status"))
-            if status is EVSEStatus.REMOVED:
-                continue
-            raw_energy_rate_updates = status_record.get("energyRateUpdate")
-            tariff = (
-                _ad_hoc_tariff(status_record, self.provider_name)
-                if raw_energy_rate_updates
-                else station.tariff
-            )
-            updated.append(
-                replace(
-                    station,
-                    availability_reported=True,
-                    evse_status=status,
-                    last_updated=(
-                        _optional_date(status_record.get("lastUpdated"), "EVSE status")
-                        or station.last_updated
-                    ),
-                    tariff=tariff,
+        favourite_stations: dict[str, ChargingStation] = {}
+        for favourite in favourites:
+            if favourite.provider != self.provider_id:
+                raise InvalidProviderResponseError(
+                    "A saved favourite belongs to a different provider"
                 )
-            )
-        return tuple(updated)
+            if favourite.provider_id in nearby_ids:
+                continue
+            station = stations_by_id.get(favourite.provider_id)
+            if station is not None:
+                favourite_stations[favourite.provider_id] = station
+
+        async def update_status(
+            stations: list[ChargingStation],
+        ) -> tuple[ChargingStation, ...]:
+            updated: list[ChargingStation] = []
+            for station in stations:
+                if station.evse_id is None:
+                    updated.append(station)
+                    continue
+                document = await self._client.async_get_evse_status(station.evse_id)
+                status_record = _evse_status_record(document, station.provider_id)
+                if status_record is None:
+                    updated.append(station)
+                    continue
+                status = _evse_status(status_record.get("status"))
+                if status is EVSEStatus.REMOVED:
+                    continue
+                raw_energy_rate_updates = status_record.get("energyRateUpdate")
+                tariff = (
+                    _ad_hoc_tariff(status_record, self.provider_name)
+                    if raw_energy_rate_updates
+                    else station.tariff
+                )
+                updated.append(
+                    replace(
+                        station,
+                        availability_reported=True,
+                        evse_status=status,
+                        last_updated=(
+                            _optional_date(
+                                status_record.get("lastUpdated"), "EVSE status"
+                            )
+                            or station.last_updated
+                        ),
+                        tariff=tariff,
+                    )
+                )
+            return tuple(updated)
+
+        return StationDiscoveryResult(
+            nearby=await update_status(nearby),
+            favourites=await update_status(list(favourite_stations.values())),
+        )
 
 
 def create_belgium_provider(

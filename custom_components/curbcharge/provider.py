@@ -5,7 +5,10 @@ from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 
-from .models import ChargingStation
+from .models import (
+    FavouriteStationReference,
+    StationDiscoveryResult,
+)
 
 
 class ChargingProviderError(Exception):
@@ -82,7 +85,8 @@ class BaseChargingProvider(ABC):
         longitude: float,
         radius_m: int,
         max_stations: int,
-    ) -> tuple[ChargingStation, ...]:
+        favourites: tuple[FavouriteStationReference, ...] = (),
+    ) -> StationDiscoveryResult:
         """Fetch stations within a radius."""
 
     @abstractmethod

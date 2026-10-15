@@ -9,6 +9,7 @@ from homeassistant.core import HomeAssistant
 from . import CurbChargeConfigEntry
 from .const import (
     CONF_API_TOKEN,
+    CONF_FAVOURITES,
     CONF_INCLUDE_UNKNOWN,
     CONF_LOCATION_SOURCE,
     CONF_PROVIDER,
@@ -16,7 +17,7 @@ from .const import (
 )
 from .coordinator import CurbChargeCoordinator
 
-TO_REDACT = [CONF_LATITUDE, CONF_LONGITUDE, CONF_API_TOKEN]
+TO_REDACT = [CONF_LATITUDE, CONF_LONGITUDE, CONF_API_TOKEN, CONF_FAVOURITES]
 
 
 async def async_get_config_entry_diagnostics(
@@ -24,8 +25,13 @@ async def async_get_config_entry_diagnostics(
 ) -> dict[str, Any]:
     """Return useful diagnostics without location or full address data."""
     coordinator: CurbChargeCoordinator = entry.runtime_data
+    fresh_station_count = sum(
+        not station.is_stale for station in (coordinator.data or {}).values()
+    )
     current_stations = [
-        station for station in (coordinator.data or {}).values() if not station.is_stale
+        station
+        for station in (coordinator.data or {}).values()
+        if not station.is_stale and station.provider_id not in coordinator.favourite_ids
     ]
     return {
         "entry_data": async_redact_data(entry.data, TO_REDACT),
@@ -44,8 +50,9 @@ async def async_get_config_entry_diagnostics(
         "include_unknown": entry.options.get(
             CONF_INCLUDE_UNKNOWN, coordinator.include_unknown
         ),
-        "discovered_stations": len(current_stations),
-        "retained_stations": len(coordinator.data or {}) - len(current_stations),
+        "favourite_count": len(coordinator.favourite_ids),
+        "discovered_stations": fresh_station_count,
+        "retained_stations": len(coordinator.data or {}) - fresh_station_count,
         "last_successful_update": (
             coordinator.last_successful_update.isoformat()
             if coordinator.last_successful_update

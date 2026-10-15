@@ -20,12 +20,17 @@ from custom_components.curbcharge.api import (
     _parse_tariff,
     _station_from_feature,
     _with_station_tariff,
+    create_provider,
 )
 from custom_components.curbcharge.belgium import BelgiumChargingProvider
-from custom_components.curbcharge.const import PROVIDER_ECO_MOVEMENT_BE
+from custom_components.curbcharge.const import (
+    PROVIDER_ECO_MOVEMENT_BE,
+    PROVIDER_NDW_DOT_NL,
+)
 from custom_components.curbcharge.models import (
     ChargingTariff,
     ConnectorStatus,
+    FavouriteStationReference,
     TariffStatus,
 )
 from custom_components.curbcharge.provider import (
@@ -94,12 +99,14 @@ async def test_get_stations_filters_by_radius_and_limit(sample_geojson):
     session = FakeSession([FakeResponse(_without_tariffs(sample_geojson))])
     provider = NdwDotNlProvider(session)
 
-    stations = await provider.async_get_stations(52.0, 5.0, 100, 2)
+    result = await provider.async_get_stations(52.0, 5.0, 100, 2)
+    stations = result.nearby
 
     assert [station.provider_id for station in stations] == [
         "NL-TEST-001",
         "NL-TEST-002",
     ]
+    assert result.favourites == ()
     assert stations[0].distance_m == 0
     assert stations[0].available_connectors == 2
     assert stations[0].total_connectors == 4
@@ -119,7 +126,66 @@ async def test_valid_empty_response_is_empty(sample_geojson):
     session = FakeSession([FakeResponse({"type": "FeatureCollection", "features": []})])
     provider = NdwDotNlProvider(session)
 
-    assert await provider.async_get_stations(52.0, 5.0, 500, 10) == ()
+    result = await provider.async_get_stations(52.0, 5.0, 500, 10)
+    assert result.nearby == ()
+    assert result.favourites == ()
+
+
+@pytest.mark.asyncio
+async def test_favourite_outside_radius_is_fetched_without_displacing_nearby(
+    sample_geojson,
+):
+    first_page = copy.deepcopy(sample_geojson)
+    favourite_feature = first_page["features"].pop()
+    session = FakeSession(
+        [
+            FakeResponse(_without_tariffs(first_page)),
+            FakeResponse(
+                _without_tariffs(
+                    {"type": "FeatureCollection", "features": [favourite_feature]}
+                )
+            ),
+        ]
+    )
+    provider = NdwDotNlProvider(session)
+    favourite = FavouriteStationReference(
+        provider=provider.provider_id,
+        provider_id="NL-TEST-003",
+        name="Teststraat 3",
+        latitude=52.0,
+        longitude=5.002,
+    )
+
+    result = await provider.async_get_stations(52.0, 5.0, 100, 2, (favourite,))
+
+    assert [station.provider_id for station in result.nearby] == [
+        "NL-TEST-001",
+        "NL-TEST-002",
+    ]
+    assert [station.provider_id for station in result.favourites] == ["NL-TEST-003"]
+    assert result.favourites[0].distance_m > 100
+    assert len(session.requests) == 2
+
+
+@pytest.mark.asyncio
+async def test_favourite_beyond_nearby_cap_reuses_the_normal_geojson_page(
+    sample_geojson,
+):
+    session = FakeSession([FakeResponse(_without_tariffs(sample_geojson))])
+    provider = NdwDotNlProvider(session)
+    favourite = FavouriteStationReference(
+        provider=provider.provider_id,
+        provider_id="NL-TEST-002",
+        name="Teststraat 2",
+        latitude=52.0,
+        longitude=5.001,
+    )
+
+    result = await provider.async_get_stations(52.0, 5.0, 500, 1, (favourite,))
+
+    assert [station.provider_id for station in result.nearby] == ["NL-TEST-001"]
+    assert [station.provider_id for station in result.favourites] == ["NL-TEST-002"]
+    assert len(session.requests) == 1
 
 
 def test_ndw_provider_exposes_stable_country_identity():
@@ -127,6 +193,15 @@ def test_ndw_provider_exposes_stable_country_identity():
 
     assert provider.provider_id == "ndw_dot_nl"
     assert provider.country_code == "NL"
+
+
+def test_ndw_providers_share_request_limiter_per_home_assistant(hass):
+    first = create_provider(PROVIDER_NDW_DOT_NL, FakeSession([]), hass)
+    second = create_provider(PROVIDER_NDW_DOT_NL, FakeSession([]), hass)
+
+    assert isinstance(first, NdwDotNlProvider)
+    assert isinstance(second, NdwDotNlProvider)
+    assert first._request_limiter is second._request_limiter
 
 
 @pytest.mark.asyncio

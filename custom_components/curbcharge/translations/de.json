@@ -106,16 +106,21 @@
           "search_radius": "Suchradius (m)",
           "max_stations": "Maximale Anzahl Ladestationen",
           "provider": "Anbieter",
-          "include_unknown": "Ladestationen ohne Verfügbarkeitsdaten einschließen"
+          "include_unknown": "Ladestationen ohne Verfügbarkeitsdaten einschließen",
+          "favourites": "Bevorzugte Ladestationen"
         },
         "data_description": {
           "scan_interval": "Wie oft Home Assistant die Ladestationsdaten aktualisiert.",
           "search_radius": "Nur öffentliche Ladestationen innerhalb dieses Radius einschließen.",
           "max_stations": "Die Anzahl der Ladestationen und zugehörigen Entitäten begrenzen.",
           "provider": "Datenanbieter zum Ermitteln von Ladestationen und ihrer Verfügbarkeit.",
-          "include_unknown": "Ladestationen einschließen, wenn der Anbieter keine Verfügbarkeit meldet."
+          "include_unknown": "Ladestationen einschließen, wenn der Anbieter keine Verfügbarkeit meldet.",
+          "favourites": "Ladestationen anhand ihres Namens auswählen. Bevorzugte Ladestationen bleiben außerhalb des Suchradius verfügbar und werden zusätzlich zum Limit für nahe gelegene Stationen aufgenommen."
         }
       }
+    },
+    "error": {
+      "invalid_favourites": "Eine oder mehrere ausgewählte bevorzugte Ladestationen sind nicht mehr verfügbar. Aktualisieren Sie die Optionen und versuchen Sie es erneut."
     }
   },
   "exceptions": {

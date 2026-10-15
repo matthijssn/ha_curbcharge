@@ -106,16 +106,21 @@
           "search_radius": "Search radius (m)",
           "max_stations": "Maximum stations",
           "provider": "Provider",
-          "include_unknown": "Include stations without availability data"
+          "include_unknown": "Include stations without availability data",
+          "favourites": "Favourite charging points"
         },
         "data_description": {
           "scan_interval": "How often Home Assistant refreshes charging station data.",
           "search_radius": "Only public charging stations within this distance are included.",
           "max_stations": "Limit the number of stations and their entities.",
           "provider": "The data provider used to discover stations and availability.",
-          "include_unknown": "Include stations when the provider reports no connector availability."
+          "include_unknown": "Include stations when the provider reports no connector availability.",
+          "favourites": "Select charging points by name. Favourites remain available outside the search radius and are added beyond the nearby station limit."
         }
       }
+    },
+    "error": {
+      "invalid_favourites": "One or more selected favourites are no longer available. Refresh the options and try again."
     }
   },
   "exceptions": {

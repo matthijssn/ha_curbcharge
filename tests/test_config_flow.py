@@ -9,6 +9,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.curbcharge import config_flow
 from custom_components.curbcharge.const import (
     CONF_API_TOKEN,
+    CONF_FAVOURITES,
     CONF_INCLUDE_UNKNOWN,
     CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
@@ -21,6 +22,8 @@ from custom_components.curbcharge.const import (
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NDW_DOT_NL,
 )
+from custom_components.curbcharge.coordinator import CurbChargeCoordinator
+from custom_components.curbcharge.models import FavouriteStationReference
 from custom_components.curbcharge.provider import (
     AuthenticationError,
     ChargingProviderError,
@@ -552,6 +555,7 @@ def test_options_allow_one_minute_and_reject_zero():
     }
 
     assert schema(valid)[CONF_SCAN_INTERVAL] == 1
+    assert schema(valid)[CONF_FAVOURITES] == []
     with pytest.raises(vol.Invalid):
         schema({**valid, CONF_SCAN_INTERVAL: 0})
 
@@ -603,7 +607,81 @@ async def test_options_flow_saves_integer_intervals_and_search_limits(hass):
         CONF_MAX_STATIONS: 5,
         CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
         CONF_INCLUDE_UNKNOWN: False,
+        CONF_FAVOURITES: [],
     }
+
+
+@pytest.mark.asyncio
+async def test_options_flow_saves_favourites_by_station_name(hass, sample_stations):
+    station = sample_stations[0]
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="favorite-area",
+        data={
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+        },
+    )
+    entry.add_to_hass(hass)
+    coordinator = CurbChargeCoordinator(
+        hass, FakeProvider(), 52.0, 5.0, 500, 10, 5, True
+    )
+    coordinator.async_set_updated_data({station.provider_id: station})
+    entry.runtime_data = coordinator
+    options, _references = config_flow._favourite_selector_options(coordinator, ())
+    assert options[0]["value"] == station.provider_id
+    assert station.address in options[0]["label"]
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_SCAN_INTERVAL: 5,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+            CONF_INCLUDE_UNKNOWN: True,
+            CONF_FAVOURITES: [station.provider_id],
+        },
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options[CONF_FAVOURITES] == [
+        {
+            "provider": station.provider,
+            "provider_id": station.provider_id,
+            "name": station.address or station.name,
+            "latitude": station.latitude,
+            "longitude": station.longitude,
+            "location_id": None,
+            "location_name": None,
+            "location_operator": None,
+        }
+    ]
+
+
+def test_stale_favourite_remains_selectable_for_removal(hass):
+    favourite = FavouriteStationReference(
+        provider=PROVIDER_NDW_DOT_NL,
+        provider_id="remote-station",
+        name="Saved charging point",
+        latitude=52.2,
+        longitude=5.2,
+    )
+    coordinator = CurbChargeCoordinator(
+        hass, FakeProvider(), 52.0, 5.0, 500, 10, 5, True, (favourite,)
+    )
+
+    options, references = config_flow._favourite_selector_options(
+        coordinator, (favourite,)
+    )
+
+    assert options == [{"value": "remote-station", "label": "Saved charging point"}]
+    assert (
+        config_flow._selected_favourites([], references, (favourite,), coordinator)
+        == ()
+    )
 
 
 @pytest.mark.asyncio

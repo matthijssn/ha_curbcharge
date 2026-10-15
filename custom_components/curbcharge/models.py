@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import cast
 
 
 class ConnectorStatus(StrEnum):
@@ -272,3 +275,108 @@ class ChargingStation:
                 }
             )
         )
+
+
+@dataclass(frozen=True, slots=True)
+class FavouriteStationReference:
+    """Minimal persisted identity and location for one user-selected station."""
+
+    provider: str
+    provider_id: str
+    name: str
+    latitude: float
+    longitude: float
+    location_id: str | None = None
+    location_name: str | None = None
+    location_operator: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class StationDiscoveryResult:
+    """Normal nearby results and additive favourite results from one provider."""
+
+    nearby: tuple[ChargingStation, ...]
+    favourites: tuple[ChargingStation, ...]
+
+
+def parse_favourite_references(
+    value: object, provider: str
+) -> tuple[FavouriteStationReference, ...]:
+    """Validate persisted favourite metadata without accepting opaque user input."""
+    if value is None:
+        return ()
+    if not isinstance(value, list):
+        raise ValueError("Favourite references must be a list")
+
+    favourites: list[FavouriteStationReference] = []
+    seen_ids: set[str] = set()
+    for item_value in value:
+        if not isinstance(item_value, Mapping):
+            raise ValueError("Favourite reference must be a mapping")
+        item = cast(Mapping[str, object], item_value)
+        item_provider = item.get("provider")
+        provider_id = item.get("provider_id")
+        name = item.get("name")
+        latitude = item.get("latitude")
+        longitude = item.get("longitude")
+        location_id = item.get("location_id")
+        location_name = item.get("location_name")
+        location_operator = item.get("location_operator")
+        if (
+            item_provider != provider
+            or not isinstance(provider_id, str)
+            or not provider_id
+            or provider_id in seen_ids
+            or not isinstance(name, str)
+            or not name.strip()
+            or not isinstance(latitude, (int, float))
+            or isinstance(latitude, bool)
+            or not isinstance(longitude, (int, float))
+            or isinstance(longitude, bool)
+            or (
+                location_id is not None
+                and (not isinstance(location_id, str) or not location_id)
+            )
+            or (
+                location_name is not None
+                and (not isinstance(location_name, str) or not location_name.strip())
+            )
+            or (
+                location_operator is not None and not isinstance(location_operator, str)
+            )
+            or (
+                location_id is None
+                and any(
+                    value is not None for value in (location_name, location_operator)
+                )
+            )
+        ):
+            raise ValueError("Favourite reference is invalid")
+
+        latitude = float(latitude)
+        longitude = float(longitude)
+        if (
+            not math.isfinite(latitude)
+            or not math.isfinite(longitude)
+            or not -90 <= latitude <= 90
+            or not -180 <= longitude <= 180
+        ):
+            raise ValueError("Favourite coordinates are invalid")
+
+        favourites.append(
+            FavouriteStationReference(
+                provider=provider,
+                provider_id=provider_id,
+                name=name.strip(),
+                latitude=latitude,
+                longitude=longitude,
+                location_id=location_id,
+                location_name=(
+                    location_name.strip() if isinstance(location_name, str) else None
+                ),
+                location_operator=location_operator,
+            )
+        )
+        seen_ids.add(provider_id)
+
+    return tuple(favourites)

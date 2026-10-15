@@ -248,6 +248,7 @@ class StatusSummarySensor(CurbChargeStationEntity, SensorEntity):
             "provider": station.provider,
             "country_code": station.country_code,
             "provider_station_id": station.provider_id,
+            "is_favorite": station.provider_id in self.coordinator.favourite_ids,
             "last_updated": _isoformat(station.last_updated),
             "last_successful_update": _isoformat(
                 self.coordinator.last_successful_update
@@ -353,11 +354,17 @@ def _decimal_attribute(value: Decimal | None) -> float | None:
 def _current_stations(
     coordinator: CurbChargeCoordinator,
 ) -> tuple[ChargingStation, ...] | None:
-    """Return non-stale coordinator records, or None before the first update."""
+    """Return current records within this entry's radius."""
     stations = coordinator.data
     if stations is None:
         return None
-    return tuple(station for station in stations.values() if not station.is_stale)
+    return tuple(
+        station
+        for station in stations.values()
+        if not station.is_stale
+        and station.distance_m is not None
+        and station.distance_m <= coordinator.radius_m
+    )
 
 
 class _AvailabilityPercentageSummary(NamedTuple):
@@ -424,14 +431,29 @@ def _nearby_aggregate_attributes(
     current_stations: tuple[ChargingStation, ...] | None,
 ) -> dict[str, Any]:
     """Return search scope and freshness attributes shared by aggregate sensors."""
+    in_radius_stations = tuple(
+        station
+        for station in (coordinator.data or {}).values()
+        if station.distance_m is not None and station.distance_m <= coordinator.radius_m
+    )
     stale_station_count = (
         None
         if current_stations is None
-        else len(coordinator.data or {}) - len(current_stations)
+        else sum(station.is_stale for station in in_radius_stations)
     )
+    normal_station_ids = coordinator.nearby_station_ids
+    if normal_station_ids is None:
+        normal_station_ids = {
+            station.provider_id
+            for station in current_stations or ()
+            if station.provider_id not in coordinator.favourite_ids
+        }
     if current_stations is None:
         results_may_be_truncated = None
-    elif len(current_stations) >= coordinator.max_stations:
+    elif (
+        sum(station.provider_id in normal_station_ids for station in current_stations)
+        >= coordinator.max_stations
+    ):
         results_may_be_truncated = True
     elif stale_station_count == 0 and coordinator.include_unknown:
         results_may_be_truncated = False

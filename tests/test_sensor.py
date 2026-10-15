@@ -15,6 +15,7 @@ from custom_components.curbcharge.models import (
     ChargingTariff,
     ConnectorStatus,
     EVSEStatus,
+    FavouriteStationReference,
     TariffStatus,
 )
 from custom_components.curbcharge.sensor import (
@@ -36,12 +37,26 @@ from tests.conftest import FakeProvider
 
 
 def _coordinator(
-    hass, station, *, max_stations=10, include_unknown=True, provider=None
+    hass,
+    station,
+    *,
+    max_stations=10,
+    include_unknown=True,
+    provider=None,
+    favourites=(),
 ):
     if provider is None:
         provider = FakeProvider()
     coordinator = CurbChargeCoordinator(
-        hass, provider, 52.0, 5.0, 500, max_stations, 5, include_unknown
+        hass,
+        provider,
+        52.0,
+        5.0,
+        500,
+        max_stations,
+        5,
+        include_unknown,
+        favourites,
     )
     coordinator.async_set_updated_data({station.provider_id: station})
     return coordinator
@@ -71,6 +86,16 @@ def _belgian_evse(
         evse_status=EVSEStatus.AVAILABLE,
         availability_reported=True,
         connector_count_reported=count_reported,
+    )
+
+
+def _favourite_reference(station):
+    return FavouriteStationReference(
+        provider=station.provider,
+        provider_id=station.provider_id,
+        name=station.name,
+        latitude=station.latitude,
+        longitude=station.longitude,
     )
 
 
@@ -670,6 +695,56 @@ def test_best_nearby_sensor_exposes_selection_reason(hass, sample_stations):
     assert sensor.extra_state_attributes["station_id"] == station.provider_id
     assert sensor.extra_state_attributes["available_connectors"] == 2
     assert sensor.extra_state_attributes["reason"] == "only_available_station"
+
+
+def test_status_summary_exposes_favourite_per_config_entry(hass, sample_stations):
+    station = sample_stations[0]
+    favourite_coordinator = _coordinator(
+        hass, station, favourites=(_favourite_reference(station),)
+    )
+    regular_coordinator = _coordinator(hass, station)
+
+    assert StatusSummarySensor(favourite_coordinator, station).extra_state_attributes[
+        "is_favorite"
+    ]
+    assert not StatusSummarySensor(regular_coordinator, station).extra_state_attributes[
+        "is_favorite"
+    ]
+
+
+def test_nearby_aggregates_and_best_exclude_remote_favourites(hass, sample_stations):
+    normal = replace(sample_stations[0], provider_id="normal-available", distance_m=100)
+    nearby_favourite = replace(
+        sample_stations[0], provider_id="nearby-favourite", distance_m=400
+    )
+    remote_favourite = replace(
+        sample_stations[0],
+        provider_id="remote-favourite",
+        distance_m=2_000,
+        tariff=ChargingTariff("EUR", Decimal("0.01"), None, None, None, "provider"),
+    )
+    favourites = (
+        _favourite_reference(nearby_favourite),
+        _favourite_reference(remote_favourite),
+    )
+    coordinator = _coordinator(hass, normal, max_stations=1, favourites=favourites)
+    coordinator.async_set_updated_data(
+        {
+            normal.provider_id: normal,
+            nearby_favourite.provider_id: nearby_favourite,
+            remote_favourite.provider_id: remote_favourite,
+        }
+    )
+    coordinator.nearby_station_ids = {normal.provider_id}
+
+    area_entry = MockConfigEntry(domain=DOMAIN, unique_id="favorite-area")
+    units = NearbyChargingUnitsSensor(coordinator, area_entry)
+    available = NearbyAvailableConnectorsSensor(coordinator, area_entry)
+    best = BestNearbyChargerSensor(coordinator, area_entry)
+
+    assert units.native_value == 2
+    assert available.native_value == 4
+    assert best.native_value == normal.name
 
 
 def test_entities_are_unavailable_without_current_station_data(hass, sample_stations):
