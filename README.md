@@ -290,28 +290,53 @@ list can lengthen a refresh.
 
 ## Use cases and automations
 
-Use the **Available** binary sensor to notify when a station reports an
-available connector, or use **Best nearby charger** as a recommendation input.
-Replace the example entity ID with the one created for your station:
+### Availability notifications
+
+Import the [CurbCharge availability notification Blueprint](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fmatthijssn%2Fha_curbcharge%2Fblob%2Fmain%2Fblueprints%2Fautomation%2Fcurbcharge%2Fnotify_when_charging_point_available.yaml)
+into Home Assistant. Blueprint import is separate from installing CurbCharge
+through HACS. Create an automation from the imported Blueprint, select one or
+more station **Status summary** sensors, then choose your preferred Home
+Assistant notification action.
+
+The Blueprint triggers only on a known `none_available` → `available`
+transition. Startup, `unknown`/`unavailable` recovery, and provider outages do
+not count as a charger becoming available. You can require the station to
+remain available for a minimum duration; this timer resets if Home Assistant
+restarts or the automation reloads.
+
+The optional provider-data-age check is off by default. If enabled, the
+Blueprint reads the selected station's provider `last_updated` timestamp and
+suppresses the action when it is missing, invalid, in the future, or older than
+the configured maximum age. Provider timestamps can describe a record update,
+not necessarily an availability change, and the data provider does not promise
+a fixed maximum age. Set this guard to a threshold appropriate for your use;
+it is not a guarantee that the station is currently available. Polling also
+adds latency, so notifications are not real-time.
+
+In your selected action, the Blueprint provides `station_name` and
+`station_entity` variables. To create a simple manual automation instead,
+listen for the same explicit Status summary transition:
 
 ```yaml
 alias: Notify when a charging station is available
 trigger:
   - platform: state
-    entity_id: binary_sensor.your_station_available
-    to: "on"
+    entity_id: sensor.your_station_status_summary
+    from: "none_available"
+    to: "available"
 action:
   - service: persistent_notification.create
     data:
       title: Charging station available
-      message: A connector is reported available at this station.
+      message: "{{ trigger.to_state.attributes.station_name }} now reports an available connector."
 mode: single
 ```
 
 ## Services
 
-CurbCharge is read-only and registers no custom services, actions, triggers, or
-conditions. Use its entities in Home Assistant automations as shown above.
+CurbCharge is read-only and registers no custom services, device triggers, or
+conditions. The Blueprint uses the existing Status summary state and a
+notification action selected by the user.
 
 ## Troubleshooting
 

@@ -1,0 +1,94 @@
+blueprint:
+  name: Notify when a CurbCharge charging point becomes available
+  description: >
+    Run a user-selected notification action when a CurbCharge Status summary
+    changes from known no availability to available. Home Assistant startup,
+    unknown/unavailable recovery, and provider data outages do not trigger this
+    automation. CurbCharge polls providers on a schedule, so notifications are
+    not real-time. The optional provider age check uses the provider's
+    last_updated timestamp, which may not represent an availability change.
+  domain: automation
+  source_url: https://github.com/matthijssn/ha_curbcharge/blob/main/blueprints/automation/curbcharge/notify_when_charging_point_available.yaml
+  input:
+    station_entities:
+      name: Charging points
+      description: Select one or more CurbCharge Status summary sensors.
+      selector:
+        entity:
+          multiple: true
+          filter:
+            - integration: curbcharge
+              domain: sensor
+              device_class: enum
+    minimum_available_duration:
+      name: Minimum available duration
+      description: >
+        Wait this long after the charger becomes available before notifying.
+        The timer resets if Home Assistant restarts or the automation reloads.
+      default:
+        hours: 0
+        minutes: 0
+        seconds: 0
+      selector:
+        duration:
+          enable_day: false
+    check_provider_data_age:
+      name: Check provider data age
+      description: >
+        When enabled, suppress the action if last_updated is missing, invalid,
+        in the future, or older than the maximum age below.
+      default: false
+      selector:
+        boolean: {}
+    maximum_provider_data_age_minutes:
+      name: Maximum provider data age
+      description: Used only when the provider data age check is enabled.
+      default: 30
+      selector:
+        number:
+          min: 1
+          step: 1
+          unit_of_measurement: min
+          mode: box
+    notification_action:
+      name: Notification action
+      description: >
+        Choose what Home Assistant should do. The action can use the variables
+        station_name and station_entity.
+      selector:
+        action: {}
+
+variables:
+  check_provider_data_age: !input check_provider_data_age
+  maximum_provider_data_age_minutes: !input maximum_provider_data_age_minutes
+
+trigger:
+  - platform: state
+    entity_id: !input station_entities
+    from: "none_available"
+    to: "available"
+    for: !input minimum_available_duration
+
+action:
+  - variables:
+      station_name: >-
+        {{ trigger.to_state.attributes.get('station_name')
+           or trigger.to_state.attributes.get('friendly_name')
+           or trigger.entity_id }}
+      station_entity: "{{ trigger.entity_id }}"
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: >-
+              {% if not check_provider_data_age %}
+                true
+              {% else %}
+                {% set provider_timestamp = as_timestamp(state_attr(trigger.entity_id, 'last_updated'), default=none) %}
+                {% set age_seconds = as_timestamp(now()) - provider_timestamp if provider_timestamp is not none else none %}
+                {{ age_seconds is not none
+                   and age_seconds >= 0
+                   and age_seconds <= (maximum_provider_data_age_minutes | float(0)) * 60 }}
+              {% endif %}
+        sequence: !input notification_action
+
+mode: single
