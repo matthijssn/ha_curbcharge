@@ -7,6 +7,7 @@ import json
 import logging
 import math
 import re
+import time
 import zlib
 from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
@@ -21,8 +22,10 @@ from homeassistant.core import HomeAssistant
 from .belgium import create_belgium_provider
 from .const import (
     COUNTRY_NL,
+    DOMAIN,
     GEOJSON_REQUEST_TIMEOUT,
     MAX_BBOX_AREA_DEG2,
+    MIN_SEARCH_RADIUS_M,
     PROVIDER_API_URL,
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NAME,
@@ -38,6 +41,8 @@ from .models import (
     ChargingStation,
     ChargingTariff,
     ConnectorStatus,
+    FavouriteStationReference,
+    StationDiscoveryResult,
     TariffStatus,
 )
 from .provider import (
@@ -54,6 +59,8 @@ from .provider import (
 _EARTH_RADIUS_M = 6_371_000
 _METERS_PER_DEGREE = 111_320
 _NDW_LOCAL_TIMEZONE = ZoneInfo("Europe/Amsterdam")
+_NDW_REQUEST_INTERVAL = 0.11
+_NDW_REQUEST_LIMITER_DATA_KEY = "ndw_request_limiter"
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -102,12 +109,61 @@ class TariffRecord(TypedDict, total=False):
     tariff_alt_text: object
 
 
+class NdwRequestLimiter:
+    """Serialize NDW feature requests across CurbCharge entries."""
+
+    def __init__(self) -> None:
+        self._lock = asyncio.Lock()
+        self._last_request: float | None = None
+        self._retry_after_until = 0.0
+
+    async def async_wait(self) -> None:
+        async with self._lock:
+            while True:
+                now = time.monotonic()
+                allowed_at = max(now, self._retry_after_until)
+                if self._last_request is not None:
+                    allowed_at = max(
+                        allowed_at, self._last_request + _NDW_REQUEST_INTERVAL
+                    )
+                delay = allowed_at - now
+                if delay > 0:
+                    await asyncio.sleep(delay)
+                if self._retry_after_until > time.monotonic():
+                    continue
+                self._last_request = time.monotonic()
+                return
+
+    def defer_requests(self, seconds: int | None) -> None:
+        """Pause shared feature requests after a provider Retry-After response."""
+        if seconds is not None and seconds > 0:
+            self._retry_after_until = max(
+                self._retry_after_until, time.monotonic() + seconds
+            )
+
+
+def _shared_ndw_request_limiter(hass: HomeAssistant) -> NdwRequestLimiter:
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    limiter = domain_data.get(_NDW_REQUEST_LIMITER_DATA_KEY)
+    if limiter is None:
+        limiter = NdwRequestLimiter()
+        domain_data[_NDW_REQUEST_LIMITER_DATA_KEY] = limiter
+    if not isinstance(limiter, NdwRequestLimiter):
+        raise RuntimeError("CurbCharge NDW request limiter has an invalid type")
+    return limiter
+
+
 class NdwDotNlProvider(BaseChargingProvider):
     """Client for NDW's documented DOT-NL GeoJSON API."""
 
-    def __init__(self, session: aiohttp.ClientSession) -> None:
+    def __init__(
+        self,
+        session: aiohttp.ClientSession,
+        request_limiter: NdwRequestLimiter | None = None,
+    ) -> None:
         """Initialize the provider with Home Assistant's shared session."""
         self._session = session
+        self._request_limiter = request_limiter or NdwRequestLimiter()
         self._tariff_cache: dict[str, ChargingTariff | None] = {}
         self._cached_tariff_ids: set[str] = set()
         self._tariff_cache_updated: datetime | None = None
@@ -141,29 +197,69 @@ class NdwDotNlProvider(BaseChargingProvider):
         longitude: float,
         radius_m: int,
         max_stations: int,
-    ) -> tuple[ChargingStation, ...]:
-        """Fetch nearby stations and attach only unambiguous published tariffs."""
+        favourites: tuple[FavouriteStationReference, ...] = (),
+    ) -> StationDiscoveryResult:
+        """Fetch normal results and add saved favourites without displacing them."""
         features = await self._async_get_features(latitude, longitude, radius_m)
-        stations = [
-            station
-            for feature in features
-            if (
-                station := _station_from_feature(feature, latitude, longitude)
-            ).distance_m
-            is not None
-            and station.distance_m <= radius_m
+        parsed_stations = [
+            _station_from_feature(feature, latitude, longitude) for feature in features
         ]
-        stations.sort(key=lambda station: (station.distance_m, station.provider_id))
-        stations = stations[:max_stations]
+        stations_by_id = {station.provider_id: station for station in parsed_stations}
+        nearby = [
+            station
+            for station in parsed_stations
+            if station.distance_m is not None and station.distance_m <= radius_m
+        ]
+        nearby.sort(key=lambda station: (station.distance_m, station.provider_id))
+        nearby = nearby[:max_stations]
+        nearby_ids = {station.provider_id for station in nearby}
+
+        favourite_stations: dict[str, ChargingStation] = {}
+        for favourite in favourites:
+            if favourite.provider != self.provider_id:
+                raise InvalidProviderResponseError(
+                    "A saved favourite belongs to a different provider"
+                )
+            if favourite.provider_id in nearby_ids:
+                continue
+
+            station = stations_by_id.get(favourite.provider_id)
+            if station is None:
+                features_at_favourite = await self._async_get_features(
+                    favourite.latitude,
+                    favourite.longitude,
+                    MIN_SEARCH_RADIUS_M,
+                )
+                station = next(
+                    (
+                        parsed
+                        for feature in features_at_favourite
+                        if (
+                            parsed := _station_from_feature(
+                                feature, latitude, longitude
+                            )
+                        ).provider_id
+                        == favourite.provider_id
+                    ),
+                    None,
+                )
+            if station is not None:
+                favourite_stations[favourite.provider_id] = station
 
         tariff_ids = {
             tariff_id
-            for station in stations
+            for station in (*nearby, *favourite_stations.values())
             for connector in station.connectors
             for tariff_id in connector.tariff_ids
         }
         tariffs = await self._async_get_tariffs(tariff_ids)
-        return tuple(_with_station_tariff(station, tariffs) for station in stations)
+        return StationDiscoveryResult(
+            nearby=tuple(_with_station_tariff(station, tariffs) for station in nearby),
+            favourites=tuple(
+                _with_station_tariff(station, tariffs)
+                for station in favourite_stations.values()
+            ),
+        )
 
     async def _async_get_features(
         self, latitude: float, longitude: float, radius_m: int
@@ -184,9 +280,14 @@ class NdwDotNlProvider(BaseChargingProvider):
                 )
             seen_urls.add(request_url)
 
-            body, headers = await self._async_request(
-                request_url, params=params, timeout=GEOJSON_REQUEST_TIMEOUT
-            )
+            await self._request_limiter.async_wait()
+            try:
+                body, headers = await self._async_request(
+                    request_url, params=params, timeout=GEOJSON_REQUEST_TIMEOUT
+                )
+            except ProviderRateLimitError as err:
+                self._request_limiter.defer_requests(err.retry_after)
+                raise
             params = None
             try:
                 payload: object = json.loads(body)
@@ -213,7 +314,6 @@ class NdwDotNlProvider(BaseChargingProvider):
                         "NDW DOT-NL omitted a page of charging stations"
                     )
                 break
-            await asyncio.sleep(0.11)
             url = next_url
 
         station_ids: set[str] = set()
@@ -341,7 +441,8 @@ def create_provider(
 ) -> BaseChargingProvider:
     """Return the requested implemented provider."""
     if provider_id == PROVIDER_NDW_DOT_NL:
-        return NdwDotNlProvider(session)
+        limiter = _shared_ndw_request_limiter(hass) if hass is not None else None
+        return NdwDotNlProvider(session, limiter)
     if provider_id == PROVIDER_ECO_MOVEMENT_BE and hass is not None and token:
         return create_belgium_provider(hass, session, token)
     raise UnsupportedProviderError("The configured charging provider is unsupported")

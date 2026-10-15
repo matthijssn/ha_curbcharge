@@ -106,16 +106,21 @@
           "search_radius": "Rayon de recherche (m)",
           "max_stations": "Nombre maximal de bornes",
           "provider": "Fournisseur",
-          "include_unknown": "Inclure les bornes sans données de disponibilité"
+          "include_unknown": "Inclure les bornes sans données de disponibilité",
+          "favourites": "Bornes favorites"
         },
         "data_description": {
           "scan_interval": "Fréquence d'actualisation des données des bornes par Home Assistant.",
           "search_radius": "Inclure uniquement les bornes publiques dans ce rayon.",
           "max_stations": "Limiter le nombre de bornes et d'entités associées.",
           "provider": "Fournisseur de données utilisé pour découvrir les bornes et leur disponibilité.",
-          "include_unknown": "Inclure les bornes lorsque le fournisseur ne communique pas leur disponibilité."
+          "include_unknown": "Inclure les bornes lorsque le fournisseur ne communique pas leur disponibilité.",
+          "favourites": "Sélectionnez les bornes par leur nom. Les bornes favorites restent disponibles hors du rayon de recherche et s'ajoutent à la limite des bornes à proximité."
         }
       }
+    },
+    "error": {
+      "invalid_favourites": "Une ou plusieurs bornes favorites sélectionnées ne sont plus disponibles. Actualisez les options et réessayez."
     }
   },
   "exceptions": {

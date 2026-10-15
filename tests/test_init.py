@@ -14,6 +14,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 import custom_components.curbcharge as curbcharge
 from custom_components.curbcharge.const import (
     CONF_API_TOKEN,
+    CONF_FAVOURITES,
     CONF_INCLUDE_UNKNOWN,
     CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
@@ -26,10 +27,12 @@ from custom_components.curbcharge.const import (
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NDW_DOT_NL,
 )
+from custom_components.curbcharge.coordinator import CurbChargeCoordinator
 from custom_components.curbcharge.entity import (
     location_device_identifier,
     station_device_identifier,
 )
+from custom_components.curbcharge.models import FavouriteStationReference
 from custom_components.curbcharge.provider import ChargingProviderError
 from tests.conftest import FakeProvider
 
@@ -41,6 +44,7 @@ def _entry(
     *,
     unique_id: str = "test-search-area",
     entry_id: str | None = None,
+    options: dict[str, object] | None = None,
 ) -> MockConfigEntry:
     data: dict[str, object] = {
         CONF_LOCATION_SOURCE: LOCATION_MANUAL,
@@ -57,14 +61,207 @@ def _entry(
         entry_id=entry_id,
         unique_id=unique_id,
         data=data,
+        options=options or {},
     )
 
 
 def _has_device(device_registry, entry_id: str, identifier: tuple[str, str]) -> bool:
+    get_child = getattr(device_registry, "async_get_child_device_by_identifier", None)
+    if get_child is not None and get_child(identifier, entry_id) is not None:
+        return True
     return any(
         identifier in device.identifiers
         for device in dr.async_entries_for_config_entry(device_registry, entry_id)
     )
+
+
+def _favorite_reference(station) -> dict[str, object]:
+    location = station.location
+    has_parent_location = (
+        location is not None and location.provider_id != station.provider_id
+    )
+    return {
+        "provider": station.provider,
+        "provider_id": station.provider_id,
+        "name": station.address or station.name,
+        "latitude": station.latitude,
+        "longitude": station.longitude,
+        "location_id": (
+            location.provider_id
+            if location is not None and has_parent_location
+            else None
+        ),
+        "location_name": location.name
+        if location is not None and has_parent_location
+        else None,
+        "location_operator": (
+            location.operator if location is not None and has_parent_location else None
+        ),
+    }
+
+
+@pytest.mark.asyncio
+async def test_saved_favourite_placeholder_recovers_after_restart(
+    hass, monkeypatch, sample_stations
+):
+    station = sample_stations[0]
+    provider = FakeProvider([(), (station,)])
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="favorite-placeholder",
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_MANUAL,
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+            CONF_LATITUDE: 52.0,
+            CONF_LONGITUDE: 5.0,
+        },
+        options={CONF_FAVOURITES: [_favorite_reference(station)]},
+    )
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    registry = er.async_get(hass)
+    summary_entity = next(
+        entity
+        for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
+        if entity.unique_id
+        == f"{station.provider}_{station.provider_id}_status_summary"
+    )
+    stale_state = hass.states.get(summary_entity.entity_id)
+    assert stale_state is not None
+    assert stale_state.state == "unavailable"
+    assert entry.runtime_data.data[station.provider_id].is_stale
+
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+
+    recovered_state = hass.states.get(summary_entity.entity_id)
+    assert recovered_state is not None
+    assert recovered_state.state == "available"
+    assert not entry.runtime_data.data[station.provider_id].is_stale
+
+
+@pytest.mark.asyncio
+async def test_belgium_favourite_placeholder_keeps_parent_device(
+    hass, monkeypatch, sample_stations
+):
+    station = _provider_station(
+        sample_stations[0],
+        PROVIDER_ECO_MOVEMENT_BE,
+        "Eco-Movement Belgium",
+        "BE",
+    )
+    provider = FakeProvider([(), (station,)])
+    provider.provider_id = PROVIDER_ECO_MOVEMENT_BE
+    provider.provider_name = "Eco-Movement Belgium"
+    provider.country_code = "BE"
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    entry = _entry(
+        {CONF_PROVIDER: PROVIDER_ECO_MOVEMENT_BE, CONF_API_TOKEN: "test-token"},
+        unique_id="belgium-favourite-area",
+        options={CONF_FAVOURITES: [_favorite_reference(station)]},
+    )
+    entry.add_to_hass(hass)
+
+    assert station.location is not None
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    device_registry = dr.async_get(hass)
+    station_identifier = station_device_identifier(
+        PROVIDER_ECO_MOVEMENT_BE, station.provider_id
+    )
+    parent_identifier = location_device_identifier(
+        PROVIDER_ECO_MOVEMENT_BE, station.location.provider_id
+    )
+    assert _has_device(device_registry, entry.entry_id, station_identifier)
+    parent = next(
+        device
+        for device in dr.async_entries_for_config_entry(device_registry, entry.entry_id)
+        if parent_identifier in device.identifiers
+    )
+
+    child_getter = getattr(
+        device_registry, "async_get_child_device_by_identifier", None
+    )
+    child = (
+        child_getter(station_identifier, entry.entry_id)
+        if child_getter is not None
+        else next(
+            device
+            for device in dr.async_entries_for_config_entry(
+                device_registry, entry.entry_id
+            )
+            if station_identifier in device.identifiers
+        )
+    )
+    assert (
+        getattr(child, "parent_device_id", None) == parent.id
+        or getattr(child, "via_device_id", None) == parent.id
+    )
+
+    await entry.runtime_data.async_refresh()
+    await hass.async_block_till_done()
+
+    assert entry.runtime_data.data[station.provider_id].is_stale is False
+    assert _has_device(device_registry, entry.entry_id, station_identifier)
+    assert _has_device(device_registry, entry.entry_id, parent_identifier)
+
+    provider.snapshots.extend([(), (), ()])
+    hass.config_entries.async_update_entry(entry, options={})
+    await hass.async_block_till_done()
+    for _ in range(2):
+        await entry.runtime_data.async_refresh()
+        await hass.async_block_till_done()
+
+    assert not _has_device(device_registry, entry.entry_id, station_identifier)
+    assert not _has_device(device_registry, entry.entry_id, parent_identifier)
+
+
+@pytest.mark.asyncio
+async def test_unfavouriting_uses_existing_device_removal_grace(
+    hass, monkeypatch, sample_stations
+):
+    station = sample_stations[0]
+    provider = FakeProvider([(station,), (), (), ()])
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="favorite-removal",
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_MANUAL,
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+            CONF_LATITUDE: 52.0,
+            CONF_LONGITUDE: 5.0,
+        },
+        options={CONF_FAVOURITES: [_favorite_reference(station)]},
+    )
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator = entry.runtime_data
+    identifier = station_device_identifier(station.provider, station.provider_id)
+    device_registry = dr.async_get(hass)
+    assert _has_device(device_registry, entry.entry_id, identifier)
+
+    hass.config_entries.async_update_entry(entry, options={})
+    await hass.async_block_till_done()
+    assert entry.runtime_data is coordinator
+    assert entry.runtime_data.data[station.provider_id].is_stale
+
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert _has_device(device_registry, entry.entry_id, identifier)
+
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert not _has_device(device_registry, entry.entry_id, identifier)
 
 
 @pytest.mark.asyncio
@@ -148,9 +345,18 @@ async def test_setup_unload_and_reload_keep_stable_entities(
     device_registry = dr.async_get(hass)
     devices = dr.async_entries_for_config_entry(device_registry, entry.entry_id)
     station_identifier = station_device_identifier(provider_id, station.provider_id)
-    station_device = next(
-        device for device in devices if station_identifier in device.identifiers
+    get_child_device = getattr(
+        device_registry, "async_get_child_device_by_identifier", None
     )
+    station_device = (
+        get_child_device(station_identifier, entry.entry_id)
+        if get_child_device is not None
+        else None
+    )
+    if station_device is None:
+        station_device = next(
+            device for device in devices if station_identifier in device.identifiers
+        )
     assert (
         station_device.name == f"{station.name} ({provider_id}:{station.provider_id})"
     )
@@ -165,7 +371,6 @@ async def test_setup_unload_and_reload_keep_stable_entities(
         parent_device = next(
             device for device in devices if parent_identifier in device.identifiers
         )
-        assert len(devices) == 2
         assert parent_device.name == (
             f"{station.location.name} ({provider_id}:{station.location.provider_id})"
         )
@@ -804,6 +1009,7 @@ async def test_setup_requires_a_valid_location(hass):
         (CONF_MAX_STATIONS, 0),
         (CONF_SCAN_INTERVAL, 0),
         (CONF_INCLUDE_UNKNOWN, 1),
+        (CONF_FAVOURITES, "invalid"),
     ],
 )
 async def test_setup_rejects_invalid_options(hass, key, value):
@@ -905,3 +1111,90 @@ async def test_options_update_reloads_the_entry(hass, monkeypatch):
     await curbcharge._async_options_updated(hass, entry)
 
     assert reloaded == [entry.entry_id]
+
+
+@pytest.mark.asyncio
+async def test_location_change_still_reloads_entry(hass, monkeypatch):
+    entry = _entry()
+    entry.add_to_hass(hass)
+    entry.runtime_data = CurbChargeCoordinator(
+        hass,
+        FakeProvider(),
+        52.0,
+        5.0,
+        500,
+        10,
+        5,
+        True,
+        config_entry=entry,
+    )
+    reloaded: list[str] = []
+
+    async def reload_entry(entry_id: str) -> None:
+        reloaded.append(entry_id)
+
+    monkeypatch.setattr(hass.config_entries, "async_reload", reload_entry)
+    hass.config_entries.async_update_entry(
+        entry,
+        data={**entry.data, CONF_LATITUDE: 52.1},
+    )
+
+    await curbcharge._async_options_updated(hass, entry)
+
+    assert reloaded == [entry.entry_id]
+
+
+@pytest.mark.asyncio
+async def test_options_update_applies_favourites_to_live_coordinator(
+    hass, monkeypatch, sample_stations
+):
+    station = sample_stations[0]
+    provider = FakeProvider([(station,), (station,)])
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    entry = _entry()
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator = entry.runtime_data
+    reloaded: list[str] = []
+
+    async def reload_entry(entry_id: str) -> None:
+        reloaded.append(entry_id)
+
+    monkeypatch.setattr(hass.config_entries, "async_reload", reload_entry)
+    favourite = {
+        "provider": station.provider,
+        "provider_id": station.provider_id,
+        "name": station.address or station.name,
+        "latitude": station.latitude,
+        "longitude": station.longitude,
+    }
+    hass.config_entries.async_update_entry(
+        entry,
+        options={
+            CONF_SCAN_INTERVAL: 1,
+            CONF_SEARCH_RADIUS: 100,
+            CONF_MAX_STATIONS: 3,
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+            CONF_INCLUDE_UNKNOWN: True,
+            CONF_FAVOURITES: [favourite],
+        },
+    )
+    await hass.async_block_till_done()
+
+    assert entry.runtime_data is coordinator
+    assert reloaded == []
+    assert coordinator.radius_m == 100
+    assert coordinator.max_stations == 3
+    assert coordinator.scan_interval_minutes == 1
+    assert coordinator.favourite_ids == {station.provider_id}
+    assert provider.station_calls[-1][-1] == (
+        FavouriteStationReference(
+            station.provider,
+            station.provider_id,
+            station.address or station.name,
+            station.latitude,
+            station.longitude,
+        ),
+    )

@@ -169,8 +169,11 @@ setup also asks for the Eco-Movement API token and validates connectivity
 before creating the entry. The default polling interval is five minutes; the
 options flow permits intervals of one minute or longer, plus changes to the
 radius, station limit, and whether to include stations for which no
-availability data was returned. The provider is selected during setup and
-cannot be switched from the options flow. See the
+availability data was returned. The options flow also lets you select
+favourite charging points by their displayed names. Favourites are stored per
+config entry, continue to be refreshed outside the search radius, and are
+added beyond the normal nearby station limit. The provider is selected during
+setup and cannot be switched from the options flow. See the
 [Belgium preview setup](#belgium-preview-setup) steps before choosing that
 provider.
 
@@ -214,6 +217,8 @@ Each charging point is one Home Assistant device. CurbCharge creates:
 - **Maximum charging power**, **Price per kWh**, and **Distance**.
 - **Status summary**, including connector types, operator, address, provider
   status, tariff details, coordinates, and provider update timestamps.
+- The Status summary's `is_favorite` attribute identifies stations selected
+  as favourites for this config entry.
 - Integration-level **Best nearby charger**, **Nearby charging units**, and
   **Nearby available connectors** sensors. The charging-unit count covers
   current, non-stale records in that entry's configured search area (NDW
@@ -239,6 +244,12 @@ These statistics are scoped to one config entry's bounded search area.
 Separate entries, including overlapping searches in the same country, remain
 separate and must not be summed as national coverage.
 
+Favourites remain represented as devices when they are outside the configured
+radius or the normal result cap. Nearby aggregate sensors remain radius-scoped:
+they include fresh in-radius favourites but exclude remote favourites. Best
+nearby gives no favourite bonus; fresh in-radius favourites compete under the
+normal ranking, while remote or stale favourites are excluded.
+
 For each availability group reported by NDW, the station also has a
 disabled-by-default connector-group sensor. The provider groups connectors by type and
 power characteristics; these are not individual physical connector IDs.
@@ -255,8 +266,10 @@ then shorter distance, more available connectors, higher power, and a stable
 station identifier. It never compares different currencies; its `reason`
 attribute is a stable reason code.
 
-When a station is absent from three consecutive successful refreshes, its
-entities and device are removed. Failed refreshes do not count as absence and
+When a non-favourite station is absent from three consecutive successful
+refreshes, its entities and device are removed. Saved favourites remain as
+unavailable devices through provider misses; removing a favourite resumes the
+three-refresh removal behavior. Failed refreshes do not count as absence and
 do not replace the last successful coordinator data.
 
 ## Data updates
@@ -269,7 +282,11 @@ OCPI file cached for six hours. The provider client may therefore make
 additional HTTP requests when more pages or uncached tariffs are needed.
 NDW's station `last_updated` time is shown separately from Home Assistant's
 last successful refresh time; upstream data can be delayed even immediately
-after a successful poll.
+after a successful poll. Favourites outside the normal NDW search results use
+additional small bounding-box requests; the provider client spaces these
+requests to respect its rate limit. Belgium favourites use the cached location
+snapshot and status requests through the shared limiter, so a large favourite
+list can lengthen a refresh.
 
 ## Use cases and automations
 
@@ -318,16 +335,19 @@ conditions. Use its entities in Home Assistant automations as shown above.
 - **Data looks old:** Compare the station's provider update timestamp with
   Home Assistant's last successful refresh timestamp.
 - **A station disappeared:** Temporarily missing stations remain unavailable
-  for two successful polls and are removed after the third.
+  for two successful polls and are removed after the third. Saved favourites
+  remain unavailable until returned or unfavourited.
 
 ## Privacy and diagnostics
 
 Diagnostics omit station addresses and exact station coordinates, redact
-manual coordinates from entry data, and round distances to the nearest
-kilometre. CurbCharge does not log coordinates, credentials, or raw provider
-responses. The integration does not request credentials from NDW. To download
-diagnostics, open **Settings → Devices & services → CurbCharge**, open the
-integration menu, and select **Download diagnostics**.
+manual coordinates and saved favourite references from entry data, and round
+distances to the nearest kilometre. Favourite IDs, names, and coordinates are
+not included in the diagnostic station list. CurbCharge does not log
+coordinates, credentials, or raw provider responses. The integration does not
+request credentials from NDW. To download diagnostics, open **Settings →
+Devices & services → CurbCharge**, open the integration menu, and select
+**Download diagnostics**.
 
 ## Removing CurbCharge
 
