@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import math
 from collections.abc import Mapping
 from dataclasses import asdict
 from typing import TYPE_CHECKING, Any, cast
@@ -48,6 +47,7 @@ from .const import (
     PROVIDER_NDW_DOT_NL,
 )
 from .coordinator import CurbChargeCoordinator
+from .location import resolve_location, valid_coordinates
 from .models import (
     ChargingStation,
     FavouriteStationReference,
@@ -772,45 +772,18 @@ def _location_source_schema(
 
 
 def _home_location(hass: HomeAssistant) -> tuple[float, float] | None:
-    latitude = hass.config.latitude
-    longitude = hass.config.longitude
-    if latitude is None or longitude is None:
-        return None
-    latitude = float(latitude)
-    longitude = float(longitude)
-    if latitude == 0 and longitude == 0:
-        return None
-    return (latitude, longitude) if _valid_coordinates(latitude, longitude) else None
+    return resolve_location(hass, {CONF_LOCATION_SOURCE: LOCATION_HOME})
 
 
 def _entry_location(
     hass: HomeAssistant, data: Mapping[str, Any]
 ) -> tuple[float, float] | None:
-    """Return the config entry's current home or manual search location."""
-    if data.get(CONF_LOCATION_SOURCE) == LOCATION_HOME:
-        return _home_location(hass)
-
-    latitude = data.get(CONF_LATITUDE)
-    longitude = data.get(CONF_LONGITUDE)
-    if (
-        not isinstance(latitude, (int, float))
-        or isinstance(latitude, bool)
-        or not isinstance(longitude, (int, float))
-        or isinstance(longitude, bool)
-    ):
-        return None
-    latitude = float(latitude)
-    longitude = float(longitude)
-    return (latitude, longitude) if _valid_coordinates(latitude, longitude) else None
+    """Return the config entry's current home, manual, or entity location."""
+    return resolve_location(hass, data)
 
 
 def _valid_coordinates(latitude: float, longitude: float) -> bool:
-    return (
-        math.isfinite(latitude)
-        and math.isfinite(longitude)
-        and -90 <= latitude <= 90
-        and -180 <= longitude <= 180
-    )
+    return valid_coordinates(latitude, longitude) is not None
 
 
 def _config_unique_id(

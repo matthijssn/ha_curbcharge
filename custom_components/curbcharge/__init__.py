@@ -1,13 +1,11 @@
 """CurbCharge Home Assistant integration."""
 
-import math
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -18,7 +16,6 @@ from .const import (
     CONF_API_TOKEN,
     CONF_FAVOURITES,
     CONF_INCLUDE_UNKNOWN,
-    CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
     CONF_PROVIDER,
     CONF_SCAN_INTERVAL,
@@ -27,7 +24,6 @@ from .const import (
     DEFAULT_MAX_STATIONS,
     DEFAULT_SCAN_INTERVAL_MINUTES,
     DEFAULT_SEARCH_RADIUS_M,
-    LOCATION_HOME,
     MAX_MAX_STATIONS,
     MAX_SEARCH_RADIUS_M,
     MIN_MAX_STATIONS,
@@ -41,6 +37,7 @@ from .const import (
     DOMAIN as DOMAIN,
 )
 from .coordinator import CurbChargeCoordinator
+from .location import resolve_location
 from .models import parse_favourite_references
 from .provider import ChargingProviderError
 
@@ -197,31 +194,4 @@ async def _async_options_updated(
 def _entry_location(
     hass: HomeAssistant, data: Mapping[str, Any]
 ) -> tuple[float, float] | None:
-    is_home_location = data.get(CONF_LOCATION_SOURCE) == LOCATION_HOME
-    latitude: object
-    longitude: object
-    if is_home_location:
-        latitude = hass.config.latitude
-        longitude = hass.config.longitude
-    else:
-        latitude = data.get(CONF_LATITUDE)
-        longitude = data.get(CONF_LONGITUDE)
-    if (
-        not isinstance(latitude, (int, float))
-        or isinstance(latitude, bool)
-        or not isinstance(longitude, (int, float))
-        or isinstance(longitude, bool)
-    ):
-        return None
-    latitude = float(latitude)
-    longitude = float(longitude)
-    if (
-        not math.isfinite(latitude)
-        or not math.isfinite(longitude)
-        or not -90 <= latitude <= 90
-        or not -180 <= longitude <= 180
-    ):
-        return None
-    if is_home_location and latitude == 0 and longitude == 0:
-        return None
-    return latitude, longitude
+    return resolve_location(hass, data)
