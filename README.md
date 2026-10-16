@@ -263,6 +263,16 @@ Each charging point is one Home Assistant device. CurbCharge creates:
   totals. If no known denominator remains, the sensor is unknown rather than
   0%.
 
+The Home Assistant State object has its own `last_changed` and `last_updated`
+timestamps. `last_changed` is when Home Assistant last observed the entity's
+state value change; it changes only when the state changes. `last_updated`
+changes when the state or its attributes change. For **Available**, while the
+state is `on`, `last_changed` marks the last observed transition to available;
+while it is `off`, it marks the last observed transition to no available
+connectors. It records only the current state's last change, not separate
+timestamps for the last transition in each direction. See Home Assistant's
+[State and state object documentation](https://www.home-assistant.io/docs/configuration/state_object/).
+
 These statistics are scoped to one config entry's bounded search area.
 Separate entries, including overlapping searches in the same country, remain
 separate and must not be summed as national coverage.
@@ -323,16 +333,20 @@ The default interval is five minutes and can be reduced to one minute in
 options. NDW may paginate GeoJSON results, and tariffs come from a separate
 OCPI file cached for six hours. The provider client may therefore make
 additional HTTP requests when more pages or uncached tariffs are needed.
-NDW's station `last_updated` time is shown separately from Home Assistant's
-last successful refresh time; upstream data can be delayed even immediately
-after a successful poll. A provider timestamp describes its source record, not
-necessarily an availability change. CurbCharge reports provider data at its
-polling cadence; Home Assistant history records entity state changes, so a
-change between polls cannot appear in the integration's history. Favourites
-outside the normal NDW search results use additional small bounding-box
-requests; the provider client spaces these requests to respect its rate limit.
-Belgium favourites use the cached location snapshot and status requests through
-the shared limiter, so a large favourite list can lengthen a refresh.
+The Status summary's `last_updated` attribute is the provider's timestamp;
+`last_successful_update` is when the coordinator last completed a successful
+refresh. The provider timestamp describes its source record, not necessarily
+an availability change, and may be older than the latest poll. The coordinator
+timestamp does not advance on failed refreshes; station entities then become
+`unavailable`, not `off`. These attributes are distinct from the Home Assistant
+State object's `last_changed` and `last_updated` timestamps described above.
+CurbCharge reports provider data at its polling cadence; Home Assistant
+history records entity state changes, so a change between polls cannot appear
+in the integration's history. Favourites outside the normal NDW search results
+use additional small bounding-box requests; the provider client spaces these
+requests to respect its rate limit. Belgium favourites use the cached location
+snapshot and status requests through the shared limiter, so a large favourite
+list can lengthen a refresh.
 
 For an Entity source, CurbCharge samples coordinates during the normal
 coordinator refreshes. It does not subscribe to every entity state change or
@@ -441,6 +455,70 @@ action:
 mode: single
 ```
 
+### Reading observed availability transitions
+
+For **Available**, `on` and `off` are known provider reports. `unknown` means
+the latest snapshot has no usable availability; `unavailable` means the entity
+cannot currently report, for example because its station is stale or a
+coordinator refresh failed. Neither is an `off` state. A missed station becomes
+unavailable after a successful poll; non-favourites are removed after three
+consecutive successful misses, while favourites remain unavailable. Failed
+refreshes do not count as misses.
+
+To inspect how long the current state has been known, paste this guarded
+template into **Developer tools > Template**. It returns seconds only for a
+current `on` or `off` state:
+
+```jinja
+{% set entity_id = 'binary_sensor.your_station_available' %}
+{% set current = states(entity_id) %}
+{% if current in ['on', 'off'] %}
+  {% set state = states.binary_sensor.your_station_available %}
+  {{ (as_timestamp(now()) - as_timestamp(state.last_changed)) | int }}
+{% else %}
+  No known availability state
+{% endif %}
+```
+
+`last_changed` is the time Home Assistant observed that transition, not the
+provider's actual transition time. CurbCharge does not restore a station's
+prior live state after a Home Assistant restart or config-entry reload; a fresh
+snapshot establishes the current state, so this duration does not span a
+restart. Earlier transitions may still be visible in Recorder-backed History
+while they remain within its retention.
+
+In an automation, `trigger.from_state` and `trigger.to_state` are the state
+objects on either side of the trigger. Guard against missing or non-binary
+states so startup, recovery from a gap, and attribute-only updates are not
+reported as known availability transitions:
+
+```yaml
+alias: Notify about an observed availability transition
+trigger:
+  - platform: state
+    entity_id: binary_sensor.your_station_available
+condition:
+  - condition: template
+    value_template: >
+      {{ trigger.from_state is not none
+         and trigger.to_state is not none
+         and trigger.from_state.state in ['on', 'off']
+         and trigger.to_state.state in ['on', 'off']
+         and trigger.from_state.state != trigger.to_state.state }}
+action:
+  - service: persistent_notification.create
+    data:
+      title: Station availability changed
+      message: >
+        Home Assistant observed {{ trigger.from_state.state }} to
+        {{ trigger.to_state.state }} at {{ trigger.to_state.last_changed }}.
+mode: single
+```
+
+The trigger timestamp is Home Assistant's observation time. This example reads
+built-in state objects only; it does not create a timestamp entity or save a
+separate transition history.
+
 ### Historical availability and connector counts
 
 The **Available** binary sensor gives a per-station `on`/`off` timeline from
@@ -466,11 +544,13 @@ sensor:
     end: "{{ now() }}"
 ```
 
-The helper uses Home Assistant's recorded state history and is limited by its
-retention. Unknown provider availability appears as unknown, while stale
-station data or a coordinator failure can make the entities unavailable.
-These are gaps, not confirmation that the station was unavailable; review the
-source timeline before interpreting a ratio as complete uptime.
+The helper uses Home Assistant's [History](https://www.home-assistant.io/integrations/history/)
+data, which is stored by [Recorder](https://www.home-assistant.io/integrations/recorder/),
+and is limited by its retention. Unknown provider availability appears as
+unknown, while stale station data or a coordinator failure can make the
+entities unavailable. These are gaps, not confirmation that the station was
+unavailable; review the source timeline before interpreting a ratio as complete
+uptime.
 
 Use a [History Graph](https://www.home-assistant.io/dashboards/history-graph/)
 for recent state changes and connector counts:
@@ -516,9 +596,10 @@ entities:
   - sensor.your_station_total_connectors
 ```
 
-Home Assistant's Recorder keeps detailed state history for 10 days by default
-(`purge_keep_days`); this can be changed in the Home Assistant Recorder
-configuration. Five-minute statistics follow that retention, while hourly
+Home Assistant's [Recorder](https://www.home-assistant.io/integrations/recorder/)
+keeps detailed state history for 10 days by default (`purge_keep_days`); this
+can be changed in the Home Assistant Recorder configuration. Five-minute
+statistics follow that retention, while hourly
 long-term statistics for measurement sensors such as availability percentage
 and connector counts are retained indefinitely. The hourly mean of the
 percentage sensor is a trend of reported `0%`/`100%` values, not an exact
