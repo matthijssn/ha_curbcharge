@@ -19,6 +19,7 @@ from custom_components.curbcharge.belgium import (
 )
 from custom_components.curbcharge.models import (
     ConnectorStatus,
+    DiscoveryFilterSettings,
     EVSEStatus,
     FavouriteStationReference,
 )
@@ -219,7 +220,20 @@ async def test_belgium_provider_maps_location_evse_connectors_and_status():
     client = BelgiumDatexClient(session, "token", NoWaitLimiter())
     provider = BelgiumChargingProvider(client)
 
-    stations = (await provider.async_get_stations(50.85, 4.35, 1000, 10)).nearby
+    stations = (
+        await provider.async_get_stations(
+            50.85,
+            4.35,
+            1000,
+            10,
+            discovery_filters=DiscoveryFilterSettings(
+                connector_types=("DOMESTIC_A",),
+                minimum_power_kw=500,
+                require_available=True,
+            ),
+            include_unknown=False,
+        )
+    ).nearby
 
     assert len(stations) == 1
     station = stations[0]
