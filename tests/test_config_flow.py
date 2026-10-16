@@ -1164,6 +1164,53 @@ async def test_reconfigure_entity_keeps_form_open_on_provider_error(hass, monkey
 
 
 @pytest.mark.asyncio
+async def test_reconfigure_rejects_entity_without_current_coordinates(
+    hass, monkeypatch
+):
+    entity_id = "sensor.vehicle_location"
+    hass.states.async_set(
+        entity_id,
+        "unavailable",
+        {CONF_LATITUDE: 52.2, CONF_LONGITUDE: 5.2},
+    )
+    old_location = (52.1, 5.1)
+    provider = FakeProvider()
+    monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=config_flow._config_unique_id(
+            PROVIDER_NDW_DOT_NL, *old_location, 500
+        ),
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_MANUAL,
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+            CONF_LATITUDE: old_location[0],
+            CONF_LONGITUDE: old_location[1],
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reconfigure", "entry_id": entry.entry_id},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_ENTITY}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_ENTITY: entity_id}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reconfigure_entity_location"
+    assert result["errors"] == {"base": "invalid_entity_location"}
+    assert entry.data[CONF_LOCATION_SOURCE] == LOCATION_MANUAL
+    assert provider.validation_calls == []
+
+
+@pytest.mark.asyncio
 async def test_reconfigure_missing_entity_requires_an_explicit_replacement(
     hass, monkeypatch
 ):
