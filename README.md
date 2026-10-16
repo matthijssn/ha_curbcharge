@@ -1,9 +1,10 @@
 # CurbCharge
 
-CurbCharge discovers public EV charging points near a Home Assistant home or
-manually configured location. It creates one device per charging point and
-reports provider-supplied availability, connector counts, power, distance,
-operator, tariff data when unambiguous, and a best-nearby recommendation.
+CurbCharge discovers public EV charging points near a Home Assistant home, a
+manually configured location, or a tracked Home Assistant entity. It creates
+one device per charging point and reports provider-supplied availability,
+connector counts, power, distance, operator, tariff data when unambiguous, and
+a best-nearby recommendation.
 
 ## Requirements
 
@@ -158,10 +159,20 @@ French, or German.
 ## Configuration
 
 Add **CurbCharge** from **Settings → Devices & services → Add integration**.
-Choose either Home Assistant's home coordinates or enter a latitude and
-longitude. Home coordinates are read at runtime and are not copied into the
-config entry. Manual coordinates are stored locally because they are needed to
-make each search.
+Choose one of three location sources:
+
+- **Home** uses Home Assistant's configured home coordinates when the
+  integration sets up; they are not copied into the config entry.
+- **Manual** uses the latitude and longitude you enter. These fixed coordinates
+  are stored locally because they are needed for each search.
+- **Entity** uses a generic Home Assistant entity selector. Select any entity
+  that currently exposes valid numeric `latitude` and `longitude` attributes;
+  it is not restricted to the `device_tracker` domain. CurbCharge stores the
+  selected entity ID locally and resolves its coordinates at runtime, without
+  persisting the changing coordinates.
+
+Use **Reconfigure** on an existing entry to change its location source or to
+select a replacement if an Entity source was renamed or removed.
 
 Choose a search radius from 100 to 10,000 metres and a maximum of 1 to 50
 stations (default 10), then select NDW DOT-NL or the Belgium preview. Belgium
@@ -169,11 +180,13 @@ setup also asks for the Eco-Movement API token and validates connectivity
 before creating the entry. The default polling interval is five minutes; the
 options flow permits intervals of one minute or longer, plus changes to the
 radius, station limit, and whether to include stations for which no
-availability data was returned. The options flow also lets you select
-favourite charging points by their displayed names. Favourites are stored per
-config entry, continue to be refreshed outside the search radius, and are
-added beyond the normal nearby station limit. The provider is selected during
-setup and cannot be switched from the options flow. See the
+availability data was returned. For Entity sources, the options flow also
+offers a movement threshold that defaults to 100 metres; set it to `0` to
+disable the threshold. Favourites can also be selected by their displayed
+names. They are stored per config entry, continue to be refreshed outside the
+search radius, and are added beyond the normal nearby station limit. The
+provider is selected during setup and cannot be switched from the options flow.
+See the
 [Belgium preview setup](#belgium-preview-setup) steps before choosing that
 provider.
 
@@ -183,8 +196,9 @@ provider.
    before setup. CurbCharge cannot issue a token; see the official
    [DATEX II API documentation][belgium-datex-api] for access and terms.
 2. Add CurbCharge from **Settings → Devices & services → Add integration**.
-   Choose Home Assistant's home location or enter a manual location, then set
-   the search radius and maximum station count.
+   Choose Home Assistant's home location, enter a manual location, or select
+   an entity with valid coordinates, then set the search radius and maximum
+   station count.
 3. Select **Eco-Movement Belgium**. On the next step, paste the token into the
    password field; CurbCharge validates it before creating the config entry.
 4. Keep the token private. It is stored in the config entry and redacted from
@@ -206,6 +220,9 @@ Netherlands published by NDW DOT-NL. Belgium DATEX II is available as a preview
 for authorized users, but is not considered release-ready until access,
 licensing, quotas, and real-payload compatibility are verified. CurbCharge
 reports provider data; it does not connect to or control physical chargers.
+An Entity location moves the search center but does not extend provider
+coverage. Each poll still applies the selected provider's geographic coverage,
+configured search radius, and station limit.
 
 ## Entities
 
@@ -266,11 +283,13 @@ then shorter distance, more available connectors, higher power, and a stable
 station identifier. It never compares different currencies; its `reason`
 attribute is a stable reason code.
 
-When a non-favourite station is absent from three consecutive successful
-refreshes, its entities and device are removed. Saved favourites remain as
-unavailable devices through provider misses; removing a favourite resumes the
-three-refresh removal behavior. Failed refreshes do not count as absence and
-do not replace the last successful coordinator data.
+When a tracked search center moves, newly matching stations are added on the
+next successful refresh. A non-favourite station absent from three consecutive
+successful refreshes becomes unavailable after the first miss and its entities
+and device are removed after the third. Saved favourites remain as unavailable
+devices through provider misses; removing a favourite resumes the three-refresh
+removal behavior. Provider failures and invalid location updates do not count
+as station absences or replace the last successful coordinator data.
 
 ## Data updates
 
@@ -287,6 +306,22 @@ additional small bounding-box requests; the provider client spaces these
 requests to respect its rate limit. Belgium favourites use the cached location
 snapshot and status requests through the shared limiter, so a large favourite
 list can lengthen a refresh.
+
+For an Entity source, CurbCharge samples coordinates during the normal
+coordinator refreshes. It does not subscribe to every entity state change or
+make a provider request for each GPS update. The movement threshold compares
+each valid coordinate with the last accepted search center: smaller fixes
+accumulate relative to that center, so GPS jitter below the threshold does not
+move the search. With a threshold of `0`, any changed coordinates are accepted
+at the next poll. Availability polling continues at its configured cadence
+whether or not the center moves. A move can take up to one polling interval,
+plus provider latency or rate-limit delays, to affect results; this is not
+real-time tracking.
+
+If the selected entity is unavailable or has invalid coordinates at a poll,
+CurbCharge skips the provider request, retains its last successful data, and
+marks station entities unavailable. It tries again on the next refresh;
+updates resume when valid coordinates return.
 
 ## Use cases and automations
 
@@ -340,8 +375,13 @@ notification action selected by the user.
 
 ## Troubleshooting
 
-- **No stations appear:** Check the configured home/manual location, radius,
+- **No stations appear:** Check the configured location source, radius,
   and that the selected provider has coverage for that area.
+- **Entity location is unavailable:** Check that the selected entity still
+  exists and currently reports valid latitude and longitude attributes. An
+  unavailable or invalid source skips provider requests until a later poll
+  finds valid coordinates. If the entity was renamed or removed, use
+  **Reconfigure** to select its replacement.
 - **Setup cannot connect:** Check Home Assistant internet access and retry
   after a provider rate limit expires.
 - **Belgium token rejected:** Confirm Eco-Movement issued the token for your
@@ -366,13 +406,16 @@ notification action selected by the user.
 ## Privacy and diagnostics
 
 Diagnostics omit station addresses and exact station coordinates, redact
-manual coordinates and saved favourite references from entry data, and round
-distances to the nearest kilometre. Favourite IDs, names, and coordinates are
-not included in the diagnostic station list. CurbCharge does not log
-coordinates, credentials, or raw provider responses. The integration does not
-request credentials from NDW. To download diagnostics, open **Settings →
-Devices & services → CurbCharge**, open the integration menu, and select
-**Download diagnostics**.
+manual coordinates, Entity source IDs, and saved favourite references from
+entry data, and round distances to the nearest kilometre. In Entity mode, the
+selected entity ID is stored locally in the config entry and redacted from
+diagnostics; its changing coordinates are not persisted or included in
+diagnostics. Favourite IDs, names, and coordinates are not included in the
+diagnostic station list. CurbCharge does not log entity IDs, coordinates,
+credentials, or raw provider responses. The integration does not request
+credentials from NDW. To download diagnostics, open **Settings → Devices &
+services → CurbCharge**, open the integration menu, and select **Download
+diagnostics**.
 
 ## Removing CurbCharge
 
