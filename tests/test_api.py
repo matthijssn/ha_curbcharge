@@ -31,6 +31,7 @@ from custom_components.curbcharge.const import (
 from custom_components.curbcharge.models import (
     ChargingTariff,
     ConnectorStatus,
+    DiscoveryFilterSettings,
     FavouriteStationReference,
     TariffStatus,
 )
@@ -119,6 +120,70 @@ async def test_get_stations_filters_by_radius_and_limit(sample_geojson):
     assert stations[0].country_code == "NL"
     assert stations[0].location is not None
     assert stations[0].location.provider_id == stations[0].provider_id
+    assert len(session.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_connector_filters_run_before_cap_and_tariff_lookup(
+    sample_geojson, monkeypatch
+):
+    payload = copy.deepcopy(sample_geojson)
+    first, second = payload["features"][:2]
+    first_t2 = next(
+        group
+        for group in first["properties"]["availabilities"]
+        if group["connector_type"] == "IEC_62196_T2"
+    )
+    first_t2["available"] = 0
+    first_t2["tariff_ids"] = ["excluded-tariff"]
+    first_chademo = next(
+        group
+        for group in first["properties"]["availabilities"]
+        if group["connector_type"] == "CHADEMO"
+    )
+    first_chademo["available"] = 1
+    second_group = second["properties"]["availabilities"][0]
+    second_group["available"] = 1
+    second_group["tariff_ids"] = ["selected-tariff"]
+
+    session = FakeSession([FakeResponse(payload)])
+    provider = NdwDotNlProvider(session)
+    tariff_requests: list[set[str]] = []
+
+    async def capture_tariff_requests(
+        tariff_ids: set[str],
+    ) -> dict[str, ChargingTariff | None]:
+        tariff_requests.append(set(tariff_ids))
+        return {}
+
+    monkeypatch.setattr(provider, "_async_get_tariffs", capture_tariff_requests)
+    result = await provider.async_get_stations(
+        52.0,
+        5.0,
+        500,
+        1,
+        discovery_filters=DiscoveryFilterSettings(
+            connector_types=("IEC_62196_T2",),
+            minimum_power_kw=11.0,
+            require_available=True,
+        ),
+    )
+
+    assert [station.provider_id for station in result.nearby] == ["NL-TEST-002"]
+    assert tariff_requests == [{"selected-tariff"}]
+    assert len(session.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_unknown_availability_is_filtered_before_station_cap(sample_geojson):
+    payload = copy.deepcopy(sample_geojson)
+    payload["features"][0]["properties"]["availabilities"] = None
+    session = FakeSession([FakeResponse(_without_tariffs(payload))])
+    provider = NdwDotNlProvider(session)
+
+    result = await provider.async_get_stations(52.0, 5.0, 500, 1, include_unknown=False)
+
+    assert [station.provider_id for station in result.nearby] == ["NL-TEST-002"]
     assert len(session.requests) == 1
 
 

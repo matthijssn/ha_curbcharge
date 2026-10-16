@@ -107,6 +107,37 @@ class DiscoveryFilterSettings:
 
         return cls(tuple(connector_types), minimum_power_kw, require_available)
 
+    def matches_station(self, station: ChargingStation) -> bool:
+        """Match if one connector group satisfies every active criterion."""
+        if (
+            not self.connector_types
+            and self.minimum_power_kw is None
+            and not self.require_available
+        ):
+            return True
+
+        return any(
+            (
+                not self.connector_types
+                or connector.connector_type in self.connector_types
+            )
+            and (
+                self.minimum_power_kw is None
+                or (
+                    connector.max_power_kw is not None
+                    and connector.max_power_kw >= self.minimum_power_kw
+                )
+            )
+            and (
+                not self.require_available
+                or (
+                    connector.available_count is not None
+                    and connector.available_count > 0
+                )
+            )
+            for connector in station.connectors
+        )
+
     def as_config(self) -> dict[str, object]:
         """Return a JSON-safe config-entry representation."""
         return {

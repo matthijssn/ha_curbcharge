@@ -41,6 +41,7 @@ from .models import (
     ChargingStation,
     ChargingTariff,
     ConnectorStatus,
+    DiscoveryFilterSettings,
     FavouriteStationReference,
     StationDiscoveryResult,
     TariffStatus,
@@ -198,17 +199,23 @@ class NdwDotNlProvider(BaseChargingProvider):
         radius_m: int,
         max_stations: int,
         favourites: tuple[FavouriteStationReference, ...] = (),
+        discovery_filters: DiscoveryFilterSettings | None = None,
+        include_unknown: bool = True,
     ) -> StationDiscoveryResult:
-        """Fetch normal results and add saved favourites without displacing them."""
+        """Filter nearby NDW stations before the cap, then add saved favourites."""
         features = await self._async_get_features(latitude, longitude, radius_m)
         parsed_stations = [
             _station_from_feature(feature, latitude, longitude) for feature in features
         ]
+        discovery_filters = discovery_filters or DiscoveryFilterSettings()
         stations_by_id = {station.provider_id: station for station in parsed_stations}
         nearby = [
             station
             for station in parsed_stations
-            if station.distance_m is not None and station.distance_m <= radius_m
+            if station.distance_m is not None
+            and station.distance_m <= radius_m
+            and (include_unknown or station.availability_reported)
+            and discovery_filters.matches_station(station)
         ]
         nearby.sort(key=lambda station: (station.distance_m, station.provider_id))
         nearby = nearby[:max_stations]

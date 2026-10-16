@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 
 from .models import (
+    DiscoveryFilterSettings,
     FavouriteStationReference,
     StationDiscoveryResult,
 )
@@ -86,6 +87,8 @@ class BaseChargingProvider(ABC):
         radius_m: int,
         max_stations: int,
         favourites: tuple[FavouriteStationReference, ...] = (),
+        discovery_filters: DiscoveryFilterSettings | None = None,
+        include_unknown: bool = True,
     ) -> StationDiscoveryResult:
         """Fetch stations within a radius."""
 

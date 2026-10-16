@@ -9,6 +9,7 @@ import pytest
 
 from custom_components.curbcharge.api import _station_from_feature
 from custom_components.curbcharge.models import (
+    DiscoveryFilterSettings,
     FavouriteStationReference,
     StationDiscoveryResult,
 )
@@ -46,6 +47,9 @@ class FakeProvider:
         self.station_calls: list[
             tuple[float, float, int, int, tuple[FavouriteStationReference, ...]]
         ] = []
+        self.discovery_filter_calls: list[
+            tuple[DiscoveryFilterSettings | None, bool]
+        ] = []
         self.validation_error: Exception | None = None
 
     async def async_get_stations(
@@ -55,10 +59,13 @@ class FakeProvider:
         radius_m: int,
         max_stations: int,
         favourites: tuple[FavouriteStationReference, ...] = (),
+        discovery_filters: DiscoveryFilterSettings | None = None,
+        include_unknown: bool = True,
     ):
         self.station_calls.append(
             (latitude, longitude, radius_m, max_stations, favourites)
         )
+        self.discovery_filter_calls.append((discovery_filters, include_unknown))
         if self.snapshots:
             result = self.snapshots.popleft()
             if isinstance(result, Exception):

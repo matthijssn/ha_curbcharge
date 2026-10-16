@@ -14,6 +14,7 @@ from custom_components.curbcharge.const import (
 from custom_components.curbcharge.coordinator import CurbChargeCoordinator
 from custom_components.curbcharge.geography import distance_m
 from custom_components.curbcharge.models import (
+    DiscoveryFilterSettings,
     FavouriteStationReference,
     StationDiscoveryResult,
 )
@@ -33,6 +34,7 @@ def _coordinator(
     favourites=(),
     location_resolver=None,
     location_movement_threshold_m=DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
+    discovery_filters=None,
 ):
     return CurbChargeCoordinator(
         hass,
@@ -46,6 +48,7 @@ def _coordinator(
         favourites,
         location_resolver=location_resolver,
         location_movement_threshold_m=location_movement_threshold_m,
+        discovery_filters=discovery_filters,
     )
 
 
@@ -80,6 +83,28 @@ async def test_coordinator_updates_and_adds_new_stations(hass, sample_stations):
         sample_stations[1].provider_id,
     }
     assert coordinator.last_successful_update is not None
+
+
+@pytest.mark.asyncio
+async def test_coordinator_passes_ndw_filters_and_unknown_setting(
+    hass, sample_stations
+):
+    provider = FakeProvider([(sample_stations[0],)])
+    filters = DiscoveryFilterSettings(
+        connector_types=("IEC_62196_T2",),
+        minimum_power_kw=11.0,
+        require_available=True,
+    )
+    coordinator = _coordinator(
+        hass,
+        provider,
+        include_unknown=False,
+        discovery_filters=filters,
+    )
+
+    await coordinator.async_refresh()
+
+    assert provider.discovery_filter_calls == [(filters, False)]
 
 
 @pytest.mark.asyncio
@@ -291,7 +316,14 @@ async def test_coordinator_rejects_unconfigured_favourite_result(hass, sample_st
 
     class UnexpectedFavouriteProvider(FakeProvider):
         async def async_get_stations(
-            self, latitude, longitude, radius_m, max_stations, favourites=()
+            self,
+            latitude,
+            longitude,
+            radius_m,
+            max_stations,
+            favourites=(),
+            discovery_filters=None,
+            include_unknown=True,
         ):
             return StationDiscoveryResult(nearby=(), favourites=(station,))
 
