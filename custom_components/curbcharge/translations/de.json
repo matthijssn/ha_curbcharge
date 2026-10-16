@@ -217,6 +217,15 @@
       "best_nearby_charger": {
         "name": "Beste Ladestation in der Nähe"
       },
+      "nearest_available_charger": {
+        "name": "Nächstgelegene verfügbare Ladestation"
+      },
+      "cheapest_available_charger": {
+        "name": "Günstigste verfügbare Ladestation"
+      },
+      "fastest_available_charger": {
+        "name": "Schnellste verfügbare Ladestation"
+      },
       "nearby_charging_units": {
         "name": "Ladeeinheiten in der Nähe"
       },
