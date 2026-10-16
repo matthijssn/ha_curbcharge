@@ -185,6 +185,9 @@
       "available_connectors": {
         "name": "Verfügbare Anschlüsse"
       },
+      "availability_percentage": {
+        "name": "Verfügbarkeitsprozentsatz"
+      },
       "occupied_connectors": {
         "name": "Belegte Anschlüsse"
       },

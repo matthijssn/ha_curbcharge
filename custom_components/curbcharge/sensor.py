@@ -69,6 +69,24 @@ class AvailableConnectorsSensor(CurbChargeStationEntity, SensorEntity):
         return None if station is None else station.available_connectors
 
 
+class AvailabilityPercentageSensor(CurbChargeStationEntity, SensorEntity):
+    """Expose the station's current binary availability as a percentage."""
+
+    _attr_translation_key = "availability_percentage"
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> float | None:
+        station = self.station
+        if station is None:
+            return None
+        available = station.has_available_connectors
+        if available is None:
+            return None
+        return 100.0 if available else 0.0
+
+
 class OccupiedConnectorsSensor(CurbChargeStationEntity, SensorEntity):
     """Occupied count only when the provider makes it knowable."""
 
@@ -842,6 +860,7 @@ def create_station_sensors(
     """Create the station's translated sensor entities."""
     return [
         AvailableConnectorsSensor(coordinator, station),
+        AvailabilityPercentageSensor(coordinator, station),
         OccupiedConnectorsSensor(coordinator, station),
         UnavailableConnectorsSensor(coordinator, station),
         TotalConnectorsSensor(coordinator, station),
