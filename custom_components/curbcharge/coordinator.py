@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -16,7 +16,11 @@ from homeassistant.helpers.update_coordinator import (
     UpdateFailed,
 )
 
-from .const import DOMAIN, MISSING_STATION_REFRESHES
+from .const import (
+    DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
+    DOMAIN,
+    MISSING_STATION_REFRESHES,
+)
 from .geography import distance_m
 from .models import (
     ChargingLocation,
@@ -48,6 +52,8 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         include_unknown: bool,
         favourites: tuple[FavouriteStationReference, ...] = (),
         config_entry: ConfigEntry[Any] | None = None,
+        location_resolver: Callable[[], tuple[float, float] | None] | None = None,
+        location_movement_threshold_m: int = DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
     ) -> None:
         """Initialize the shared coordinator."""
         self.provider = provider
@@ -61,6 +67,8 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         self.scan_interval_minutes = scan_interval_minutes
         self.include_unknown = include_unknown
         self.favourites = favourites
+        self.location_resolver = location_resolver
+        self.location_movement_threshold_m = location_movement_threshold_m
         self.favourite_ids = {favourite.provider_id for favourite in favourites}
         self.nearby_station_ids: set[str] | None = None
         self._config_entry_data = (
@@ -82,6 +90,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
 
     async def _async_update_data(self) -> dict[str, ChargingStation]:
         """Fetch stations and retain ones temporarily missing upstream."""
+        self._update_search_location()
         try:
             stations = await self.provider.async_get_stations(
                 self.latitude,
@@ -162,6 +171,23 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         self.last_successful_update = datetime.now(UTC)
         return current
 
+    def _update_search_location(self) -> None:
+        """Resolve and accept a tracked location before each provider refresh."""
+        if self.location_resolver is None:
+            return
+
+        location = self.location_resolver()
+        if location is None:
+            self._log_update_unavailable("LocationUnavailable")
+            raise UpdateFailed("Configured charging search location is unavailable")
+
+        if (
+            self.location_movement_threshold_m == 0
+            or distance_m(self.latitude, self.longitude, *location)
+            >= self.location_movement_threshold_m
+        ):
+            self.latitude, self.longitude = location
+
     def update_options(
         self,
         *,
@@ -170,6 +196,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         scan_interval_minutes: int,
         include_unknown: bool,
         favourites: tuple[FavouriteStationReference, ...],
+        location_movement_threshold_m: int = DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
     ) -> None:
         """Apply options without discarding station-missing history."""
         previous_default_interval = self._default_update_interval
@@ -179,6 +206,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         self.scan_interval_minutes = scan_interval_minutes
         self.include_unknown = include_unknown
         self.favourites = favourites
+        self.location_movement_threshold_m = location_movement_threshold_m
         self.favourite_ids = {favourite.provider_id for favourite in favourites}
         self._default_update_interval = timedelta(minutes=scan_interval_minutes)
         self.update_interval = (

@@ -472,6 +472,45 @@ async def test_belgium_provider_filters_by_radius_before_status_requests():
 
 
 @pytest.mark.asyncio
+async def test_belgium_provider_recalculates_radius_and_limit_for_moved_center():
+    document = _locations_document()
+    table = document["payload"]["aegiEnergyInfrastructureTablePublication"][
+        "energyInfrastructureTable"
+    ][0]
+    first_site = table["energyInfrastructureSite"][0]
+    second_site = copy.deepcopy(first_site)
+    second_site["idG"] = "site-2"
+    second_station = second_site["energyInfrastructureStation"][0]
+    second_station["idG"] = "station-2"
+    second_station["locationReference"]["locPointLocation"]["coordinatesForDisplay"][
+        "latitude"
+    ] = 51.0
+    second_point = second_station["refillPoint"][0]["aegiElectricChargingPoint"]
+    second_point["idG"] = "evse-internal-2"
+    second_point["externalIdentifier"][0]["identifier"] = "BE*EXAMPLE*2"
+    table["energyInfrastructureSite"].append(second_site)
+
+    for radius_m, max_stations in ((20_000, 1), (1_000, 10)):
+        session = FakeSession(
+            [
+                FakeResponse(copy.deepcopy(document)),
+                FakeResponse(_status_document()),
+            ]
+        )
+        provider = BelgiumChargingProvider(
+            BelgiumDatexClient(session, "token", NoWaitLimiter())
+        )
+
+        stations = (
+            await provider.async_get_stations(51.0, 4.35, radius_m, max_stations)
+        ).nearby
+
+        assert [station.provider_id for station in stations] == ["evse-internal-2"]
+        assert stations[0].distance_m == 0
+        assert len(session.requests) == 2
+
+
+@pytest.mark.asyncio
 async def test_request_limiter_enforces_ip_location_and_per_evse_limits(monkeypatch):
     current_time = [0.0]
     waits: list[float] = []

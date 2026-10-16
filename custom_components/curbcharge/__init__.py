@@ -1,6 +1,6 @@
 """CurbCharge Home Assistant integration."""
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -16,14 +16,18 @@ from .const import (
     CONF_API_TOKEN,
     CONF_FAVOURITES,
     CONF_INCLUDE_UNKNOWN,
+    CONF_LOCATION_MOVEMENT_THRESHOLD,
+    CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
     CONF_PROVIDER,
     CONF_SCAN_INTERVAL,
     CONF_SEARCH_RADIUS,
     DEFAULT_INCLUDE_UNKNOWN,
+    DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
     DEFAULT_MAX_STATIONS,
     DEFAULT_SCAN_INTERVAL_MINUTES,
     DEFAULT_SEARCH_RADIUS_M,
+    LOCATION_ENTITY,
     MAX_MAX_STATIONS,
     MAX_SEARCH_RADIUS_M,
     MIN_MAX_STATIONS,
@@ -74,6 +78,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
     max_stations = options.get(CONF_MAX_STATIONS, DEFAULT_MAX_STATIONS)
     scan_interval = options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES)
     include_unknown = options.get(CONF_INCLUDE_UNKNOWN, DEFAULT_INCLUDE_UNKNOWN)
+    location_movement_threshold_m = _location_movement_threshold(
+        options, entry.data.get(CONF_LOCATION_SOURCE)
+    )
     api_token = entry.data.get(CONF_API_TOKEN)
     try:
         favourites = parse_favourite_references(
@@ -97,6 +104,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
         or not isinstance(scan_interval, int)
         or scan_interval < MIN_SCAN_INTERVAL_MINUTES
         or not isinstance(include_unknown, bool)
+        or location_movement_threshold_m is None
     ):
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN,
@@ -118,6 +126,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
             translation_key="unsupported_provider",
         ) from err
 
+    location_resolver: Callable[[], tuple[float, float] | None] | None = None
+    if entry.data.get(CONF_LOCATION_SOURCE) == LOCATION_ENTITY:
+
+        def resolve_entity_location() -> tuple[float, float] | None:
+            return _entry_location(hass, entry.data)
+
+        location_resolver = resolve_entity_location
+
     coordinator = CurbChargeCoordinator(
         hass,
         provider,
@@ -129,6 +145,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
         include_unknown,
         favourites,
         config_entry=entry,
+        location_resolver=location_resolver,
+        location_movement_threshold_m=location_movement_threshold_m,
     )
     entry.runtime_data = coordinator
     await coordinator.async_config_entry_first_refresh()
@@ -160,8 +178,12 @@ async def _async_options_updated(
     max_stations = options.get(CONF_MAX_STATIONS, DEFAULT_MAX_STATIONS)
     scan_interval = options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES)
     include_unknown = options.get(CONF_INCLUDE_UNKNOWN, DEFAULT_INCLUDE_UNKNOWN)
+    location_movement_threshold_m = _location_movement_threshold(
+        options, entry.data.get(CONF_LOCATION_SOURCE)
+    )
     if (
-        provider_id != coordinator.provider_id
+        location_movement_threshold_m is None
+        or provider_id != coordinator.provider_id
         or not isinstance(radius_m, int)
         or not MIN_SEARCH_RADIUS_M <= radius_m <= MAX_SEARCH_RADIUS_M
         or not isinstance(max_stations, int)
@@ -187,6 +209,7 @@ async def _async_options_updated(
         scan_interval_minutes=scan_interval,
         include_unknown=include_unknown,
         favourites=favourites,
+        location_movement_threshold_m=location_movement_threshold_m,
     )
     await coordinator.async_request_refresh()
 
@@ -195,3 +218,17 @@ def _entry_location(
     hass: HomeAssistant, data: Mapping[str, Any]
 ) -> tuple[float, float] | None:
     return resolve_location(hass, data)
+
+
+def _location_movement_threshold(
+    options: Mapping[str, Any], location_source: object
+) -> int | None:
+    if location_source != LOCATION_ENTITY:
+        return DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M
+
+    threshold = options.get(
+        CONF_LOCATION_MOVEMENT_THRESHOLD, DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M
+    )
+    if not isinstance(threshold, int) or isinstance(threshold, bool) or threshold < 0:
+        return None
+    return threshold
