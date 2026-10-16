@@ -20,6 +20,7 @@ from custom_components.curbcharge.models import (
     TariffStatus,
 )
 from custom_components.curbcharge.sensor import (
+    AvailabilityPercentageSensor,
     AvailableConnectorsSensor,
     BestNearbyChargerSensor,
     CheapestAvailableChargerSensor,
@@ -567,6 +568,38 @@ def test_connector_sensors_do_not_infer_occupancy(hass, sample_stations):
     assert DistanceSensor(coordinator, station).native_value == 0
 
 
+def test_station_availability_percentage_mirrors_binary_sensor(hass, sample_stations):
+    station = sample_stations[0]
+    coordinator = _coordinator(hass, station)
+    sensor = AvailabilityPercentageSensor(coordinator, station)
+
+    assert sensor.native_value == 100
+    assert sensor.native_unit_of_measurement == PERCENTAGE
+    assert sensor.state_class is SensorStateClass.MEASUREMENT
+    assert sensor.unique_id == (
+        f"{station.provider}_{station.provider_id}_availability_percentage"
+    )
+
+    unavailable = replace(
+        station,
+        connectors=tuple(
+            replace(connector, available_count=0) for connector in station.connectors
+        ),
+    )
+    unavailable_sensor = AvailabilityPercentageSensor(
+        _coordinator(hass, unavailable), unavailable
+    )
+    assert unavailable_sensor.native_value == 0
+
+    unknown = replace(station, availability_reported=False)
+    unknown_sensor = AvailabilityPercentageSensor(_coordinator(hass, unknown), unknown)
+    assert unknown_sensor.native_value is None
+
+    stale = replace(station, is_stale=True)
+    stale_sensor = AvailabilityPercentageSensor(_coordinator(hass, stale), stale)
+    assert not stale_sensor.available
+
+
 def test_connector_group_sensor_exposes_provider_group_counts(hass, sample_stations):
     station = sample_stations[0]
     coordinator = _coordinator(hass, station)
@@ -933,13 +966,17 @@ def test_entities_are_unavailable_without_current_station_data(hass, sample_stat
     station = sample_stations[0]
     stale_coordinator = _coordinator(hass, replace(station, is_stale=True))
     assert not AvailableConnectorsSensor(stale_coordinator, station).available
+    assert not AvailabilityPercentageSensor(stale_coordinator, station).available
 
     coordinator = _coordinator(hass, station)
     connector_sensor = AvailableConnectorsSensor(coordinator, station)
+    percentage_sensor = AvailabilityPercentageSensor(coordinator, station)
     assert connector_sensor.available
 
     coordinator.async_set_updated_data({})
     assert not connector_sensor.available
+    assert not percentage_sensor.available
+    assert percentage_sensor.native_value is None
     assert StatusSummarySensor(coordinator, station).native_value == "unknown"
     assert StatusSummarySensor(coordinator, station).extra_state_attributes == {
         "provider_station_id": station.provider_id

@@ -185,6 +185,9 @@
       "available_connectors": {
         "name": "Beschikbare connectoren"
       },
+      "availability_percentage": {
+        "name": "Beschikbaarheidspercentage"
+      },
       "occupied_connectors": {
         "name": "Bezettingsconnectoren"
       },

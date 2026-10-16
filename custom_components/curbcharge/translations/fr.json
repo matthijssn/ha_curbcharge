@@ -185,6 +185,9 @@
       "available_connectors": {
         "name": "Connecteurs disponibles"
       },
+      "availability_percentage": {
+        "name": "Pourcentage de disponibilité"
+      },
       "occupied_connectors": {
         "name": "Connecteurs occupés"
       },

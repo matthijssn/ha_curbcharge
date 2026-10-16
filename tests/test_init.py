@@ -410,6 +410,7 @@ async def test_setup_unload_and_reload_keep_stable_entities(
     }
     expected_station_entities = {
         f"{provider_id}_{station.provider_id}_available",
+        f"{provider_id}_{station.provider_id}_availability_percentage",
         f"{provider_id}_{station.provider_id}_price_per_kwh",
         f"{provider_id}_{station.provider_id}_status_summary",
     }
@@ -471,6 +472,49 @@ async def test_setup_unload_and_reload_keep_stable_entities(
 
     assert before == after
     assert len(provider.station_calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_station_availability_percentage_is_unavailable_during_provider_failure(
+    hass, monkeypatch, sample_stations
+):
+    station = sample_stations[0]
+    provider = FakeProvider([(station,), ChargingProviderError("offline"), (station,)])
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    entry = _entry()
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    registry = er.async_get(hass)
+    availability_entity = next(
+        entity
+        for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
+        if entity.unique_id
+        == f"{station.provider}_{station.provider_id}_availability_percentage"
+    )
+
+    state = hass.states.get(availability_entity.entity_id)
+    assert state is not None
+    assert float(state.state) == 100.0
+
+    coordinator = entry.runtime_data
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert not coordinator.last_update_success
+    state = hass.states.get(availability_entity.entity_id)
+    assert state is not None
+    assert state.state == "unavailable"
+
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert coordinator.last_update_success
+    state = hass.states.get(availability_entity.entity_id)
+    assert state is not None
+    assert float(state.state) == 100.0
+    assert len(provider.station_calls) == 3
 
 
 @pytest.mark.asyncio
@@ -865,6 +909,12 @@ async def test_moving_search_adds_and_removes_station_entities_after_three_polls
         for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
         if entity.unique_id == f"{first.provider}_{first.provider_id}_available"
     )
+    first_availability_percentage = next(
+        entity
+        for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
+        if entity.unique_id
+        == f"{first.provider}_{first.provider_id}_availability_percentage"
+    )
 
     hass.states.async_set(
         entity_id,
@@ -885,6 +935,9 @@ async def test_moving_search_adds_and_removes_station_entities_after_three_polls
     first_state = hass.states.get(first_available.entity_id)
     assert first_state is not None
     assert first_state.state == "unavailable"
+    percentage_state = hass.states.get(first_availability_percentage.entity_id)
+    assert percentage_state is not None
+    assert percentage_state.state == "unavailable"
 
     await coordinator.async_refresh()
     await hass.async_block_till_done()
@@ -901,8 +954,16 @@ async def test_moving_search_adds_and_removes_station_entities_after_three_polls
         for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
     }
     assert f"{first.provider}_{first.provider_id}_available" not in entity_unique_ids
+    assert (
+        f"{first.provider}_{first.provider_id}_availability_percentage"
+        not in entity_unique_ids
+    )
     assert f"{newly_discovered.provider}_{newly_discovered.provider_id}_available" in (
         entity_unique_ids
+    )
+    assert (
+        f"{newly_discovered.provider}_{newly_discovered.provider_id}_availability_percentage"
+        in entity_unique_ids
     )
 
 
