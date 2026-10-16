@@ -39,7 +39,11 @@ from custom_components.curbcharge.entity import (
     location_device_identifier,
     station_device_identifier,
 )
-from custom_components.curbcharge.models import FavouriteStationReference
+from custom_components.curbcharge.models import (
+    DiscoveryFilterSettings,
+    FavouriteStationReference,
+    StationDiscoveryResult,
+)
 from custom_components.curbcharge.provider import ChargingProviderError
 from tests.conftest import FakeProvider
 
@@ -1431,6 +1435,7 @@ async def test_options_update_reloads_the_entry(hass, monkeypatch):
     [
         {CONF_SEARCH_RADIUS: 1},
         {CONF_FAVOURITES: "invalid"},
+        {CONF_CONNECTOR_TYPES: ["UNKNOWN_CODE"]},
     ],
 )
 async def test_invalid_live_options_reload_the_entry(hass, monkeypatch, options):
@@ -1457,6 +1462,41 @@ async def test_invalid_live_options_reload_the_entry(hass, monkeypatch, options)
     await curbcharge._async_options_updated(hass, entry)
 
     assert reloaded == [entry.entry_id]
+
+
+@pytest.mark.asyncio
+async def test_belgium_options_update_keeps_discovery_filters_empty(hass, monkeypatch):
+    provider = FakeProvider()
+    provider.provider_id = PROVIDER_ECO_MOVEMENT_BE
+    provider.provider_name = "Eco-Movement Belgium"
+    provider.country_code = "BE"
+    entry = _entry(
+        {CONF_PROVIDER: PROVIDER_ECO_MOVEMENT_BE, CONF_API_TOKEN: "test-token"}
+    )
+    entry.add_to_hass(hass)
+    coordinator = CurbChargeCoordinator(
+        hass,
+        provider,
+        52.0,
+        5.0,
+        500,
+        10,
+        5,
+        True,
+        config_entry=entry,
+    )
+    entry.runtime_data = coordinator
+    refresh_requests: list[bool] = []
+
+    async def request_refresh() -> None:
+        refresh_requests.append(True)
+
+    monkeypatch.setattr(coordinator, "async_request_refresh", request_refresh)
+
+    await curbcharge._async_options_updated(hass, entry)
+
+    assert coordinator.discovery_filters == DiscoveryFilterSettings()
+    assert refresh_requests == [True]
 
 
 @pytest.mark.asyncio
@@ -1543,6 +1583,130 @@ async def test_options_update_applies_favourites_to_live_coordinator(
             station.latitude,
             station.longitude,
         ),
+    )
+
+
+@pytest.mark.asyncio
+async def test_discovery_filter_changes_preserve_live_station_lifecycle(
+    hass, monkeypatch, sample_stations
+):
+    station = sample_stations[0]
+
+    class FilterAwareProvider(FakeProvider):
+        async def async_get_stations(
+            self,
+            latitude: float,
+            longitude: float,
+            radius_m: int,
+            max_stations: int,
+            favourites: tuple[FavouriteStationReference, ...] = (),
+            discovery_filters: DiscoveryFilterSettings | None = None,
+            include_unknown: bool = True,
+        ) -> StationDiscoveryResult:
+            result = await super().async_get_stations(
+                latitude,
+                longitude,
+                radius_m,
+                max_stations,
+                favourites,
+                discovery_filters,
+                include_unknown,
+            )
+            filters = discovery_filters or DiscoveryFilterSettings()
+            return StationDiscoveryResult(
+                nearby=tuple(
+                    candidate
+                    for candidate in result.nearby
+                    if (include_unknown or candidate.availability_reported)
+                    and filters.matches_station(candidate)
+                ),
+                favourites=result.favourites,
+            )
+
+    provider = FilterAwareProvider([(station,)])
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    entry = _entry()
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator = entry.runtime_data
+    registry = er.async_get(hass)
+    device_registry = dr.async_get(hass)
+    availability_entity = next(
+        entity
+        for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
+        if entity.unique_id == f"{station.provider}_{station.provider_id}_available"
+    )
+    station_identifier = station_device_identifier(
+        station.provider, station.provider_id
+    )
+
+    assert provider.discovery_filter_calls[0] == (DiscoveryFilterSettings(), True)
+    assert hass.states.get(availability_entity.entity_id).state == "on"
+
+    filters = DiscoveryFilterSettings(minimum_power_kw=60.0)
+    hass.config_entries.async_update_entry(entry, options={CONF_MIN_POWER_KW: 60.0})
+    await hass.async_block_till_done()
+
+    assert entry.runtime_data is coordinator
+    assert coordinator.discovery_filters == filters
+    assert provider.discovery_filter_calls[-1] == (filters, True)
+    assert coordinator._missing_refreshes == {station.provider_id: 1}
+    assert hass.states.get(availability_entity.entity_id).state == "unavailable"
+    assert _has_device(device_registry, entry.entry_id, station_identifier)
+
+    provider.snapshots.append(ChargingProviderError("offline"))
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert not coordinator.last_update_success
+    assert coordinator._missing_refreshes == {station.provider_id: 1}
+
+    matching_station = replace(
+        station,
+        connectors=tuple(
+            replace(connector, max_power_kw=60.0)
+            if connector.connector_type == "IEC_62196_T2"
+            else connector
+            for connector in station.connectors
+        ),
+    )
+    provider.snapshots.append((matching_station,))
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert coordinator.discovery_filters == filters
+    assert coordinator._missing_refreshes == {}
+    assert hass.states.get(availability_entity.entity_id).state == "on"
+    assert _has_device(device_registry, entry.entry_id, station_identifier)
+    assert (
+        sum(
+            entity.unique_id == f"{station.provider}_{station.provider_id}_available"
+            for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
+        )
+        == 1
+    )
+
+    provider.snapshots.append((station,))
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert coordinator._missing_refreshes == {station.provider_id: 1}
+
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert coordinator._missing_refreshes == {station.provider_id: 2}
+    assert _has_device(device_registry, entry.entry_id, station_identifier)
+
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert station.provider_id in coordinator.removed_station_ids
+    assert station.provider_id not in coordinator.data
+    assert not _has_device(device_registry, entry.entry_id, station_identifier)
+    assert all(
+        entity.unique_id != f"{station.provider}_{station.provider_id}_available"
+        for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
     )
 
 
