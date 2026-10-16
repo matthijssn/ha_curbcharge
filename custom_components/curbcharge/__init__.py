@@ -81,9 +81,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
     location_movement_threshold_m = _location_movement_threshold(
         options, entry.data.get(CONF_LOCATION_SOURCE)
     )
+    discovery_filters = DiscoveryFilterSettings()
     if provider_id == PROVIDER_NDW_DOT_NL:
         try:
-            DiscoveryFilterSettings.from_config(options)
+            discovery_filters = DiscoveryFilterSettings.from_config(options)
         except ValueError as err:
             raise ConfigEntryNotReady(
                 translation_domain=DOMAIN,
@@ -155,6 +156,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
         config_entry=entry,
         location_resolver=location_resolver,
         location_movement_threshold_m=location_movement_threshold_m,
+        discovery_filters=discovery_filters,
     )
     entry.runtime_data = coordinator
     await coordinator.async_config_entry_first_refresh()

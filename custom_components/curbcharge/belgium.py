@@ -32,6 +32,7 @@ from .models import (
     ChargingStation,
     ChargingTariff,
     ConnectorStatus,
+    DiscoveryFilterSettings,
     EVSEStatus,
     FavouriteStationReference,
     StationDiscoveryResult,
@@ -280,6 +281,8 @@ class BelgiumChargingProvider(BaseChargingProvider):
         radius_m: int,
         max_stations: int,
         favourites: tuple[FavouriteStationReference, ...] = (),
+        discovery_filters: DiscoveryFilterSettings | None = None,
+        include_unknown: bool = True,
     ) -> StationDiscoveryResult:
         """Fetch nearby EVSEs and separately selected favourites."""
         all_stations = _parse_static_stations(

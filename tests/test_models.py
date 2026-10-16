@@ -8,6 +8,7 @@ from custom_components.curbcharge.models import (
     ChargingConnector,
     ChargingLocation,
     ConnectorStatus,
+    DiscoveryFilterSettings,
     EVSEStatus,
     FavouriteStationReference,
     parse_favourite_references,
@@ -81,6 +82,57 @@ def test_station_without_availability_remains_unknown(sample_stations):
     assert station.unknown_connectors is None
     assert station.max_power_kw is None
     assert station.connector_types == ()
+
+
+def test_discovery_filters_require_one_connector_group_to_match_all_criteria(
+    sample_stations,
+):
+    station = sample_stations[0]
+    type_two = next(
+        connector
+        for connector in station.connectors
+        if connector.connector_type == "IEC_62196_T2"
+    )
+    filters = DiscoveryFilterSettings(
+        connector_types=("IEC_62196_T2",),
+        minimum_power_kw=50,
+        require_available=True,
+    )
+
+    assert not filters.matches_station(station)
+    assert DiscoveryFilterSettings(
+        connector_types=("IEC_62196_T2",),
+        minimum_power_kw=22,
+        require_available=True,
+    ).matches_station(station)
+
+    matching_group = replace(type_two, max_power_kw=50, available_count=1)
+    assert filters.matches_station(replace(station, connectors=(matching_group,)))
+    assert DiscoveryFilterSettings().matches_station(replace(station, connectors=()))
+
+
+def test_discovery_filters_reject_unknown_group_data(sample_stations):
+    station = sample_stations[0]
+    connector = next(
+        connector
+        for connector in station.connectors
+        if connector.connector_type == "IEC_62196_T2"
+    )
+
+    assert not DiscoveryFilterSettings(
+        connector_types=("IEC_62196_T2",)
+    ).matches_station(
+        replace(station, connectors=(replace(connector, connector_type=None),))
+    )
+    assert not DiscoveryFilterSettings(minimum_power_kw=1).matches_station(
+        replace(station, connectors=(replace(connector, max_power_kw=None),))
+    )
+    assert not DiscoveryFilterSettings(require_available=True).matches_station(
+        replace(station, connectors=(replace(connector, available_count=None),))
+    )
+    assert not DiscoveryFilterSettings(require_available=True).matches_station(
+        replace(station, connectors=(replace(connector, available_count=0),))
+    )
 
 
 def test_station_with_an_empty_report_has_zero_counts(sample_stations):
