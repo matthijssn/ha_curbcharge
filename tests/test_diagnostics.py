@@ -15,11 +15,13 @@ from custom_components.curbcharge.belgium import (
 from custom_components.curbcharge.const import (
     CONF_API_TOKEN,
     CONF_FAVOURITES,
+    CONF_LOCATION_ENTITY,
     CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
     CONF_PROVIDER,
     CONF_SEARCH_RADIUS,
     DOMAIN,
+    LOCATION_ENTITY,
     LOCATION_MANUAL,
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NDW_DOT_NL,
@@ -112,6 +114,43 @@ async def test_diagnostics_redact_coordinates_and_addresses(hass, sample_station
     assert unknown_diagnostics["availability_reported"] is False
     assert unknown_diagnostics["available_connectors"] is None
     assert len(provider.snapshots) == 1
+
+
+@pytest.mark.asyncio
+async def test_diagnostics_redact_entity_location_id_and_exact_coordinates(hass):
+    entity_id = "device_tracker.private_vehicle"
+    latitude = 52.123456
+    longitude = 5.654321
+    hass.states.async_set(
+        entity_id,
+        "moving",
+        {CONF_LATITUDE: latitude, CONF_LONGITUDE: longitude},
+    )
+    coordinator = CurbChargeCoordinator(
+        hass, FakeProvider(), latitude, longitude, 500, 10, 5, True
+    )
+    coordinator.async_set_updated_data({})
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="entity-search-area",
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_ENTITY,
+            CONF_LOCATION_ENTITY: entity_id,
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+        },
+    )
+    entry.runtime_data = coordinator
+
+    diagnostics = await async_get_config_entry_diagnostics(hass, entry)
+    serialized = json.dumps(diagnostics)
+
+    assert entity_id not in serialized
+    assert str(latitude) not in serialized
+    assert str(longitude) not in serialized
+    assert CONF_LATITUDE not in diagnostics["entry_data"]
+    assert CONF_LONGITUDE not in diagnostics["entry_data"]
 
 
 @pytest.mark.asyncio

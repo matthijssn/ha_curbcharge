@@ -818,38 +818,84 @@ async def test_legacy_netherlands_entry_loads_without_provider_field(
 
 
 @pytest.mark.asyncio
-async def test_new_stations_are_added_and_removed_after_three_successful_polls(
+async def test_moving_search_adds_and_removes_station_entities_after_three_polls(
     hass, monkeypatch, sample_stations
 ):
     first, newly_discovered = sample_stations[:2]
+    entity_id = "sensor.vehicle_location"
+    initial = (52.0, 5.0)
+    moved = (52.0011, 5.0)
+    hass.states.async_set(
+        entity_id,
+        "moving",
+        {CONF_LATITUDE: initial[0], CONF_LONGITUDE: initial[1]},
+    )
     provider = FakeProvider(
-        [(first,), (first, newly_discovered), (first,), (first,), (first,)]
+        [(first,), (newly_discovered,), (newly_discovered,), (newly_discovered,)]
     )
     monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
-    entry = _entry()
+    entry = _entity_entry(entity_id)
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     coordinator = entry.runtime_data
     device_registry = dr.async_get(hass)
-    identifier = (
+    first_identifier = (
+        DOMAIN,
+        f"{first.provider}:{first.provider_id}",
+    )
+    new_identifier = (
         DOMAIN,
         f"{newly_discovered.provider}:{newly_discovered.provider_id}",
     )
 
-    await coordinator.async_refresh()
+    assert _has_device(device_registry, entry.entry_id, first_identifier)
+    assert not _has_device(device_registry, entry.entry_id, new_identifier)
+    registry = er.async_get(hass)
+    first_available = next(
+        entity
+        for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
+        if entity.unique_id == f"{first.provider}_{first.provider_id}_available"
+    )
+
+    hass.states.async_set(
+        entity_id,
+        "moving",
+        {CONF_LATITUDE: moved[0], CONF_LONGITUDE: moved[1]},
+    )
     await hass.async_block_till_done()
-    assert _has_device(device_registry, entry.entry_id, identifier)
+    assert len(provider.station_calls) == 1
 
     await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert provider.station_calls[-1][:2] == moved
+    assert _has_device(device_registry, entry.entry_id, first_identifier)
+    assert _has_device(device_registry, entry.entry_id, new_identifier)
+    assert first_available.unique_id == (
+        f"{first.provider}_{first.provider_id}_available"
+    )
+    first_state = hass.states.get(first_available.entity_id)
+    assert first_state is not None
+    assert first_state.state == "unavailable"
+
     await coordinator.async_refresh()
     await hass.async_block_till_done()
-    assert _has_device(device_registry, entry.entry_id, identifier)
+    assert _has_device(device_registry, entry.entry_id, first_identifier)
 
     await coordinator.async_refresh()
     await hass.async_block_till_done()
 
-    assert not _has_device(device_registry, entry.entry_id, identifier)
+    assert first.provider_id in coordinator.removed_station_ids
+    assert not _has_device(device_registry, entry.entry_id, first_identifier)
+    assert _has_device(device_registry, entry.entry_id, new_identifier)
+    entity_unique_ids = {
+        entity.unique_id
+        for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
+    }
+    assert f"{first.provider}_{first.provider_id}_available" not in entity_unique_ids
+    assert f"{newly_discovered.provider}_{newly_discovered.provider_id}_available" in (
+        entity_unique_ids
+    )
 
 
 @pytest.mark.asyncio
@@ -1196,7 +1242,7 @@ async def test_entity_location_updates_on_polls_without_state_change_requests(
 
 @pytest.mark.asyncio
 async def test_invalid_entity_location_makes_entities_unavailable_then_recovers(
-    hass, monkeypatch, sample_stations
+    hass, monkeypatch, sample_stations, caplog
 ):
     entity_id = "sensor.vehicle_location"
     location = (52.0, 5.0)
@@ -1236,12 +1282,17 @@ async def test_invalid_entity_location_makes_entities_unavailable_then_recovers(
     await hass.async_block_till_done()
     assert len(provider.station_calls) == 1
 
+    caplog.clear()
     await coordinator.async_refresh()
     await hass.async_block_till_done()
 
     assert not coordinator.last_update_success
     assert len(provider.station_calls) == 1
     assert coordinator.data[station.provider_id] == station
+    assert "CurbCharge data update failed (LocationUnavailable)" in caplog.text
+    assert entity_id not in caplog.text
+    assert str(location[0]) not in caplog.text
+    assert str(location[1]) not in caplog.text
     state = hass.states.get(available_entity.entity_id)
     assert state is not None
     assert state.state == "unavailable"

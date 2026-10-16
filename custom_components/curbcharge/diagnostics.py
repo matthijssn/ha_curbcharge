@@ -11,13 +11,20 @@ from .const import (
     CONF_API_TOKEN,
     CONF_FAVOURITES,
     CONF_INCLUDE_UNKNOWN,
+    CONF_LOCATION_ENTITY,
     CONF_LOCATION_SOURCE,
     CONF_PROVIDER,
     CONF_SEARCH_RADIUS,
 )
 from .coordinator import CurbChargeCoordinator
 
-TO_REDACT = [CONF_LATITUDE, CONF_LONGITUDE, CONF_API_TOKEN, CONF_FAVOURITES]
+TO_REDACT = [
+    CONF_LATITUDE,
+    CONF_LONGITUDE,
+    CONF_LOCATION_ENTITY,
+    CONF_API_TOKEN,
+    CONF_FAVOURITES,
+]
 
 
 async def async_get_config_entry_diagnostics(
