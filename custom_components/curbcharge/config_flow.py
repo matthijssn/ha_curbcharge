@@ -24,13 +24,16 @@ from .api import create_provider
 from .belgium import is_valid_belgium_api_token
 from .const import (
     CONF_API_TOKEN,
+    CONF_CONNECTOR_TYPES,
     CONF_FAVOURITES,
     CONF_INCLUDE_UNKNOWN,
     CONF_LOCATION_ENTITY,
     CONF_LOCATION_MOVEMENT_THRESHOLD,
     CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
+    CONF_MIN_POWER_KW,
     CONF_PROVIDER,
+    CONF_REQUIRE_AVAILABLE,
     CONF_SCAN_INTERVAL,
     CONF_SEARCH_RADIUS,
     DEFAULT_INCLUDE_UNKNOWN,
@@ -47,6 +50,7 @@ from .const import (
     MIN_MAX_STATIONS,
     MIN_SCAN_INTERVAL_MINUTES,
     MIN_SEARCH_RADIUS_M,
+    NDW_CONNECTOR_TYPE_CODES,
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NDW_DOT_NL,
 )
@@ -54,6 +58,7 @@ from .coordinator import CurbChargeCoordinator
 from .location import resolve_location, valid_coordinates
 from .models import (
     ChargingStation,
+    DiscoveryFilterSettings,
     FavouriteStationReference,
     parse_favourite_references,
 )
@@ -166,6 +171,51 @@ def station_options_schema(
     )
 
 
+def _discovery_filter_fields(
+    settings: DiscoveryFilterSettings | None = None,
+) -> dict[Any, Any]:
+    """Return translated NDW-only discovery filter fields."""
+    settings = settings or DiscoveryFilterSettings()
+    return {
+        vol.Required(
+            CONF_CONNECTOR_TYPES, default=list(settings.connector_types)
+        ): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=list(NDW_CONNECTOR_TYPE_CODES),
+                multiple=True,
+                mode=selector.SelectSelectorMode.LIST,
+                translation_key="ndw_connector_type",
+            )
+        ),
+        vol.Optional(CONF_MIN_POWER_KW, default=settings.minimum_power_kw): vol.Any(
+            None,
+            vol.All(
+                selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=0,
+                        step="any",
+                        mode=selector.NumberSelectorMode.BOX,
+                    )
+                ),
+                _validate_minimum_power_kw,
+            ),
+        ),
+        vol.Required(
+            CONF_REQUIRE_AVAILABLE, default=settings.require_available
+        ): selector.BooleanSelector(),
+    }
+
+
+def _validate_minimum_power_kw(value: Any) -> float:
+    """Validate the positive, finite power selector value."""
+    try:
+        settings = DiscoveryFilterSettings.from_config({CONF_MIN_POWER_KW: value})
+    except ValueError as err:
+        raise vol.Invalid("Minimum power must be a finite positive number") from err
+    assert settings.minimum_power_kw is not None
+    return settings.minimum_power_kw
+
+
 def options_schema(
     defaults: dict[str, Any],
     *,
@@ -233,6 +283,10 @@ def options_schema(
             )
         ),
     }
+    if provider_id == PROVIDER_NDW_DOT_NL:
+        schema.update(
+            _discovery_filter_fields(DiscoveryFilterSettings.from_config(defaults))
+        )
     if defaults.get(CONF_LOCATION_SOURCE) == LOCATION_ENTITY:
         schema[
             vol.Required(
@@ -282,6 +336,7 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._provider_id = PROVIDER_NDW_DOT_NL
         self._search_radius = DEFAULT_SEARCH_RADIUS_M
         self._max_stations = DEFAULT_MAX_STATIONS
+        self._discovery_filters = DiscoveryFilterSettings()
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -642,10 +697,24 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             if provider_id == PROVIDER_ECO_MOVEMENT_BE:
                 return await self.async_step_belgium_credentials()
-            return await self._async_validate_and_create_entry()
+            return await self.async_step_discovery_filters()
 
         return _show_form(
             self, step_id="station_options", data_schema=station_options_schema()
+        )
+
+    async def async_step_discovery_filters(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Configure the optional NDW connector-group filters."""
+        if user_input is not None:
+            self._discovery_filters = DiscoveryFilterSettings.from_config(user_input)
+            return await self._async_validate_and_create_entry()
+
+        return _show_form(
+            self,
+            step_id="discovery_filters",
+            data_schema=vol.Schema(_discovery_filter_fields(self._discovery_filters)),
         )
 
     async def async_step_belgium_credentials(
@@ -697,10 +766,9 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             return _show_form(
                 self,
-                step_id="station_options",
-                data_schema=station_options_schema(
-                    radius=self._search_radius,
-                    max_stations=self._max_stations,
+                step_id="discovery_filters",
+                data_schema=vol.Schema(
+                    _discovery_filter_fields(self._discovery_filters)
                 ),
                 errors={"base": _flow_error(err)},
             )
@@ -717,6 +785,8 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         elif self._location_source == LOCATION_ENTITY:
             assert self._location_entity_id is not None
             data[CONF_LOCATION_ENTITY] = self._location_entity_id
+        if self._provider_id == PROVIDER_NDW_DOT_NL:
+            data.update(self._discovery_filters.as_config())
         if token is not None:
             data[CONF_API_TOKEN] = token
         return self.async_create_entry(title="CurbCharge", data=data)
@@ -749,6 +819,11 @@ class CurbChargeOptionsFlow(config_entries.OptionsFlow):
         )
 
         if user_input is not None:
+            discovery_filters = (
+                DiscoveryFilterSettings.from_config(user_input)
+                if provider_id == PROVIDER_NDW_DOT_NL
+                else None
+            )
             try:
                 favourites = _selected_favourites(
                     user_input.get(CONF_FAVOURITES),
@@ -773,6 +848,8 @@ class CurbChargeOptionsFlow(config_entries.OptionsFlow):
                 CONF_INCLUDE_UNKNOWN: user_input[CONF_INCLUDE_UNKNOWN],
                 CONF_FAVOURITES: [asdict(favourite) for favourite in favourites],
             }
+            if discovery_filters is not None:
+                data.update(discovery_filters.as_config())
             if defaults.get(CONF_LOCATION_SOURCE) == LOCATION_ENTITY:
                 data[CONF_LOCATION_MOVEMENT_THRESHOLD] = int(
                     user_input.get(

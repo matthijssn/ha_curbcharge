@@ -79,6 +79,20 @@
           "provider": "Fournisseur de données utilisé pour découvrir les bornes et leur disponibilité."
         }
       },
+      "discovery_filters": {
+        "title": "Filtrer les bornes à proximité",
+        "description": "Filtrez éventuellement les bornes NDW selon leurs groupes de connecteurs. Les filtres sont appliqués avant la limite de bornes.",
+        "data": {
+          "connector_types": "Types de connecteur",
+          "min_power_kw": "Puissance minimale (kW)",
+          "require_available": "Exiger un connecteur disponible"
+        },
+        "data_description": {
+          "connector_types": "Laissez vide pour tous les types. Un groupe de connecteurs correspondant à l'un des types sélectionnés doit aussi respecter les autres filtres.",
+          "min_power_kw": "Facultatif. Un groupe de connecteurs correspondant doit déclarer au moins cette puissance.",
+          "require_available": "N'inclure que les bornes dont un groupe correspondant signale des connecteurs disponibles."
+        }
+      },
       "belgium_credentials": {
         "title": "Connexion à Eco-Movement Belgique",
         "description": "Saisissez le jeton API qui vous a été délivré par Eco-Movement. Il est stocké dans cette entrée et masqué dans les diagnostics.",
@@ -128,6 +142,9 @@
           "max_stations": "Nombre maximal de bornes",
           "provider": "Fournisseur",
           "include_unknown": "Inclure les bornes sans données de disponibilité",
+          "connector_types": "Types de connecteur",
+          "min_power_kw": "Puissance minimale (kW)",
+          "require_available": "Exiger un connecteur disponible",
           "favourites": "Bornes favorites",
           "location_movement_threshold": "Seuil de déplacement de la position (m)"
         },
@@ -137,6 +154,9 @@
           "max_stations": "Limiter le nombre de bornes et d'entités associées.",
           "provider": "Fournisseur de données utilisé pour découvrir les bornes et leur disponibilité.",
           "include_unknown": "Inclure les bornes lorsque le fournisseur ne communique pas leur disponibilité.",
+          "connector_types": "Laissez vide pour tous les types. Un groupe de connecteurs correspondant à l'un des types sélectionnés doit aussi respecter les autres filtres.",
+          "min_power_kw": "Facultatif. Un groupe de connecteurs correspondant doit déclarer au moins cette puissance.",
+          "require_available": "N'inclure que les bornes dont un groupe correspondant signale des connecteurs disponibles.",
           "favourites": "Sélectionnez les bornes par leur nom. Les bornes favorites restent disponibles hors du rayon de recherche et s'ajoutent à la limite des bornes à proximité.",
           "location_movement_threshold": "Distance minimale que l'entité sélectionnée doit parcourir avant la mise à jour de la position de recherche. Saisissez 0 pour désactiver ce seuil."
         }
@@ -166,6 +186,17 @@
         "home": "Coordonnées du domicile Home Assistant",
         "manual": "Latitude et longitude manuelles",
         "entity": "Entité Home Assistant"
+      }
+    },
+    "ndw_connector_type": {
+      "options": {
+        "IEC_62196_T2": "Type 2 (Mennekes)",
+        "IEC_62196_T2_COMBO": "CCS (Combo 2)",
+        "CHADEMO": "CHAdeMO",
+        "IEC_60309_2_SINGLE_16": "CEE 16 A (monophasé)",
+        "IEC_60309_2_THREE_16": "CEE 16 A (triphasé)",
+        "IEC_60309_2_THREE_32": "CEE 32 A (triphasé)",
+        "DOMESTIC_A": "Prise domestique type A (NEMA 1-15)"
       }
     },
     "provider": {

@@ -10,6 +10,16 @@ from decimal import Decimal
 from enum import StrEnum
 from typing import cast
 
+from .const import (
+    CONF_CONNECTOR_TYPES,
+    CONF_MIN_POWER_KW,
+    CONF_REQUIRE_AVAILABLE,
+    DEFAULT_CONNECTOR_TYPES,
+    DEFAULT_MIN_POWER_KW,
+    DEFAULT_REQUIRE_AVAILABLE,
+    NDW_CONNECTOR_TYPE_CODES,
+)
+
 
 class ConnectorStatus(StrEnum):
     """Known connector states."""
@@ -45,6 +55,63 @@ class TariffStatus(StrEnum):
     INACTIVE = "inactive"
     INCOMPLETE = "incomplete"
     AMBIGUOUS = "ambiguous"
+
+
+@dataclass(frozen=True, slots=True)
+class DiscoveryFilterSettings:
+    """Validated NDW connector-group filters from config-entry settings."""
+
+    connector_types: tuple[str, ...] = DEFAULT_CONNECTOR_TYPES
+    minimum_power_kw: float | None = DEFAULT_MIN_POWER_KW
+    require_available: bool = DEFAULT_REQUIRE_AVAILABLE
+
+    @classmethod
+    def from_config(cls, config: Mapping[str, object]) -> DiscoveryFilterSettings:
+        """Validate saved filter settings and apply defaults for older entries."""
+        raw_connector_types = config.get(CONF_CONNECTOR_TYPES, DEFAULT_CONNECTOR_TYPES)
+        if raw_connector_types is None:
+            raw_connector_types = DEFAULT_CONNECTOR_TYPES
+        if not isinstance(raw_connector_types, (list, tuple)):
+            raise ValueError("Invalid connector type filters")
+
+        connector_types: list[str] = []
+        for connector_type in raw_connector_types:
+            if (
+                not isinstance(connector_type, str)
+                or connector_type not in NDW_CONNECTOR_TYPE_CODES
+            ):
+                raise ValueError("Invalid connector type filter")
+            if connector_type not in connector_types:
+                connector_types.append(connector_type)
+
+        raw_minimum_power = config.get(CONF_MIN_POWER_KW, DEFAULT_MIN_POWER_KW)
+        if raw_minimum_power is None:
+            minimum_power_kw = None
+        elif (
+            isinstance(raw_minimum_power, bool)
+            or not isinstance(raw_minimum_power, (int, float))
+            or not math.isfinite(raw_minimum_power)
+            or raw_minimum_power <= 0
+        ):
+            raise ValueError("Minimum power must be finite and positive")
+        else:
+            minimum_power_kw = float(raw_minimum_power)
+
+        require_available = config.get(
+            CONF_REQUIRE_AVAILABLE, DEFAULT_REQUIRE_AVAILABLE
+        )
+        if not isinstance(require_available, bool):
+            raise ValueError("Require-available filter must be a boolean")
+
+        return cls(tuple(connector_types), minimum_power_kw, require_available)
+
+    def as_config(self) -> dict[str, object]:
+        """Return a JSON-safe config-entry representation."""
+        return {
+            CONF_CONNECTOR_TYPES: list(self.connector_types),
+            CONF_MIN_POWER_KW: self.minimum_power_kw,
+            CONF_REQUIRE_AVAILABLE: self.require_available,
+        }
 
 
 @dataclass(frozen=True, slots=True)

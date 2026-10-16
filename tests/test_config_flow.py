@@ -11,13 +11,16 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.curbcharge import config_flow
 from custom_components.curbcharge.const import (
     CONF_API_TOKEN,
+    CONF_CONNECTOR_TYPES,
     CONF_FAVOURITES,
     CONF_INCLUDE_UNKNOWN,
     CONF_LOCATION_ENTITY,
     CONF_LOCATION_MOVEMENT_THRESHOLD,
     CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
+    CONF_MIN_POWER_KW,
     CONF_PROVIDER,
+    CONF_REQUIRE_AVAILABLE,
     CONF_SCAN_INTERVAL,
     CONF_SEARCH_RADIUS,
     DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
@@ -25,11 +28,15 @@ from custom_components.curbcharge.const import (
     LOCATION_ENTITY,
     LOCATION_HOME,
     LOCATION_MANUAL,
+    NDW_CONNECTOR_TYPE_CODES,
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NDW_DOT_NL,
 )
 from custom_components.curbcharge.coordinator import CurbChargeCoordinator
-from custom_components.curbcharge.models import FavouriteStationReference
+from custom_components.curbcharge.models import (
+    DiscoveryFilterSettings,
+    FavouriteStationReference,
+)
 from custom_components.curbcharge.provider import (
     AuthenticationError,
     ChargingProviderError,
@@ -54,6 +61,18 @@ def _station_options(
     }
 
 
+def _discovery_filters(
+    connector_types: list[str] | None = None,
+    minimum_power_kw: float | None = None,
+    require_available: bool = False,
+) -> dict[str, object]:
+    return {
+        CONF_CONNECTOR_TYPES: connector_types or [],
+        CONF_MIN_POWER_KW: minimum_power_kw,
+        CONF_REQUIRE_AVAILABLE: require_available,
+    }
+
+
 @pytest.mark.asyncio
 async def test_config_flow_uses_home_coordinates(hass, monkeypatch):
     hass.config.latitude = 52.1
@@ -72,10 +91,17 @@ async def test_config_flow_uses_home_coordinates(hass, monkeypatch):
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], _station_options()
     )
+    assert result["step_id"] == "discovery_filters"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _discovery_filters()
+    )
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert provider.validation_calls == [(52.1, 5.1, 500)]
     assert result["data"][CONF_LOCATION_SOURCE] == LOCATION_HOME
+    assert result["data"][CONF_CONNECTOR_TYPES] == []
+    assert result["data"][CONF_MIN_POWER_KW] is None
+    assert result["data"][CONF_REQUIRE_AVAILABLE] is False
     assert "latitude" not in result["data"]
     assert "longitude" not in result["data"]
     assert "52.1" not in result["result"].unique_id
@@ -96,6 +122,9 @@ async def test_config_flow_uses_manual_coordinates(hass, monkeypatch):
     )
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], _station_options()
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _discovery_filters()
     )
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
@@ -134,6 +163,10 @@ async def test_config_flow_uses_entity_location_without_storing_coordinates(
     assert result["step_id"] == "station_options"
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], _station_options()
+    )
+    assert result["step_id"] == "discovery_filters"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _discovery_filters()
     )
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
@@ -622,6 +655,78 @@ def test_manual_coordinates_and_radius_are_range_validated():
         )
 
 
+def test_discovery_filter_settings_default_and_validate():
+    assert DiscoveryFilterSettings.from_config({}) == DiscoveryFilterSettings()
+    settings = DiscoveryFilterSettings.from_config(
+        _discovery_filters(
+            ["IEC_62196_T2", "CHADEMO"],
+            minimum_power_kw=11.0,
+            require_available=True,
+        )
+    )
+    assert settings.connector_types == ("IEC_62196_T2", "CHADEMO")
+    assert settings.minimum_power_kw == 11.0
+    assert settings.require_available
+
+    invalid_settings = (
+        {CONF_CONNECTOR_TYPES: "IEC_62196_T2"},
+        {CONF_CONNECTOR_TYPES: ["UNKNOWN_CODE"]},
+        {CONF_MIN_POWER_KW: 0},
+        {CONF_MIN_POWER_KW: -1},
+        {CONF_MIN_POWER_KW: float("inf")},
+        {CONF_MIN_POWER_KW: float("nan")},
+        {CONF_MIN_POWER_KW: True},
+        {CONF_REQUIRE_AVAILABLE: "true"},
+    )
+    for invalid in invalid_settings:
+        with pytest.raises(ValueError):
+            DiscoveryFilterSettings.from_config(invalid)
+
+
+def test_ndw_discovery_filter_options_default_and_validate():
+    schema = config_flow.options_schema({})
+    values = {
+        CONF_SCAN_INTERVAL: 5,
+        CONF_SEARCH_RADIUS: 500,
+        CONF_MAX_STATIONS: 10,
+        CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+        CONF_INCLUDE_UNKNOWN: True,
+    }
+    defaults = schema(values)
+    assert defaults[CONF_CONNECTOR_TYPES] == []
+    assert defaults[CONF_MIN_POWER_KW] is None
+    assert defaults[CONF_REQUIRE_AVAILABLE] is False
+
+    selected = schema(
+        {
+            **values,
+            **_discovery_filters(["IEC_62196_T2"], 7.2, True),
+        }
+    )
+    assert selected[CONF_CONNECTOR_TYPES] == ["IEC_62196_T2"]
+    assert selected[CONF_MIN_POWER_KW] == 7.2
+    assert selected[CONF_REQUIRE_AVAILABLE] is True
+
+    assert set(NDW_CONNECTOR_TYPE_CODES) >= {
+        "IEC_62196_T2",
+        "CHADEMO",
+        "DOMESTIC_A",
+    }
+    for invalid_power in (0, -1, float("inf"), float("nan")):
+        with pytest.raises(vol.Invalid):
+            schema({**values, **_discovery_filters(minimum_power_kw=invalid_power)})
+    with pytest.raises(vol.Invalid):
+        schema({**values, **_discovery_filters(["UNKNOWN_CODE"])})
+
+    belgium_schema = config_flow.options_schema(
+        {CONF_PROVIDER: PROVIDER_ECO_MOVEMENT_BE}
+    )
+    belgium_values = belgium_schema({**values, CONF_PROVIDER: PROVIDER_ECO_MOVEMENT_BE})
+    assert CONF_CONNECTOR_TYPES not in belgium_values
+    with pytest.raises(vol.Invalid):
+        belgium_schema({**values, CONF_PROVIDER: PROVIDER_NDW_DOT_NL})
+
+
 def test_options_allow_one_minute_and_reject_zero():
     schema = config_flow.options_schema({})
     valid = {
@@ -701,6 +806,7 @@ async def test_options_flow_saves_integer_intervals_and_search_limits(hass):
             CONF_MAX_STATIONS: 5.0,
             CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
             CONF_INCLUDE_UNKNOWN: False,
+            **_discovery_filters(["IEC_62196_T2"], 11.0, True),
         },
     )
 
@@ -711,6 +817,9 @@ async def test_options_flow_saves_integer_intervals_and_search_limits(hass):
         CONF_MAX_STATIONS: 5,
         CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
         CONF_INCLUDE_UNKNOWN: False,
+        CONF_CONNECTOR_TYPES: ["IEC_62196_T2"],
+        CONF_MIN_POWER_KW: 11.0,
+        CONF_REQUIRE_AVAILABLE: True,
         CONF_FAVOURITES: [],
     }
 
@@ -1012,9 +1121,19 @@ async def test_config_flow_surfaces_authentication_failure(hass, monkeypatch):
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], _station_options()
     )
+    assert result["step_id"] == "discovery_filters"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        _discovery_filters(["IEC_62196_T2"], 11.0, True),
+    )
 
     assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "discovery_filters"
     assert result["errors"]["base"] == "auth"
+    restored = result["data_schema"]({})
+    assert restored[CONF_CONNECTOR_TYPES] == ["IEC_62196_T2"]
+    assert restored[CONF_MIN_POWER_KW] == 11.0
+    assert restored[CONF_REQUIRE_AVAILABLE] is True
 
 
 @pytest.mark.asyncio

@@ -79,6 +79,20 @@
           "provider": "The data provider used to discover stations and availability."
         }
       },
+      "discovery_filters": {
+        "title": "Filter nearby stations",
+        "description": "Optionally match NDW stations by their connector groups. Filters apply before the station limit.",
+        "data": {
+          "connector_types": "Connector types",
+          "min_power_kw": "Minimum power (kW)",
+          "require_available": "Require an available connector"
+        },
+        "data_description": {
+          "connector_types": "Leave empty for any type. A matching connector group with any selected type must also meet the other filters.",
+          "min_power_kw": "Optional. A matching connector group must report at least this power.",
+          "require_available": "Only include stations when a matching connector group reports available connectors."
+        }
+      },
       "belgium_credentials": {
         "title": "Connect to Eco-Movement Belgium",
         "description": "Enter the API token issued to you by Eco-Movement. The token is stored in this config entry and redacted from diagnostics.",
@@ -128,6 +142,9 @@
           "max_stations": "Maximum stations",
           "provider": "Provider",
           "include_unknown": "Include stations without availability data",
+          "connector_types": "Connector types",
+          "min_power_kw": "Minimum power (kW)",
+          "require_available": "Require an available connector",
           "favourites": "Favourite charging points",
           "location_movement_threshold": "Location movement threshold (m)"
         },
@@ -137,6 +154,9 @@
           "max_stations": "Limit the number of stations and their entities.",
           "provider": "The data provider used to discover stations and availability.",
           "include_unknown": "Include stations when the provider reports no connector availability.",
+          "connector_types": "Leave empty for any type. A matching connector group with any selected type must also meet the other filters.",
+          "min_power_kw": "Optional. A matching connector group must report at least this power.",
+          "require_available": "Only include stations when a matching connector group reports available connectors.",
           "favourites": "Select charging points by name. Favourites remain available outside the search radius and are added beyond the nearby station limit.",
           "location_movement_threshold": "Minimum distance the selected entity must move before the search location is updated. Set to 0 to disable the threshold."
         }
@@ -166,6 +186,17 @@
         "home": "Home Assistant home coordinates",
         "manual": "Manual latitude and longitude",
         "entity": "Home Assistant entity"
+      }
+    },
+    "ndw_connector_type": {
+      "options": {
+        "IEC_62196_T2": "Type 2 (Mennekes)",
+        "IEC_62196_T2_COMBO": "CCS (Combo 2)",
+        "CHADEMO": "CHAdeMO",
+        "IEC_60309_2_SINGLE_16": "CEE 16 A (single phase)",
+        "IEC_60309_2_THREE_16": "CEE 16 A (three phase)",
+        "IEC_60309_2_THREE_32": "CEE 32 A (three phase)",
+        "DOMESTIC_A": "Domestic A (NEMA 1-15)"
       }
     },
     "provider": {
