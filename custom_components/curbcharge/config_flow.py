@@ -26,16 +26,20 @@ from .const import (
     CONF_API_TOKEN,
     CONF_FAVOURITES,
     CONF_INCLUDE_UNKNOWN,
+    CONF_LOCATION_ENTITY,
+    CONF_LOCATION_MOVEMENT_THRESHOLD,
     CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
     CONF_PROVIDER,
     CONF_SCAN_INTERVAL,
     CONF_SEARCH_RADIUS,
     DEFAULT_INCLUDE_UNKNOWN,
+    DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
     DEFAULT_MAX_STATIONS,
     DEFAULT_SCAN_INTERVAL_MINUTES,
     DEFAULT_SEARCH_RADIUS_M,
     DOMAIN,
+    LOCATION_ENTITY,
     LOCATION_HOME,
     LOCATION_MANUAL,
     MAX_MAX_STATIONS,
@@ -94,6 +98,20 @@ def manual_location_schema(
                     mode=selector.NumberSelectorMode.BOX,
                 )
             ),
+        }
+    )
+
+
+def entity_location_schema(entity_id: str | None = None) -> vol.Schema:
+    """Return a generic Home Assistant entity selector for location sources."""
+    key = (
+        vol.Required(CONF_LOCATION_ENTITY)
+        if entity_id is None
+        else vol.Required(CONF_LOCATION_ENTITY, default=entity_id)
+    )
+    return vol.Schema(
+        {
+            key: selector.EntitySelector(selector.EntitySelectorConfig()),
         }
     )
 
@@ -160,63 +178,78 @@ def options_schema(
     favourites = parse_favourite_references(
         defaults.get(CONF_FAVOURITES, []), provider_id
     )
-    return vol.Schema(
-        {
+    schema: dict[Any, Any] = {
+        vol.Required(
+            CONF_SCAN_INTERVAL,
+            default=defaults.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES),
+        ): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=MIN_SCAN_INTERVAL_MINUTES,
+                step=1,
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        ),
+        vol.Required(
+            CONF_SEARCH_RADIUS,
+            default=defaults.get(CONF_SEARCH_RADIUS, DEFAULT_SEARCH_RADIUS_M),
+        ): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=MIN_SEARCH_RADIUS_M,
+                max=MAX_SEARCH_RADIUS_M,
+                step=1,
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        ),
+        vol.Required(
+            CONF_MAX_STATIONS,
+            default=defaults.get(CONF_MAX_STATIONS, DEFAULT_MAX_STATIONS),
+        ): selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=MIN_MAX_STATIONS,
+                max=MAX_MAX_STATIONS,
+                step=1,
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        ),
+        vol.Required(CONF_PROVIDER, default=provider_id): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=[provider_id],
+                mode=selector.SelectSelectorMode.DROPDOWN,
+                translation_key="provider",
+            )
+        ),
+        vol.Required(
+            CONF_INCLUDE_UNKNOWN,
+            default=defaults.get(CONF_INCLUDE_UNKNOWN, DEFAULT_INCLUDE_UNKNOWN),
+        ): selector.BooleanSelector(),
+        vol.Required(
+            CONF_FAVOURITES,
+            default=[favourite.provider_id for favourite in favourites],
+        ): selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=favourite_options or [],
+                multiple=True,
+                mode=selector.SelectSelectorMode.LIST,
+            )
+        ),
+    }
+    if defaults.get(CONF_LOCATION_SOURCE) == LOCATION_ENTITY:
+        schema[
             vol.Required(
-                CONF_SCAN_INTERVAL,
-                default=defaults.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES),
-            ): selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    min=MIN_SCAN_INTERVAL_MINUTES,
-                    step=1,
-                    mode=selector.NumberSelectorMode.BOX,
-                )
-            ),
-            vol.Required(
-                CONF_SEARCH_RADIUS,
-                default=defaults.get(CONF_SEARCH_RADIUS, DEFAULT_SEARCH_RADIUS_M),
-            ): selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    min=MIN_SEARCH_RADIUS_M,
-                    max=MAX_SEARCH_RADIUS_M,
-                    step=1,
-                    mode=selector.NumberSelectorMode.BOX,
-                )
-            ),
-            vol.Required(
-                CONF_MAX_STATIONS,
-                default=defaults.get(CONF_MAX_STATIONS, DEFAULT_MAX_STATIONS),
-            ): selector.NumberSelector(
-                selector.NumberSelectorConfig(
-                    min=MIN_MAX_STATIONS,
-                    max=MAX_MAX_STATIONS,
-                    step=1,
-                    mode=selector.NumberSelectorMode.BOX,
-                )
-            ),
-            vol.Required(CONF_PROVIDER, default=provider_id): selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=[provider_id],
-                    mode=selector.SelectSelectorMode.DROPDOWN,
-                    translation_key="provider",
-                )
-            ),
-            vol.Required(
-                CONF_INCLUDE_UNKNOWN,
-                default=defaults.get(CONF_INCLUDE_UNKNOWN, DEFAULT_INCLUDE_UNKNOWN),
-            ): selector.BooleanSelector(),
-            vol.Required(
-                CONF_FAVOURITES,
-                default=[favourite.provider_id for favourite in favourites],
-            ): selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=favourite_options or [],
-                    multiple=True,
-                    mode=selector.SelectSelectorMode.LIST,
-                )
-            ),
-        }
-    )
+                CONF_LOCATION_MOVEMENT_THRESHOLD,
+                default=defaults.get(
+                    CONF_LOCATION_MOVEMENT_THRESHOLD,
+                    DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
+                ),
+            )
+        ] = selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=0,
+                step=1,
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        )
+    return vol.Schema(schema)
 
 
 def _show_form(
@@ -243,6 +276,7 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         """Initialize flow state."""
         self._location_source: str | None = None
+        self._location_entity_id: str | None = None
         self._latitude: float | None = None
         self._longitude: float | None = None
         self._provider_id = PROVIDER_NDW_DOT_NL
@@ -266,9 +300,42 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     )
                 self._latitude, self._longitude = location
                 return await self.async_step_station_options()
+            if self._location_source == LOCATION_ENTITY:
+                return await self.async_step_entity_location()
             return await self.async_step_manual_location()
 
         return _show_form(self, step_id="user", data_schema=_location_source_schema())
+
+    async def async_step_entity_location(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Select an entity with current valid coordinates."""
+        if user_input is None:
+            return _show_form(
+                self,
+                step_id="entity_location",
+                data_schema=entity_location_schema(),
+            )
+
+        entity_id = user_input[CONF_LOCATION_ENTITY]
+        location = resolve_location(
+            self.hass,
+            {
+                CONF_LOCATION_SOURCE: LOCATION_ENTITY,
+                CONF_LOCATION_ENTITY: entity_id,
+            },
+        )
+        if location is None:
+            return _show_form(
+                self,
+                step_id="entity_location",
+                data_schema=entity_location_schema(entity_id),
+                errors={"base": "invalid_entity_location"},
+            )
+        self._location_source = LOCATION_ENTITY
+        self._location_entity_id = entity_id
+        self._latitude, self._longitude = location
+        return await self.async_step_station_options()
 
     async def async_step_reauth(
         self, _entry_data: dict[str, Any] | None = None
@@ -363,6 +430,8 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
             self._latitude, self._longitude = location
             return await self._async_save_reconfigured_location(entry)
+        if self._location_source == LOCATION_ENTITY:
+            return await self.async_step_reconfigure_entity_location()
 
         stored_latitude = entry.data.get(CONF_LATITUDE)
         stored_longitude = entry.data.get(CONF_LONGITUDE)
@@ -386,6 +455,40 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="reconfigure_manual_location",
             data_schema=manual_location_schema(self._latitude, self._longitude),
         )
+
+    async def async_step_reconfigure_entity_location(
+        self,
+        user_input: dict[str, Any] | None = None,
+    ) -> FlowResult:
+        """Select or replace an Entity search location during reconfigure."""
+        entry = self._get_reconfigure_entry()
+        if user_input is None:
+            default_entity_id = entry.data.get(CONF_LOCATION_ENTITY)
+            return _show_form(
+                self,
+                step_id="reconfigure_entity_location",
+                data_schema=entity_location_schema(default_entity_id),
+            )
+
+        entity_id = user_input[CONF_LOCATION_ENTITY]
+        location = resolve_location(
+            self.hass,
+            {
+                CONF_LOCATION_SOURCE: LOCATION_ENTITY,
+                CONF_LOCATION_ENTITY: entity_id,
+            },
+        )
+        if location is None:
+            return _show_form(
+                self,
+                step_id="reconfigure_entity_location",
+                data_schema=entity_location_schema(entity_id),
+                errors={"base": "invalid_entity_location"},
+            )
+        self._location_source = LOCATION_ENTITY
+        self._location_entity_id = entity_id
+        self._latitude, self._longitude = location
+        return await self._async_save_reconfigured_location(entry)
 
     async def async_step_reconfigure_manual_location(
         self, user_input: dict[str, Any] | None = None
@@ -437,6 +540,14 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data_schema=manual_location_schema(self._latitude, self._longitude),
                     errors={"base": _flow_error(err)},
                 )
+            if self._location_source == LOCATION_ENTITY:
+                assert self._location_entity_id is not None
+                return _show_form(
+                    self,
+                    step_id="reconfigure_entity_location",
+                    data_schema=entity_location_schema(self._location_entity_id),
+                    errors={"base": _flow_error(err)},
+                )
             return _show_form(
                 self,
                 step_id="reconfigure",
@@ -444,9 +555,15 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors={"base": _flow_error(err)},
             )
 
-        new_unique_id = _config_unique_id(
-            provider_id, self._latitude, self._longitude, radius
-        )
+        if self._location_source == LOCATION_ENTITY:
+            assert self._location_entity_id is not None
+            new_unique_id = _config_unique_id_entity(
+                provider_id, self._location_entity_id, radius
+            )
+        else:
+            new_unique_id = _config_unique_id(
+                provider_id, self._latitude, self._longitude, radius
+            )
         if new_unique_id != entry.unique_id:
             await self.async_set_unique_id(new_unique_id)
             self._abort_if_unique_id_configured()
@@ -459,6 +576,11 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         else:
             data.pop(CONF_LATITUDE, None)
             data.pop(CONF_LONGITUDE, None)
+        if self._location_source == LOCATION_ENTITY:
+            assert self._location_entity_id is not None
+            data[CONF_LOCATION_ENTITY] = self._location_entity_id
+        else:
+            data.pop(CONF_LOCATION_ENTITY, None)
         return self.async_update_reload_and_abort(
             entry,
             unique_id=new_unique_id,
@@ -506,9 +628,16 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._provider_id = provider_id
             self._search_radius = radius
             self._max_stations = max_stations
-            await self.async_set_unique_id(
-                _config_unique_id(provider_id, self._latitude, self._longitude, radius)
-            )
+            if self._location_source == LOCATION_ENTITY:
+                assert self._location_entity_id is not None
+                unique_id = _config_unique_id_entity(
+                    provider_id, self._location_entity_id, radius
+                )
+            else:
+                unique_id = _config_unique_id(
+                    provider_id, self._latitude, self._longitude, radius
+                )
+            await self.async_set_unique_id(unique_id)
             self._abort_if_unique_id_configured()
 
             if provider_id == PROVIDER_ECO_MOVEMENT_BE:
@@ -585,6 +714,9 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         if self._location_source == LOCATION_MANUAL:
             data[CONF_LATITUDE] = self._latitude
             data[CONF_LONGITUDE] = self._longitude
+        elif self._location_source == LOCATION_ENTITY:
+            assert self._location_entity_id is not None
+            data[CONF_LOCATION_ENTITY] = self._location_entity_id
         if token is not None:
             data[CONF_API_TOKEN] = token
         return self.async_create_entry(title="CurbCharge", data=data)
@@ -633,17 +765,25 @@ class CurbChargeOptionsFlow(config_entries.OptionsFlow):
                     ),
                     errors={"base": "invalid_favourites"},
                 )
-            return self.async_create_entry(
-                title="",
-                data={
-                    CONF_SCAN_INTERVAL: int(user_input[CONF_SCAN_INTERVAL]),
-                    CONF_SEARCH_RADIUS: int(user_input[CONF_SEARCH_RADIUS]),
-                    CONF_MAX_STATIONS: int(user_input[CONF_MAX_STATIONS]),
-                    CONF_PROVIDER: user_input[CONF_PROVIDER],
-                    CONF_INCLUDE_UNKNOWN: user_input[CONF_INCLUDE_UNKNOWN],
-                    CONF_FAVOURITES: [asdict(favourite) for favourite in favourites],
-                },
-            )
+            data = {
+                CONF_SCAN_INTERVAL: int(user_input[CONF_SCAN_INTERVAL]),
+                CONF_SEARCH_RADIUS: int(user_input[CONF_SEARCH_RADIUS]),
+                CONF_MAX_STATIONS: int(user_input[CONF_MAX_STATIONS]),
+                CONF_PROVIDER: user_input[CONF_PROVIDER],
+                CONF_INCLUDE_UNKNOWN: user_input[CONF_INCLUDE_UNKNOWN],
+                CONF_FAVOURITES: [asdict(favourite) for favourite in favourites],
+            }
+            if defaults.get(CONF_LOCATION_SOURCE) == LOCATION_ENTITY:
+                data[CONF_LOCATION_MOVEMENT_THRESHOLD] = int(
+                    user_input.get(
+                        CONF_LOCATION_MOVEMENT_THRESHOLD,
+                        defaults.get(
+                            CONF_LOCATION_MOVEMENT_THRESHOLD,
+                            DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
+                        ),
+                    )
+                )
+            return self.async_create_entry(title="", data=data)
 
         return _show_form(
             self,
@@ -762,7 +902,7 @@ def _location_source_schema(
                 CONF_LOCATION_SOURCE, default=default
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
-                    options=[LOCATION_HOME, LOCATION_MANUAL],
+                    options=[LOCATION_HOME, LOCATION_MANUAL, LOCATION_ENTITY],
                     mode=selector.SelectSelectorMode.DROPDOWN,
                     translation_key="location_source",
                 )
@@ -793,6 +933,13 @@ def _config_unique_id(
         f"{latitude:.6f},{longitude:.6f},{radius}".encode()
     ).hexdigest()[:16]
     return f"{provider}_{area_digest}"
+
+
+def _config_unique_id_entity(provider: str, entity_id: str, radius: int) -> str:
+    entity_digest = hashlib.sha256(f"entity:{entity_id}:{radius}".encode()).hexdigest()[
+        :16
+    ]
+    return f"{provider}_entity_{entity_digest}"
 
 
 def _flow_error(error: ChargingProviderError) -> str:

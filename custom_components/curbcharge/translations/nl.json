@@ -3,22 +3,42 @@
     "step": {
       "user": {
         "title": "CurbCharge instellen",
-        "description": "Kies hoe CurbCharge de zoeklocatie bepaalt.",
+        "description": "Kies of CurbCharge de thuislocatie, handmatige coördinaten of een entiteit gebruikt.",
         "data": {
           "location_source": "Locatiebron"
         },
         "data_description": {
-          "location_source": "Gebruik de thuislocatie van Home Assistant of voer coördinaten voor deze zoekopdracht in."
+          "location_source": "Gebruik de thuiscoördinaten van Home Assistant, voer coördinaten in of selecteer een entiteit die een locatie rapporteert."
+        }
+      },
+      "entity_location": {
+        "title": "Locatie-entiteit selecteren",
+        "description": "Kies een entiteit die momenteel geldige breedte- en lengtegraad rapporteert. Alleen de entiteits-ID wordt opgeslagen.",
+        "data": {
+          "location_entity": "Locatie-entiteit"
+        },
+        "data_description": {
+          "location_entity": "De entiteit moet momenteel geldige locatiecoördinaten rapporteren."
         }
       },
       "reconfigure": {
         "title": "Zoeklocatie wijzigen",
-        "description": "Kies de huidige thuislocatie van Home Assistant of voer nieuwe coördinaten in.",
+        "description": "Kies de thuislocatie van Home Assistant, handmatige coördinaten of een entiteit.",
         "data": {
           "location_source": "Locatiebron"
         },
         "data_description": {
           "location_source": "Een gewijzigd zoekgebied kan andere laadpunten opleveren."
+        }
+      },
+      "reconfigure_entity_location": {
+        "title": "Nieuwe locatie-entiteit selecteren",
+        "description": "Kies een entiteit die momenteel geldige locatiecoördinaten rapporteert. CurbCharge slaat de entiteits-ID op, niet de coördinaten.",
+        "data": {
+          "location_entity": "Locatie-entiteit"
+        },
+        "data_description": {
+          "location_entity": "Selecteer een vervangende entiteit als de vorige niet beschikbaar is of is verwijderd."
         }
       },
       "reconfigure_manual_location": {
@@ -84,6 +104,7 @@
       "auth": "De provider heeft de authenticatie geweigerd.",
       "cannot_connect": "Kan geen verbinding maken met de laadprovider.",
       "invalid_location": "Voer geldige coördinaten en een ondersteund zoekgebied in.",
+      "invalid_entity_location": "Selecteer een entiteit die momenteel geldige breedte- en lengtegraad rapporteert.",
       "invalid_api_token": "Voer een niet-lege, afdrukbare ASCII-API-token in.",
       "invalid_response": "De provider heeft gegevens in een onverwacht formaat geretourneerd.",
       "location_not_configured": "De thuiscoördinaten zijn niet ingesteld in Home Assistant.",
@@ -107,7 +128,8 @@
           "max_stations": "Maximumaantal laadpunten",
           "provider": "Provider",
           "include_unknown": "Laadpunten zonder beschikbaarheidsgegevens opnemen",
-          "favourites": "Favoriete laadpunten"
+          "favourites": "Favoriete laadpunten",
+          "location_movement_threshold": "Verplaatsingsdrempel locatie (m)"
         },
         "data_description": {
           "scan_interval": "Hoe vaak Home Assistant de laadpuntgegevens vernieuwt.",
@@ -115,7 +137,8 @@
           "max_stations": "Beperk het aantal laadpunten en bijbehorende entiteiten.",
           "provider": "De gegevensprovider voor het vinden van laadpunten en beschikbaarheid.",
           "include_unknown": "Neem laadpunten op als de provider geen connectorbeschikbaarheid meldt.",
-          "favourites": "Selecteer laadpunten op naam. Favorieten blijven beschikbaar buiten de zoekradius en worden toegevoegd boven op de limiet voor laadpunten in de buurt."
+          "favourites": "Selecteer laadpunten op naam. Favorieten blijven beschikbaar buiten de zoekradius en worden toegevoegd boven op de limiet voor laadpunten in de buurt.",
+          "location_movement_threshold": "Minimale afstand die de geselecteerde entiteit moet afleggen voordat de zoeklocatie wordt bijgewerkt. Stel in op 0 om de drempel uit te schakelen."
         }
       }
     },
@@ -141,7 +164,8 @@
     "location_source": {
       "options": {
         "home": "Thuiscoördinaten van Home Assistant",
-        "manual": "Breedte- en lengtegraad handmatig invoeren"
+        "manual": "Breedte- en lengtegraad handmatig invoeren",
+        "entity": "Home Assistant-entiteit"
       }
     },
     "provider": {

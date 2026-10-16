@@ -13,12 +13,16 @@ from custom_components.curbcharge.const import (
     CONF_API_TOKEN,
     CONF_FAVOURITES,
     CONF_INCLUDE_UNKNOWN,
+    CONF_LOCATION_ENTITY,
+    CONF_LOCATION_MOVEMENT_THRESHOLD,
     CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
     CONF_PROVIDER,
     CONF_SCAN_INTERVAL,
     CONF_SEARCH_RADIUS,
+    DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
     DOMAIN,
+    LOCATION_ENTITY,
     LOCATION_HOME,
     LOCATION_MANUAL,
     PROVIDER_ECO_MOVEMENT_BE,
@@ -100,6 +104,78 @@ async def test_config_flow_uses_manual_coordinates(hass, monkeypatch):
     assert result["data"]["longitude"] == 5.654321
     assert "52.123456" not in result["result"].unique_id
     assert "5.654321" not in result["result"].unique_id
+
+
+@pytest.mark.asyncio
+async def test_config_flow_uses_entity_location_without_storing_coordinates(
+    hass, monkeypatch
+):
+    entity_id = "sensor.vehicle_location"
+    location = (52.123456, 5.654321)
+    hass.states.async_set(
+        entity_id,
+        "moving",
+        {CONF_LATITUDE: location[0], CONF_LONGITUDE: location[1]},
+    )
+    provider = FakeProvider()
+    monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_ENTITY}
+    )
+    assert result["step_id"] == "entity_location"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_ENTITY: entity_id}
+    )
+    assert result["step_id"] == "station_options"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _station_options()
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert provider.validation_calls == [(*location, 500)]
+    assert result["data"][CONF_LOCATION_SOURCE] == LOCATION_ENTITY
+    assert result["data"][CONF_LOCATION_ENTITY] == entity_id
+    assert CONF_LATITUDE not in result["data"]
+    assert CONF_LONGITUDE not in result["data"]
+    assert result["result"].unique_id == config_flow._config_unique_id_entity(
+        PROVIDER_NDW_DOT_NL, entity_id, 500
+    )
+    assert entity_id not in result["result"].unique_id
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("state", ["unknown", "unavailable"])
+async def test_config_flow_rejects_entity_without_current_coordinates(
+    hass, monkeypatch, state
+):
+    entity_id = "sensor.vehicle_location"
+    hass.states.async_set(
+        entity_id,
+        state,
+        {CONF_LATITUDE: 52.1, CONF_LONGITUDE: 5.1},
+    )
+    provider = FakeProvider()
+    monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_ENTITY}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_ENTITY: entity_id}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "entity_location"
+    assert result["errors"] == {"base": "invalid_entity_location"}
+    assert provider.validation_calls == []
 
 
 @pytest.mark.asyncio
@@ -562,6 +638,32 @@ def test_options_allow_one_minute_and_reject_zero():
         schema({**valid, CONF_SCAN_INTERVAL: 0})
 
 
+def test_entity_movement_threshold_defaults_and_is_entity_only():
+    options = {
+        CONF_SCAN_INTERVAL: 5,
+        CONF_SEARCH_RADIUS: 500,
+        CONF_MAX_STATIONS: 10,
+        CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+        CONF_INCLUDE_UNKNOWN: True,
+        CONF_FAVOURITES: [],
+    }
+    home_schema = config_flow.options_schema({})
+    assert CONF_LOCATION_MOVEMENT_THRESHOLD not in home_schema(options)
+
+    entity_schema = config_flow.options_schema({CONF_LOCATION_SOURCE: LOCATION_ENTITY})
+    assert entity_schema(options)[CONF_LOCATION_MOVEMENT_THRESHOLD] == (
+        DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M
+    )
+    assert (
+        entity_schema({**options, CONF_LOCATION_MOVEMENT_THRESHOLD: 0})[
+            CONF_LOCATION_MOVEMENT_THRESHOLD
+        ]
+        == 0
+    )
+    with pytest.raises(vol.Invalid):
+        entity_schema({**options, CONF_LOCATION_MOVEMENT_THRESHOLD: -1})
+
+
 def test_entry_location_validates_manual_coordinates(hass):
     assert config_flow._entry_location(hass, {}) is None
     assert (
@@ -611,6 +713,39 @@ async def test_options_flow_saves_integer_intervals_and_search_limits(hass):
         CONF_INCLUDE_UNKNOWN: False,
         CONF_FAVOURITES: [],
     }
+
+
+@pytest.mark.asyncio
+async def test_options_flow_saves_entity_movement_threshold(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="entity-location",
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_ENTITY,
+            CONF_LOCATION_ENTITY: "sensor.vehicle_location",
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_SCAN_INTERVAL: 5,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+            CONF_INCLUDE_UNKNOWN: True,
+            CONF_FAVOURITES: [],
+            CONF_LOCATION_MOVEMENT_THRESHOLD: 0,
+        },
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options[CONF_LOCATION_MOVEMENT_THRESHOLD] == 0
 
 
 @pytest.mark.asyncio
@@ -927,6 +1062,201 @@ async def test_reconfigure_updates_manual_location_and_validates_connection(
         PROVIDER_NDW_DOT_NL, *new_location, 500
     )
     assert provider.validation_calls == [(*new_location, 500)]
+
+
+@pytest.mark.asyncio
+async def test_reconfigure_can_switch_from_manual_to_entity_location(hass, monkeypatch):
+    entity_id = "sensor.vehicle_location"
+    location = (52.2, 5.2)
+    hass.states.async_set(
+        entity_id,
+        "moving",
+        {CONF_LATITUDE: location[0], CONF_LONGITUDE: location[1]},
+    )
+    old_location = (52.1, 5.1)
+    provider = FakeProvider()
+    monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=config_flow._config_unique_id(
+            PROVIDER_NDW_DOT_NL, *old_location, 500
+        ),
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_MANUAL,
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+            CONF_LATITUDE: old_location[0],
+            CONF_LONGITUDE: old_location[1],
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reconfigure", "entry_id": entry.entry_id},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_ENTITY}
+    )
+    assert result["step_id"] == "reconfigure_entity_location"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_ENTITY: entity_id}
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert provider.validation_calls == [(*location, 500)]
+    assert entry.data[CONF_LOCATION_SOURCE] == LOCATION_ENTITY
+    assert entry.data[CONF_LOCATION_ENTITY] == entity_id
+    assert CONF_LATITUDE not in entry.data
+    assert CONF_LONGITUDE not in entry.data
+    assert entry.unique_id == config_flow._config_unique_id_entity(
+        PROVIDER_NDW_DOT_NL, entity_id, 500
+    )
+
+
+@pytest.mark.asyncio
+async def test_reconfigure_entity_keeps_form_open_on_provider_error(hass, monkeypatch):
+    entity_id = "sensor.vehicle_location"
+    location = (52.2, 5.2)
+    hass.states.async_set(
+        entity_id,
+        "moving",
+        {CONF_LATITUDE: location[0], CONF_LONGITUDE: location[1]},
+    )
+    old_location = (52.1, 5.1)
+    provider = FakeProvider()
+    provider.validation_error = ProviderConnectionError("private details")
+    monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=config_flow._config_unique_id(
+            PROVIDER_NDW_DOT_NL, *old_location, 500
+        ),
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_MANUAL,
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+            CONF_LATITUDE: old_location[0],
+            CONF_LONGITUDE: old_location[1],
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reconfigure", "entry_id": entry.entry_id},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_ENTITY}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_ENTITY: entity_id}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reconfigure_entity_location"
+    assert result["errors"] == {"base": "cannot_connect"}
+    assert entry.data[CONF_LOCATION_SOURCE] == LOCATION_MANUAL
+    assert provider.validation_calls == [(*location, 500)]
+
+
+@pytest.mark.asyncio
+async def test_reconfigure_missing_entity_requires_an_explicit_replacement(
+    hass, monkeypatch
+):
+    missing_entity = "sensor.old_vehicle_location"
+    replacement_entity = "sensor.new_vehicle_location"
+    location = (52.2, 5.2)
+    hass.states.async_set(
+        replacement_entity,
+        "moving",
+        {CONF_LATITUDE: location[0], CONF_LONGITUDE: location[1]},
+    )
+    provider = FakeProvider()
+    monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=config_flow._config_unique_id_entity(
+            PROVIDER_NDW_DOT_NL, missing_entity, 500
+        ),
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_ENTITY,
+            CONF_LOCATION_ENTITY: missing_entity,
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reconfigure", "entry_id": entry.entry_id},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_ENTITY}
+    )
+    assert result["step_id"] == "reconfigure_entity_location"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_ENTITY: replacement_entity}
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert provider.validation_calls == [(*location, 500)]
+    assert entry.data[CONF_LOCATION_ENTITY] == replacement_entity
+    assert entry.unique_id == config_flow._config_unique_id_entity(
+        PROVIDER_NDW_DOT_NL, replacement_entity, 500
+    )
+
+
+@pytest.mark.asyncio
+async def test_reconfigure_entity_unique_id_is_stable_when_coordinates_change(
+    hass, monkeypatch
+):
+    entity_id = "sensor.vehicle_location"
+    location = (52.3, 5.3)
+    hass.states.async_set(
+        entity_id,
+        "moving",
+        {CONF_LATITUDE: location[0], CONF_LONGITUDE: location[1]},
+    )
+    unique_id = config_flow._config_unique_id_entity(
+        PROVIDER_NDW_DOT_NL, entity_id, 500
+    )
+    provider = FakeProvider()
+    monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=unique_id,
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_ENTITY,
+            CONF_LOCATION_ENTITY: entity_id,
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reconfigure", "entry_id": entry.entry_id},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_ENTITY}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_ENTITY: entity_id}
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert provider.validation_calls == [(*location, 500)]
+    assert entry.unique_id == unique_id
 
 
 @pytest.mark.asyncio

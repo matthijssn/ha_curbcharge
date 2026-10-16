@@ -3,22 +3,42 @@
     "step": {
       "user": {
         "title": "CurbCharge einrichten",
-        "description": "Wählen Sie aus, wie CurbCharge den Suchstandort bestimmt.",
+        "description": "Wählen Sie, ob CurbCharge den Home-Assistant-Standort, manuelle Koordinaten oder eine Entität verwendet.",
         "data": {
           "location_source": "Standortquelle"
         },
         "data_description": {
-          "location_source": "Verwenden Sie den Home-Assistant-Standort oder geben Sie Koordinaten für diese Suche ein."
+          "location_source": "Verwenden Sie die Home-Assistant-Standortkoordinaten, geben Sie Koordinaten ein oder wählen Sie eine Entität, die einen Standort meldet."
+        }
+      },
+      "entity_location": {
+        "title": "Standortentität auswählen",
+        "description": "Wählen Sie eine Entität, die aktuell gültige Breiten- und Längengradattribute meldet. Gespeichert wird nur die Entitäts-ID.",
+        "data": {
+          "location_entity": "Standortentität"
+        },
+        "data_description": {
+          "location_entity": "Die Entität muss aktuell gültige Standortkoordinaten melden."
         }
       },
       "reconfigure": {
         "title": "Suchgebiet ändern",
-        "description": "Wählen Sie den aktuellen Home-Assistant-Standort oder geben Sie neue Koordinaten ein.",
+        "description": "Wählen Sie den Home-Assistant-Standort, manuelle Koordinaten oder eine Entität.",
         "data": {
           "location_source": "Standortquelle"
         },
         "data_description": {
           "location_source": "Eine Änderung des Suchgebiets kann die enthaltenen Ladestationen ändern."
+        }
+      },
+      "reconfigure_entity_location": {
+        "title": "Neue Standortentität auswählen",
+        "description": "Wählen Sie eine Entität, die aktuell gültige Standortkoordinaten meldet. CurbCharge speichert die Entitäts-ID, nicht die Koordinaten.",
+        "data": {
+          "location_entity": "Standortentität"
+        },
+        "data_description": {
+          "location_entity": "Wenn die vorherige Entität nicht verfügbar oder entfernt ist, wählen Sie eine Ersatzentität aus."
         }
       },
       "reconfigure_manual_location": {
@@ -84,6 +104,7 @@
       "auth": "Der Anbieter hat die Authentifizierung abgelehnt.",
       "cannot_connect": "Verbindung zum Ladestationsanbieter nicht möglich.",
       "invalid_location": "Geben Sie gültige Koordinaten und ein unterstütztes Suchgebiet ein.",
+      "invalid_entity_location": "Wählen Sie eine Entität aus, die aktuell gültige Breiten- und Längengradkoordinaten meldet.",
       "invalid_api_token": "Geben Sie ein nicht leeres, druckbares ASCII-API-Token ein.",
       "invalid_response": "Der Anbieter hat Daten in einem unerwarteten Format zurückgegeben.",
       "location_not_configured": "Die Home-Assistant-Standortkoordinaten sind nicht konfiguriert.",
@@ -107,7 +128,8 @@
           "max_stations": "Maximale Anzahl Ladestationen",
           "provider": "Anbieter",
           "include_unknown": "Ladestationen ohne Verfügbarkeitsdaten einschließen",
-          "favourites": "Bevorzugte Ladestationen"
+          "favourites": "Bevorzugte Ladestationen",
+          "location_movement_threshold": "Bewegungsschwelle des Standorts (m)"
         },
         "data_description": {
           "scan_interval": "Wie oft Home Assistant die Ladestationsdaten aktualisiert.",
@@ -115,7 +137,8 @@
           "max_stations": "Die Anzahl der Ladestationen und zugehörigen Entitäten begrenzen.",
           "provider": "Datenanbieter zum Ermitteln von Ladestationen und ihrer Verfügbarkeit.",
           "include_unknown": "Ladestationen einschließen, wenn der Anbieter keine Verfügbarkeit meldet.",
-          "favourites": "Ladestationen anhand ihres Namens auswählen. Bevorzugte Ladestationen bleiben außerhalb des Suchradius verfügbar und werden zusätzlich zum Limit für nahe gelegene Stationen aufgenommen."
+          "favourites": "Ladestationen anhand ihres Namens auswählen. Bevorzugte Ladestationen bleiben außerhalb des Suchradius verfügbar und werden zusätzlich zum Limit für nahe gelegene Stationen aufgenommen.",
+          "location_movement_threshold": "Mindeststrecke, die sich die ausgewählte Entität bewegen muss, bevor der Suchstandort aktualisiert wird. Mit 0 wird die Schwelle deaktiviert."
         }
       }
     },
@@ -141,7 +164,8 @@
     "location_source": {
       "options": {
         "home": "Home-Assistant-Standortkoordinaten",
-        "manual": "Manueller Breiten- und Längengrad"
+        "manual": "Manueller Breiten- und Längengrad",
+        "entity": "Home-Assistant-Entität"
       }
     },
     "provider": {

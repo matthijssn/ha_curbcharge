@@ -3,22 +3,42 @@
     "step": {
       "user": {
         "title": "Configurer CurbCharge",
-        "description": "Choisissez comment CurbCharge détermine la zone de recherche.",
+        "description": "Choisissez si CurbCharge utilise la position du domicile, des coordonnées manuelles ou une entité.",
         "data": {
           "location_source": "Source de localisation"
         },
         "data_description": {
-          "location_source": "Utilisez la position du domicile Home Assistant ou saisissez des coordonnées pour cette recherche."
+          "location_source": "Utilisez les coordonnées du domicile Home Assistant, saisissez des coordonnées ou sélectionnez une entité qui indique une position."
+        }
+      },
+      "entity_location": {
+        "title": "Sélectionner une entité de localisation",
+        "description": "Choisissez une entité qui fournit actuellement des attributs de latitude et longitude valides. Seul l'identifiant de l'entité est enregistré.",
+        "data": {
+          "location_entity": "Entité de localisation"
+        },
+        "data_description": {
+          "location_entity": "L'entité doit actuellement fournir des coordonnées de position valides."
         }
       },
       "reconfigure": {
         "title": "Modifier la zone de recherche",
-        "description": "Choisissez la position actuelle du domicile Home Assistant ou saisissez de nouvelles coordonnées.",
+        "description": "Choisissez la position du domicile Home Assistant, des coordonnées manuelles ou une entité.",
         "data": {
           "location_source": "Source de localisation"
         },
         "data_description": {
           "location_source": "La modification de la zone de recherche peut changer les bornes incluses."
+        }
+      },
+      "reconfigure_entity_location": {
+        "title": "Sélectionner une nouvelle entité de localisation",
+        "description": "Choisissez une entité qui fournit actuellement des coordonnées valides. CurbCharge enregistre l'identifiant de l'entité, pas ses coordonnées.",
+        "data": {
+          "location_entity": "Entité de localisation"
+        },
+        "data_description": {
+          "location_entity": "Si l'entité précédente est indisponible ou a été supprimée, sélectionnez une entité de remplacement."
         }
       },
       "reconfigure_manual_location": {
@@ -84,6 +104,7 @@
       "auth": "Le fournisseur a refusé l'authentification.",
       "cannot_connect": "Impossible de se connecter au fournisseur de données.",
       "invalid_location": "Saisissez des coordonnées valides et une zone de recherche prise en charge.",
+      "invalid_entity_location": "Sélectionnez une entité qui fournit actuellement des coordonnées de latitude et longitude valides.",
       "invalid_api_token": "Saisissez un jeton API ASCII imprimable non vide.",
       "invalid_response": "Le fournisseur a renvoyé des données dans un format inattendu.",
       "location_not_configured": "Les coordonnées du domicile ne sont pas configurées dans Home Assistant.",
@@ -107,7 +128,8 @@
           "max_stations": "Nombre maximal de bornes",
           "provider": "Fournisseur",
           "include_unknown": "Inclure les bornes sans données de disponibilité",
-          "favourites": "Bornes favorites"
+          "favourites": "Bornes favorites",
+          "location_movement_threshold": "Seuil de déplacement de la position (m)"
         },
         "data_description": {
           "scan_interval": "Fréquence d'actualisation des données des bornes par Home Assistant.",
@@ -115,7 +137,8 @@
           "max_stations": "Limiter le nombre de bornes et d'entités associées.",
           "provider": "Fournisseur de données utilisé pour découvrir les bornes et leur disponibilité.",
           "include_unknown": "Inclure les bornes lorsque le fournisseur ne communique pas leur disponibilité.",
-          "favourites": "Sélectionnez les bornes par leur nom. Les bornes favorites restent disponibles hors du rayon de recherche et s'ajoutent à la limite des bornes à proximité."
+          "favourites": "Sélectionnez les bornes par leur nom. Les bornes favorites restent disponibles hors du rayon de recherche et s'ajoutent à la limite des bornes à proximité.",
+          "location_movement_threshold": "Distance minimale que l'entité sélectionnée doit parcourir avant la mise à jour de la position de recherche. Saisissez 0 pour désactiver ce seuil."
         }
       }
     },
@@ -141,7 +164,8 @@
     "location_source": {
       "options": {
         "home": "Coordonnées du domicile Home Assistant",
-        "manual": "Latitude et longitude manuelles"
+        "manual": "Latitude et longitude manuelles",
+        "entity": "Entité Home Assistant"
       }
     },
     "provider": {
