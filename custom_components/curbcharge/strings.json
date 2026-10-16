@@ -217,6 +217,15 @@
       "best_nearby_charger": {
         "name": "Best nearby charger"
       },
+      "nearest_available_charger": {
+        "name": "Nearest available charger"
+      },
+      "cheapest_available_charger": {
+        "name": "Cheapest available charger"
+      },
+      "fastest_available_charger": {
+        "name": "Fastest available charger"
+      },
       "nearby_charging_units": {
         "name": "Nearby charging units"
       },
