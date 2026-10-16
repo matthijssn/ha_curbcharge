@@ -128,7 +128,7 @@ async def test_connector_filters_run_before_cap_and_tariff_lookup(
     sample_geojson, monkeypatch
 ):
     payload = copy.deepcopy(sample_geojson)
-    first, second = payload["features"][:2]
+    first, second, third = payload["features"]
     first_t2 = next(
         group
         for group in first["properties"]["availabilities"]
@@ -145,6 +145,9 @@ async def test_connector_filters_run_before_cap_and_tariff_lookup(
     second_group = second["properties"]["availabilities"][0]
     second_group["available"] = 1
     second_group["tariff_ids"] = ["selected-tariff"]
+    third_group = copy.deepcopy(second_group)
+    third_group["tariff_ids"] = ["farther-tariff"]
+    third["properties"]["availabilities"] = [third_group]
 
     session = FakeSession([FakeResponse(payload)])
     provider = NdwDotNlProvider(session)
@@ -172,6 +175,72 @@ async def test_connector_filters_run_before_cap_and_tariff_lookup(
     assert [station.provider_id for station in result.nearby] == ["NL-TEST-002"]
     assert tariff_requests == [{"selected-tariff"}]
     assert len(session.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_connector_filter_preserves_radius_limit(sample_geojson):
+    payload = copy.deepcopy(sample_geojson)
+    second_group = payload["features"][1]["properties"]["availabilities"][0]
+    second_group["available"] = 1
+    third_group = copy.deepcopy(second_group)
+    payload["features"][2]["properties"]["availabilities"] = [third_group]
+
+    session = FakeSession([FakeResponse(_without_tariffs(payload))])
+    provider = NdwDotNlProvider(session)
+    result = await provider.async_get_stations(
+        52.0,
+        5.0,
+        100,
+        10,
+        discovery_filters=DiscoveryFilterSettings(
+            connector_types=("IEC_62196_T2",),
+            minimum_power_kw=11.0,
+            require_available=True,
+        ),
+    )
+
+    assert [station.provider_id for station in result.nearby] == [
+        "NL-TEST-001",
+        "NL-TEST-002",
+    ]
+    assert len(session.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_filtered_candidates_break_distance_ties_by_station_id(sample_geojson):
+    payload = copy.deepcopy(sample_geojson)
+    first, second, third = payload["features"]
+    first_t2 = next(
+        group
+        for group in first["properties"]["availabilities"]
+        if group["connector_type"] == "IEC_62196_T2"
+    )
+    first_t2["available"] = 0
+    next(
+        group
+        for group in first["properties"]["availabilities"]
+        if group["connector_type"] == "CHADEMO"
+    )["available"] = 1
+    second_group = second["properties"]["availabilities"][0]
+    second_group["available"] = 1
+    third["geometry"]["coordinates"] = second["geometry"]["coordinates"]
+    third["properties"]["availabilities"] = [copy.deepcopy(second_group)]
+
+    session = FakeSession([FakeResponse(_without_tariffs(payload))])
+    provider = NdwDotNlProvider(session)
+    result = await provider.async_get_stations(
+        52.0,
+        5.0,
+        500,
+        1,
+        discovery_filters=DiscoveryFilterSettings(
+            connector_types=("IEC_62196_T2",),
+            minimum_power_kw=11.0,
+            require_available=True,
+        ),
+    )
+
+    assert [station.provider_id for station in result.nearby] == ["NL-TEST-002"]
 
 
 @pytest.mark.asyncio
