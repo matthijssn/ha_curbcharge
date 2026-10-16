@@ -14,13 +14,16 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 import custom_components.curbcharge as curbcharge
 from custom_components.curbcharge.const import (
     CONF_API_TOKEN,
+    CONF_CONNECTOR_TYPES,
     CONF_FAVOURITES,
     CONF_INCLUDE_UNKNOWN,
     CONF_LOCATION_ENTITY,
     CONF_LOCATION_MOVEMENT_THRESHOLD,
     CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
+    CONF_MIN_POWER_KW,
     CONF_PROVIDER,
+    CONF_REQUIRE_AVAILABLE,
     CONF_SCAN_INTERVAL,
     CONF_SEARCH_RADIUS,
     DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
@@ -1152,6 +1155,25 @@ async def test_setup_requires_a_valid_location(hass):
 )
 async def test_setup_rejects_invalid_options(hass, key, value):
     entry = _entry({key: value})
+
+    with pytest.raises(ConfigEntryNotReady) as error:
+        await curbcharge.async_setup_entry(hass, entry)
+
+    assert error.value.translation_key == "invalid_config"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "filters",
+    [
+        {CONF_CONNECTOR_TYPES: ["UNKNOWN_CODE"]},
+        {CONF_MIN_POWER_KW: 0},
+        {CONF_MIN_POWER_KW: float("inf")},
+        {CONF_REQUIRE_AVAILABLE: 1},
+    ],
+)
+async def test_setup_rejects_invalid_discovery_filter_settings(hass, filters):
+    entry = _entry(filters)
 
     with pytest.raises(ConfigEntryNotReady) as error:
         await curbcharge.async_setup_entry(hass, entry)

@@ -79,6 +79,20 @@
           "provider": "De gegevensprovider voor het vinden van laadpunten en beschikbaarheid."
         }
       },
+      "discovery_filters": {
+        "title": "Laadpunten filteren",
+        "description": "Filter NDW-laadpunten optioneel op basis van hun connectorgroepen. De filters worden vóór de stationslimiet toegepast.",
+        "data": {
+          "connector_types": "Connectortypen",
+          "min_power_kw": "Minimaal vermogen (kW)",
+          "require_available": "Een beschikbare connector vereisen"
+        },
+        "data_description": {
+          "connector_types": "Laat leeg voor elk type. Een connectorgroep met een geselecteerd type moet ook aan de overige filters voldoen.",
+          "min_power_kw": "Optioneel. Een passende connectorgroep moet minstens dit vermogen rapporteren.",
+          "require_available": "Neem alleen laadpunten op waarvan een passende connectorgroep beschikbare connectoren rapporteert."
+        }
+      },
       "belgium_credentials": {
         "title": "Verbinden met Eco-Movement België",
         "description": "Voer de API-token in die Eco-Movement aan u heeft verstrekt. De token wordt in deze integratie opgeslagen en in diagnostiek afgeschermd.",
@@ -128,6 +142,9 @@
           "max_stations": "Maximumaantal laadpunten",
           "provider": "Provider",
           "include_unknown": "Laadpunten zonder beschikbaarheidsgegevens opnemen",
+          "connector_types": "Connectortypen",
+          "min_power_kw": "Minimaal vermogen (kW)",
+          "require_available": "Een beschikbare connector vereisen",
           "favourites": "Favoriete laadpunten",
           "location_movement_threshold": "Verplaatsingsdrempel locatie (m)"
         },
@@ -137,6 +154,9 @@
           "max_stations": "Beperk het aantal laadpunten en bijbehorende entiteiten.",
           "provider": "De gegevensprovider voor het vinden van laadpunten en beschikbaarheid.",
           "include_unknown": "Neem laadpunten op als de provider geen connectorbeschikbaarheid meldt.",
+          "connector_types": "Laat leeg voor elk type. Een connectorgroep met een geselecteerd type moet ook aan de overige filters voldoen.",
+          "min_power_kw": "Optioneel. Een passende connectorgroep moet minstens dit vermogen rapporteren.",
+          "require_available": "Neem alleen laadpunten op waarvan een passende connectorgroep beschikbare connectoren rapporteert.",
           "favourites": "Selecteer laadpunten op naam. Favorieten blijven beschikbaar buiten de zoekradius en worden toegevoegd boven op de limiet voor laadpunten in de buurt.",
           "location_movement_threshold": "Minimale afstand die de geselecteerde entiteit moet afleggen voordat de zoeklocatie wordt bijgewerkt. Stel in op 0 om de drempel uit te schakelen."
         }
@@ -166,6 +186,17 @@
         "home": "Thuiscoördinaten van Home Assistant",
         "manual": "Breedte- en lengtegraad handmatig invoeren",
         "entity": "Home Assistant-entiteit"
+      }
+    },
+    "ndw_connector_type": {
+      "options": {
+        "IEC_62196_T2": "Type 2 (Mennekes)",
+        "IEC_62196_T2_COMBO": "CCS (Combo 2)",
+        "CHADEMO": "CHAdeMO",
+        "IEC_60309_2_SINGLE_16": "CEE 16 A (eenfase)",
+        "IEC_60309_2_THREE_16": "CEE 16 A (driefase)",
+        "IEC_60309_2_THREE_32": "CEE 32 A (driefase)",
+        "DOMESTIC_A": "Huishoudelijk type A (NEMA 1-15)"
       }
     },
     "provider": {

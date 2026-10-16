@@ -42,7 +42,7 @@ from .const import (
 )
 from .coordinator import CurbChargeCoordinator
 from .location import resolve_location
-from .models import parse_favourite_references
+from .models import DiscoveryFilterSettings, parse_favourite_references
 from .provider import ChargingProviderError
 
 type CurbChargeConfigEntry = ConfigEntry[CurbChargeCoordinator]
@@ -81,6 +81,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
     location_movement_threshold_m = _location_movement_threshold(
         options, entry.data.get(CONF_LOCATION_SOURCE)
     )
+    if provider_id == PROVIDER_NDW_DOT_NL:
+        try:
+            DiscoveryFilterSettings.from_config(options)
+        except ValueError as err:
+            raise ConfigEntryNotReady(
+                translation_domain=DOMAIN,
+                translation_key="invalid_config",
+            ) from err
     api_token = entry.data.get(CONF_API_TOKEN)
     try:
         favourites = parse_favourite_references(
