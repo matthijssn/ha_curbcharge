@@ -186,6 +186,27 @@ disable the threshold. Favourites can also be selected by their displayed
 names. They are stored per config entry, continue to be refreshed outside the
 search radius, and are added beyond the normal nearby station limit. The
 provider is selected during setup and cannot be switched from the options flow.
+For NDW DOT-NL, an additional setup step and the Options flow offer connector
+type, minimum power, and require-available filters. Select zero or more
+connector types; if several are selected, any one may match, but the same
+connector group must also meet the selected power and availability criteria.
+For example, **Type 2 (Mennekes)** with a minimum of `11` kW accepts a Type 2
+group reporting at least `11` kW; **CCS (Combo 2)** with a minimum of `100` kW
+accepts a matching CCS group reporting at least `100` kW. The thresholds are
+inclusive. **Require an available connector** additionally requires that same
+group to report a positive available count.
+
+Leave connector types empty and minimum power blank to omit those filters;
+minimum power must be finite and positive. Require-available is off by default.
+Missing or unknown group data does not satisfy an active filter. The existing
+**Include stations without availability data** option is separate and enabled
+by default; turning it off excludes NDW stations with no availability report
+before the station cap. The search radius remains the distance limit, and the
+maximum-station cap selects the nearest matching stations (with provider
+station ID as the tie-breaker). These filters are NDW-only; Belgium preview
+has no filter step or filter options. There is no operator filter or separate
+maximum-distance setting.
+
 See the
 [Belgium preview setup](#belgium-preview-setup) steps before choosing that
 provider.
@@ -320,10 +341,13 @@ make no extra provider requests.
 When a tracked search center moves, newly matching stations are added on the
 next successful refresh. A non-favourite station absent from three consecutive
 successful refreshes becomes unavailable after the first miss and its entities
-and device are removed after the third. Saved favourites remain as unavailable
-devices through provider misses; removing a favourite resumes the three-refresh
-removal behavior. Provider failures and invalid location updates do not count
-as station absences or replace the last successful coordinator data.
+and device are removed after the third. A station omitted because it no longer
+matches an NDW filter follows the same lifecycle; if it matches again before
+the third successful omission, its existing device and entity IDs are reused.
+Saved favourites remain as unavailable devices through provider misses;
+removing a favourite resumes the three-refresh removal behavior. Provider
+failures and invalid location updates do not count as station absences or
+replace the last successful coordinator data.
 
 ## Data updates
 
@@ -333,6 +357,9 @@ The default interval is five minutes and can be reduced to one minute in
 options. NDW may paginate GeoJSON results, and tariffs come from a separate
 OCPI file cached for six hours. The provider client may therefore make
 additional HTTP requests when more pages or uncached tariffs are needed.
+NDW discovery filters run locally on the normalized, radius-bounded results
+from the regular bounding-box refresh. They do not add provider requests;
+matching candidates are sorted and capped before tariff lookup.
 The Status summary's `last_updated` attribute is the provider's timestamp;
 `last_successful_update` is when the coordinator last completed a successful
 refresh. The provider timestamp describes its source record, not necessarily
