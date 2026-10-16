@@ -26,6 +26,7 @@ from .geography import distance_m
 from .models import (
     ChargingLocation,
     ChargingStation,
+    DiscoveryFilterSettings,
     FavouriteStationReference,
     TariffStatus,
 )
@@ -56,6 +57,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         config_entry: ConfigEntry[Any] | None = None,
         location_resolver: Callable[[], tuple[float, float] | None] | None = None,
         location_movement_threshold_m: int = DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
+        discovery_filters: DiscoveryFilterSettings | None = None,
     ) -> None:
         """Initialize the shared coordinator."""
         self.provider = provider
@@ -71,6 +73,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         self.favourites = favourites
         self.location_resolver = location_resolver
         self.location_movement_threshold_m = location_movement_threshold_m
+        self.discovery_filters = discovery_filters or DiscoveryFilterSettings()
         self.favourite_ids = {favourite.provider_id for favourite in favourites}
         self.nearby_station_ids: set[str] | None = None
         self._config_entry_data = (
@@ -100,6 +103,8 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
                 self.radius_m,
                 self.max_stations,
                 self.favourites,
+                discovery_filters=self.discovery_filters,
+                include_unknown=self.include_unknown,
             )
         except AuthenticationError as err:
             self._log_update_unavailable(type(err).__name__)
