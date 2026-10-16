@@ -123,6 +123,34 @@ async def test_get_stations_filters_by_radius_and_limit(sample_geojson):
 
 
 @pytest.mark.asyncio
+async def test_get_stations_recalculates_radius_and_limit_for_moved_center(
+    sample_geojson,
+):
+    center = (52.0, 5.001)
+    scenarios = [
+        (100, 2, ["NL-TEST-002", "NL-TEST-001"]),
+        (60, 10, ["NL-TEST-002"]),
+    ]
+
+    for radius_m, max_stations, expected_ids in scenarios:
+        session = FakeSession([FakeResponse(_without_tariffs(sample_geojson))])
+        provider = NdwDotNlProvider(session)
+
+        stations = (
+            await provider.async_get_stations(
+                *center, radius_m=radius_m, max_stations=max_stations
+            )
+        ).nearby
+
+        assert [station.provider_id for station in stations] == expected_ids
+        assert stations[0].distance_m == 0
+        assert session.requests[0][1] == {"bbox": api._bounding_box(*center, radius_m)}
+        assert session.requests[0][1] != {
+            "bbox": api._bounding_box(52.0, 5.0, radius_m)
+        }
+
+
+@pytest.mark.asyncio
 async def test_valid_empty_response_is_empty(sample_geojson):
     session = FakeSession([FakeResponse({"type": "FeatureCollection", "features": []})])
     provider = NdwDotNlProvider(session)

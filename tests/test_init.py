@@ -16,12 +16,16 @@ from custom_components.curbcharge.const import (
     CONF_API_TOKEN,
     CONF_FAVOURITES,
     CONF_INCLUDE_UNKNOWN,
+    CONF_LOCATION_ENTITY,
+    CONF_LOCATION_MOVEMENT_THRESHOLD,
     CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
     CONF_PROVIDER,
     CONF_SCAN_INTERVAL,
     CONF_SEARCH_RADIUS,
+    DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
     DOMAIN,
+    LOCATION_ENTITY,
     LOCATION_HOME,
     LOCATION_MANUAL,
     PROVIDER_ECO_MOVEMENT_BE,
@@ -61,6 +65,25 @@ def _entry(
         entry_id=entry_id,
         unique_id=unique_id,
         data=data,
+        options=options or {},
+    )
+
+
+def _entity_entry(
+    entity_id: str,
+    *,
+    options: dict[str, object] | None = None,
+) -> MockConfigEntry:
+    return MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="test-entity-search-area",
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_ENTITY,
+            CONF_LOCATION_ENTITY: entity_id,
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+        },
         options=options or {},
     )
 
@@ -1022,6 +1045,26 @@ async def test_setup_rejects_invalid_options(hass, key, value):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("threshold", [True, -1, 100.5])
+async def test_setup_rejects_invalid_entity_movement_threshold(hass, threshold):
+    entity_id = "sensor.vehicle_location"
+    hass.states.async_set(
+        entity_id,
+        "moving",
+        {CONF_LATITUDE: 52.0, CONF_LONGITUDE: 5.0},
+    )
+    entry = _entity_entry(
+        entity_id,
+        options={CONF_LOCATION_MOVEMENT_THRESHOLD: threshold},
+    )
+
+    with pytest.raises(ConfigEntryNotReady) as error:
+        await curbcharge.async_setup_entry(hass, entry)
+
+    assert error.value.translation_key == "invalid_config"
+
+
+@pytest.mark.asyncio
 async def test_setup_requires_a_belgium_token(hass):
     entry = _entry({CONF_PROVIDER: PROVIDER_ECO_MOVEMENT_BE})
 
@@ -1096,6 +1139,133 @@ async def test_setup_translates_first_refresh_failure(hass, monkeypatch):
     entry.add_to_hass(hass)
 
     assert not await hass.config_entries.async_setup(entry.entry_id)
+
+
+@pytest.mark.asyncio
+async def test_entity_location_updates_on_polls_without_state_change_requests(
+    hass, monkeypatch, sample_stations
+):
+    entity_id = "sensor.vehicle_location"
+    initial = (52.0, 5.0)
+    subthreshold = (52.0005, 5.0)
+    moved = (52.0011, 5.0)
+    hass.states.async_set(
+        entity_id,
+        "moving",
+        {CONF_LATITUDE: initial[0], CONF_LONGITUDE: initial[1]},
+    )
+    station = sample_stations[0]
+    provider = FakeProvider([(station,), (station,), (station,)])
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    entry = _entity_entry(entity_id)
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator = entry.runtime_data
+
+    assert coordinator.location_movement_threshold_m == (
+        DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M
+    )
+    assert provider.station_calls[0][:2] == initial
+    assert CONF_LATITUDE not in entry.data
+    assert CONF_LONGITUDE not in entry.data
+
+    hass.states.async_set(
+        entity_id,
+        "moving",
+        {CONF_LATITUDE: subthreshold[0], CONF_LONGITUDE: subthreshold[1]},
+    )
+    await hass.async_block_till_done()
+    assert len(provider.station_calls) == 1
+
+    await coordinator.async_refresh()
+    assert provider.station_calls[-1][:2] == initial
+
+    hass.states.async_set(
+        entity_id,
+        "moving",
+        {CONF_LATITUDE: moved[0], CONF_LONGITUDE: moved[1]},
+    )
+    await hass.async_block_till_done()
+    assert len(provider.station_calls) == 2
+
+    await coordinator.async_refresh()
+    assert provider.station_calls[-1][:2] == moved
+
+
+@pytest.mark.asyncio
+async def test_invalid_entity_location_makes_entities_unavailable_then_recovers(
+    hass, monkeypatch, sample_stations
+):
+    entity_id = "sensor.vehicle_location"
+    location = (52.0, 5.0)
+    recovered_location = (52.0011, 5.0)
+    hass.states.async_set(
+        entity_id,
+        "moving",
+        {CONF_LATITUDE: location[0], CONF_LONGITUDE: location[1]},
+    )
+    station = sample_stations[0]
+    provider = FakeProvider([(station,), (station,)])
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    entry = _entity_entry(
+        entity_id,
+        options={CONF_LOCATION_MOVEMENT_THRESHOLD: 0},
+    )
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator = entry.runtime_data
+    registry = er.async_get(hass)
+    available_entity = next(
+        entity
+        for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
+        if entity.unique_id == f"{PROVIDER_NDW_DOT_NL}_{station.provider_id}_available"
+    )
+    state = hass.states.get(available_entity.entity_id)
+    assert state is not None
+    assert state.state == "on"
+
+    hass.states.async_set(
+        entity_id,
+        "unavailable",
+        {CONF_LATITUDE: location[0], CONF_LONGITUDE: location[1]},
+    )
+    await hass.async_block_till_done()
+    assert len(provider.station_calls) == 1
+
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert not coordinator.last_update_success
+    assert len(provider.station_calls) == 1
+    assert coordinator.data[station.provider_id] == station
+    state = hass.states.get(available_entity.entity_id)
+    assert state is not None
+    assert state.state == "unavailable"
+
+    hass.states.async_set(
+        entity_id,
+        "moving",
+        {
+            CONF_LATITUDE: recovered_location[0],
+            CONF_LONGITUDE: recovered_location[1],
+        },
+    )
+    await hass.async_block_till_done()
+    assert len(provider.station_calls) == 1
+
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert coordinator.last_update_success
+    assert len(provider.station_calls) == 2
+    assert provider.station_calls[-1][:2] == recovered_location
+    state = hass.states.get(available_entity.entity_id)
+    assert state is not None
+    assert state.state == "on"
 
 
 @pytest.mark.asyncio
@@ -1232,3 +1402,42 @@ async def test_options_update_applies_favourites_to_live_coordinator(
             station.longitude,
         ),
     )
+
+
+@pytest.mark.asyncio
+async def test_options_update_applies_entity_movement_threshold(hass, monkeypatch):
+    entity_id = "sensor.vehicle_location"
+    initial = (52.0, 5.0)
+    moved = (52.0005, 5.0)
+    hass.states.async_set(
+        entity_id,
+        "moving",
+        {CONF_LATITUDE: initial[0], CONF_LONGITUDE: initial[1]},
+    )
+    provider = FakeProvider([(), ()])
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    entry = _entity_entry(
+        entity_id,
+        options={CONF_LOCATION_MOVEMENT_THRESHOLD: 100},
+    )
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator = entry.runtime_data
+    hass.states.async_set(
+        entity_id,
+        "moving",
+        {CONF_LATITUDE: moved[0], CONF_LONGITUDE: moved[1]},
+    )
+    await hass.async_block_till_done()
+
+    hass.config_entries.async_update_entry(
+        entry,
+        options={CONF_LOCATION_MOVEMENT_THRESHOLD: 0},
+    )
+    await hass.async_block_till_done()
+
+    assert entry.runtime_data is coordinator
+    assert coordinator.location_movement_threshold_m == 0
+    assert provider.station_calls[-1][:2] == moved

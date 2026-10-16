@@ -8,7 +8,11 @@ import pytest
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
+from custom_components.curbcharge.const import (
+    DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
+)
 from custom_components.curbcharge.coordinator import CurbChargeCoordinator
+from custom_components.curbcharge.geography import distance_m
 from custom_components.curbcharge.models import (
     FavouriteStationReference,
     StationDiscoveryResult,
@@ -21,7 +25,15 @@ from custom_components.curbcharge.provider import (
 from tests.conftest import FakeProvider
 
 
-def _coordinator(hass, provider, *, include_unknown=True, favourites=()):
+def _coordinator(
+    hass,
+    provider,
+    *,
+    include_unknown=True,
+    favourites=(),
+    location_resolver=None,
+    location_movement_threshold_m=DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
+):
     return CurbChargeCoordinator(
         hass,
         provider,
@@ -32,6 +44,8 @@ def _coordinator(hass, provider, *, include_unknown=True, favourites=()):
         5,
         include_unknown,
         favourites,
+        location_resolver=location_resolver,
+        location_movement_threshold_m=location_movement_threshold_m,
     )
 
 
@@ -100,6 +114,102 @@ async def test_provider_failure_does_not_remove_cached_stations(hass, sample_sta
     assert not coordinator.last_update_success
     assert coordinator.data == {station.provider_id: station}
     assert coordinator.removed_station_ids == set()
+
+
+@pytest.mark.asyncio
+async def test_tracked_location_applies_threshold_from_last_accepted_center(hass):
+    initial = (52.0, 5.0)
+    subthreshold = (52.0005, 5.0)
+    beyond_threshold = (52.0011, 5.0)
+    current_location = initial
+    provider = FakeProvider([(), (), ()])
+    coordinator = _coordinator(
+        hass,
+        provider,
+        location_resolver=lambda: current_location,
+        location_movement_threshold_m=100,
+    )
+
+    assert distance_m(*initial, *subthreshold) < 100
+    assert distance_m(*initial, *beyond_threshold) >= 100
+    assert distance_m(*subthreshold, *beyond_threshold) < 100
+
+    await coordinator.async_refresh()
+    current_location = subthreshold
+    await coordinator.async_refresh()
+    current_location = beyond_threshold
+    await coordinator.async_refresh()
+
+    assert [call[:2] for call in provider.station_calls] == [
+        initial,
+        initial,
+        beyond_threshold,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_zero_movement_threshold_accepts_any_new_location(hass):
+    initial = (52.0, 5.0)
+    moved = (52.00001, 5.0)
+    current_location = initial
+    provider = FakeProvider([(), ()])
+    coordinator = _coordinator(
+        hass,
+        provider,
+        location_resolver=lambda: current_location,
+        location_movement_threshold_m=0,
+    )
+
+    await coordinator.async_refresh()
+    current_location = moved
+    await coordinator.async_refresh()
+
+    assert [call[:2] for call in provider.station_calls] == [initial, moved]
+
+
+@pytest.mark.asyncio
+async def test_invalid_tracked_location_preserves_data_and_miss_count_then_recovers(
+    hass, sample_stations
+):
+    station = sample_stations[0]
+    initial = (52.0, 5.0)
+    moved = (52.0011, 5.0)
+    current_location = initial
+    provider = FakeProvider([(station,), (), (), ()])
+    coordinator = _coordinator(
+        hass,
+        provider,
+        location_resolver=lambda: current_location,
+        location_movement_threshold_m=100,
+    )
+
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+    assert coordinator._missing_refreshes == {station.provider_id: 1}
+    cached_data = dict(coordinator.data)
+    last_successful_update = coordinator.last_successful_update
+
+    current_location = None
+    await coordinator.async_refresh()
+
+    assert not coordinator.last_update_success
+    assert len(provider.station_calls) == 2
+    assert coordinator.data == cached_data
+    assert coordinator._missing_refreshes == {station.provider_id: 1}
+    assert coordinator.last_successful_update == last_successful_update
+    assert coordinator.removed_station_ids == set()
+
+    current_location = moved
+    await coordinator.async_refresh()
+    assert coordinator.last_update_success
+    assert len(provider.station_calls) == 3
+    assert provider.station_calls[-1][:2] == moved
+    assert coordinator._missing_refreshes == {station.provider_id: 2}
+    assert station.provider_id not in coordinator.removed_station_ids
+
+    await coordinator.async_refresh()
+    assert station.provider_id not in coordinator.data
+    assert coordinator.removed_station_ids == {station.provider_id}
 
 
 @pytest.mark.asyncio
