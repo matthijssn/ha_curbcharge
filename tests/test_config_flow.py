@@ -66,8 +66,15 @@ def _discovery_filters(
     minimum_power_kw: float | None = None,
     require_available: bool = False,
 ) -> dict[str, object]:
+    selector_value_by_code = {
+        code: selector_value
+        for selector_value, code in config_flow.NDW_CONNECTOR_TYPE_SELECTOR_OPTIONS
+    }
     return {
-        CONF_CONNECTOR_TYPES: connector_types or [],
+        CONF_CONNECTOR_TYPES: [
+            selector_value_by_code.get(connector_type, connector_type)
+            for connector_type in connector_types or []
+        ],
         CONF_MIN_POWER_KW: minimum_power_kw,
         CONF_REQUIRE_AVAILABLE: require_available,
     }
@@ -124,13 +131,16 @@ async def test_config_flow_uses_manual_coordinates(hass, monkeypatch):
         result["flow_id"], _station_options()
     )
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], _discovery_filters()
+        result["flow_id"], _discovery_filters(["IEC_62196_T2"], 7.2, True)
     )
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert provider.validation_calls == [(52.123456, 5.654321, 500)]
     assert result["data"]["latitude"] == 52.123456
     assert result["data"]["longitude"] == 5.654321
+    assert result["data"][CONF_CONNECTOR_TYPES] == ["IEC_62196_T2"]
+    assert result["data"][CONF_MIN_POWER_KW] == 7.2
+    assert result["data"][CONF_REQUIRE_AVAILABLE] is True
     assert "52.123456" not in result["result"].unique_id
     assert "5.654321" not in result["result"].unique_id
 
@@ -668,8 +678,26 @@ def test_discovery_filter_settings_default_and_validate():
     assert settings.minimum_power_kw == 11.0
     assert settings.require_available
 
+    saved_settings = DiscoveryFilterSettings.from_config(
+        {
+            CONF_CONNECTOR_TYPES: ["IEC_62196_T2", "IEC_62196_T2"],
+            CONF_MIN_POWER_KW: 7,
+        }
+    )
+    assert saved_settings.connector_types == ("IEC_62196_T2",)
+    assert saved_settings.as_config() == {
+        CONF_CONNECTOR_TYPES: ["IEC_62196_T2"],
+        CONF_MIN_POWER_KW: 7.0,
+        CONF_REQUIRE_AVAILABLE: False,
+    }
+    assert (
+        DiscoveryFilterSettings.from_config({CONF_CONNECTOR_TYPES: None})
+        == DiscoveryFilterSettings()
+    )
+
     invalid_settings = (
         {CONF_CONNECTOR_TYPES: "IEC_62196_T2"},
+        {CONF_CONNECTOR_TYPES: [1]},
         {CONF_CONNECTOR_TYPES: ["UNKNOWN_CODE"]},
         {CONF_MIN_POWER_KW: 0},
         {CONF_MIN_POWER_KW: -1},
@@ -697,13 +725,24 @@ def test_ndw_discovery_filter_options_default_and_validate():
     assert defaults[CONF_MIN_POWER_KW] is None
     assert defaults[CONF_REQUIRE_AVAILABLE] is False
 
+    restored_schema = config_flow.options_schema(
+        {
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+            **_discovery_filters(["IEC_62196_T2"], 7.2, True),
+        }
+    )
+    restored = restored_schema(values)
+    assert restored[CONF_CONNECTOR_TYPES] == ["type-2"]
+    assert restored[CONF_MIN_POWER_KW] == 7.2
+    assert restored[CONF_REQUIRE_AVAILABLE] is True
+
     selected = schema(
         {
             **values,
             **_discovery_filters(["IEC_62196_T2"], 7.2, True),
         }
     )
-    assert selected[CONF_CONNECTOR_TYPES] == ["IEC_62196_T2"]
+    assert selected[CONF_CONNECTOR_TYPES] == ["type-2"]
     assert selected[CONF_MIN_POWER_KW] == 7.2
     assert selected[CONF_REQUIRE_AVAILABLE] is True
 
@@ -1131,7 +1170,7 @@ async def test_config_flow_surfaces_authentication_failure(hass, monkeypatch):
     assert result["step_id"] == "discovery_filters"
     assert result["errors"]["base"] == "auth"
     restored = result["data_schema"]({})
-    assert restored[CONF_CONNECTOR_TYPES] == ["IEC_62196_T2"]
+    assert restored[CONF_CONNECTOR_TYPES] == ["type-2"]
     assert restored[CONF_MIN_POWER_KW] == 11.0
     assert restored[CONF_REQUIRE_AVAILABLE] is True
 
