@@ -849,6 +849,36 @@ def test_selection_sensors_handle_uninitialized_coordinator(hass):
     assert provider.station_calls == []
 
 
+def test_cheapest_sensor_reports_mixed_currency_no_result(hass, sample_stations):
+    euro_station = _selection_station(
+        sample_stations[0], distance=100, power=50, price="0.20"
+    )
+    dollar_station = replace(
+        _selection_station(sample_stations[1], distance=200, power=150, price="0.10"),
+        tariff=ChargingTariff("USD", Decimal("0.10"), None, None, None, "test"),
+    )
+    provider = FakeProvider()
+    coordinator = _coordinator(hass, euro_station, provider=provider)
+    coordinator.async_set_updated_data(
+        {
+            euro_station.provider_id: euro_station,
+            dollar_station.provider_id: dollar_station,
+        }
+    )
+    coordinator.last_successful_update = datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC)
+    sensor = CheapestAvailableChargerSensor(
+        coordinator,
+        MockConfigEntry(domain=DOMAIN, unique_id="mixed-currency-area"),
+    )
+
+    assert sensor.native_value is None
+    assert sensor.extra_state_attributes == {
+        "reason": "mixed_currencies",
+        "last_updated": "2025-01-02T03:04:05+00:00",
+    }
+    assert provider.station_calls == []
+
+
 def test_status_summary_exposes_favourite_per_config_entry(hass, sample_stations):
     station = sample_stations[0]
     favourite_coordinator = _coordinator(

@@ -171,12 +171,16 @@ def test_new_selectors_require_reported_positive_connectors_and_preserve_best_ne
         status_only,
         "only_available_station",
     )
+    zero_connectors = _available_station(sample_stations[1], count=0)
+    stale = replace(_available_station(sample_stations[1]), is_stale=True)
     for selector in (
         select_nearest_station,
         select_cheapest_station,
         select_fastest_station,
     ):
         assert selector((status_only,)) == (None, "no_available_station")
+        assert selector((zero_connectors,)) == (None, "no_available_station")
+        assert selector((stale,)) == (None, "no_available_station")
 
 
 def test_cheapest_selector_compares_decimal_prices_before_distance(sample_stations):
