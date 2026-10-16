@@ -1,6 +1,7 @@
 """Tests for CurbCharge sensor values and attributes."""
 
 from dataclasses import replace
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from homeassistant.components.sensor import SensorStateClass
@@ -21,12 +22,15 @@ from custom_components.curbcharge.models import (
 from custom_components.curbcharge.sensor import (
     AvailableConnectorsSensor,
     BestNearbyChargerSensor,
+    CheapestAvailableChargerSensor,
     ConnectorGroupSensor,
     DistanceSensor,
+    FastestAvailableChargerSensor,
     MaximumChargingPowerSensor,
     NearbyAvailabilityPercentageSensor,
     NearbyAvailableConnectorsSensor,
     NearbyChargingUnitsSensor,
+    NearestAvailableChargerSensor,
     OccupiedConnectorsSensor,
     PricePerKwhSensor,
     StatusSummarySensor,
@@ -60,6 +64,21 @@ def _coordinator(
     )
     coordinator.async_set_updated_data({station.provider_id: station})
     return coordinator
+
+
+def _selection_station(station, *, distance, power, price):
+    connector = replace(
+        station.connectors[0],
+        count=1,
+        available_count=1,
+        max_power_kw=power,
+    )
+    return replace(
+        station,
+        distance_m=distance,
+        connectors=(connector,),
+        tariff=ChargingTariff("EUR", Decimal(price), None, None, None, "test"),
+    )
 
 
 def _belgian_evse(
@@ -695,6 +714,139 @@ def test_best_nearby_sensor_exposes_selection_reason(hass, sample_stations):
     assert sensor.extra_state_attributes["station_id"] == station.provider_id
     assert sensor.extra_state_attributes["available_connectors"] == 2
     assert sensor.extra_state_attributes["reason"] == "only_available_station"
+
+
+def test_selection_sensors_report_station_details_and_reasons(hass, sample_stations):
+    nearest_station = _selection_station(
+        sample_stations[0], distance=100, power=50, price="0.40"
+    )
+    fastest_cheapest_station = _selection_station(
+        sample_stations[1], distance=200, power=150, price="0.20"
+    )
+    remote_favourite = _selection_station(
+        replace(sample_stations[0], provider_id="remote-favourite"),
+        distance=2_000,
+        power=1_000,
+        price="0.01",
+    )
+    provider = FakeProvider()
+    coordinator = _coordinator(hass, nearest_station, provider=provider)
+    coordinator.async_set_updated_data(
+        {
+            nearest_station.provider_id: nearest_station,
+            fastest_cheapest_station.provider_id: fastest_cheapest_station,
+            remote_favourite.provider_id: remote_favourite,
+        }
+    )
+    coordinator.nearby_station_ids = {
+        nearest_station.provider_id,
+        fastest_cheapest_station.provider_id,
+    }
+    coordinator.favourite_ids = {remote_favourite.provider_id}
+    coordinator.last_successful_update = datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC)
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="selector-area")
+    sensors = (
+        (
+            NearestAvailableChargerSensor(coordinator, entry),
+            nearest_station,
+            "shortest_distance",
+            "nearest_available_charger",
+        ),
+        (
+            CheapestAvailableChargerSensor(coordinator, entry),
+            fastest_cheapest_station,
+            "lowest_price_per_kwh",
+            "cheapest_available_charger",
+        ),
+        (
+            FastestAvailableChargerSensor(coordinator, entry),
+            fastest_cheapest_station,
+            "highest_maximum_power",
+            "fastest_available_charger",
+        ),
+    )
+
+    for sensor, station, reason, suffix in sensors:
+        assert sensor.native_value == station.name
+        assert sensor.unique_id == f"selector-area_{suffix}"
+        assert sensor.extra_state_attributes == {
+            "reason": reason,
+            "last_updated": "2025-01-02T03:04:05+00:00",
+            "station_id": station.provider_id,
+            "provider": station.provider,
+            "country_code": station.country_code,
+            "name": station.name,
+            "address": station.address,
+            "distance_m": station.distance_m,
+            "available_connectors": 1,
+            "total_connectors": 1,
+            "max_power_kw": station.max_power_kw,
+            "price_per_kwh": float(station.tariff.price_per_kwh),
+            "currency": "EUR",
+            "latitude": station.latitude,
+            "longitude": station.longitude,
+        }
+
+    assert provider.station_calls == []
+
+
+def test_nearest_sensor_reports_reason_when_distance_is_unknown(hass, sample_stations):
+    station = _selection_station(
+        sample_stations[0], distance=None, power=50, price="0.40"
+    )
+    coordinator = _coordinator(hass, station)
+    coordinator.nearby_station_ids = {station.provider_id}
+    sensor = NearestAvailableChargerSensor(
+        coordinator,
+        MockConfigEntry(domain=DOMAIN, unique_id="unknown-distance-area"),
+    )
+
+    assert sensor.native_value is None
+    assert sensor.extra_state_attributes["reason"] == "no_known_distance"
+
+
+def test_selection_sensors_expose_reason_and_timestamp_without_results(
+    hass, sample_stations
+):
+    provider = FakeProvider()
+    coordinator = _coordinator(hass, sample_stations[0], provider=provider)
+    coordinator.async_set_updated_data({})
+    coordinator.last_successful_update = datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC)
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="empty-selector-area")
+    sensors = (
+        NearestAvailableChargerSensor(coordinator, entry),
+        CheapestAvailableChargerSensor(coordinator, entry),
+        FastestAvailableChargerSensor(coordinator, entry),
+    )
+
+    for sensor in sensors:
+        assert sensor.native_value is None
+        assert sensor.extra_state_attributes == {
+            "reason": "no_available_station",
+            "last_updated": "2025-01-02T03:04:05+00:00",
+        }
+
+    assert provider.station_calls == []
+
+
+def test_selection_sensors_handle_uninitialized_coordinator(hass):
+    provider = FakeProvider()
+    coordinator = CurbChargeCoordinator(hass, provider, 52.0, 5.0, 500, 10, 5, True)
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="uninitialized-selector-area")
+    sensors = (
+        NearestAvailableChargerSensor(coordinator, entry),
+        CheapestAvailableChargerSensor(coordinator, entry),
+        FastestAvailableChargerSensor(coordinator, entry),
+    )
+
+    for sensor in sensors:
+        assert sensor.native_value is None
+        assert sensor.extra_state_attributes == {
+            "reason": "no_available_station",
+            "last_updated": None,
+        }
+
+    assert provider.station_calls == []
 
 
 def test_status_summary_exposes_favourite_per_config_entry(hass, sample_stations):

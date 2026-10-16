@@ -413,6 +413,11 @@ async def test_setup_unload_and_reload_keep_stable_entities(
         f"{provider_id}_{station.provider_id}_price_per_kwh",
         f"{provider_id}_{station.provider_id}_status_summary",
     }
+    expected_selection_entities = {
+        f"{entry.unique_id}_nearest_available_charger",
+        f"{entry.unique_id}_cheapest_available_charger",
+        f"{entry.unique_id}_fastest_available_charger",
+    }
     expected_connector_entities = {
         (
             f"{provider_id}_{station.provider_id}_connector_group_"
@@ -421,7 +426,9 @@ async def test_setup_unload_and_reload_keep_stable_entities(
         for connector in station.connectors
     }
     assert expected_station_entities <= before
+    assert expected_selection_entities <= before
     assert expected_connector_entities <= before
+    assert len(provider.station_calls) == 1
 
     available_entity = next(
         item
@@ -463,6 +470,7 @@ async def test_setup_unload_and_reload_keep_stable_entities(
     }
 
     assert before == after
+    assert len(provider.station_calls) == 2
 
 
 @pytest.mark.asyncio

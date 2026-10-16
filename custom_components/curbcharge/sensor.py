@@ -1,5 +1,6 @@
 """Sensors for CurbCharge stations and recommendations."""
 
+from collections.abc import Callable, Iterable
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, NamedTuple
@@ -16,7 +17,12 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import COUNTRY_BE, COUNTRY_NL
-from .coordinator import CurbChargeCoordinator
+from .coordinator import (
+    CurbChargeCoordinator,
+    select_cheapest_station,
+    select_fastest_station,
+    select_nearest_station,
+)
 from .entity import CurbChargeStationEntity, setup_dynamic_station_entities
 from .models import ChargingConnector, ChargingStation, ChargingTariff, TariffStatus
 
@@ -40,6 +46,9 @@ async def async_setup_entry(
     async_add_entities(
         [
             BestNearbyChargerSensor(coordinator, entry),
+            NearestAvailableChargerSensor(coordinator, entry),
+            CheapestAvailableChargerSensor(coordinator, entry),
+            FastestAvailableChargerSensor(coordinator, entry),
             NearbyChargingUnitsSensor(coordinator, entry),
             NearbyAvailableConnectorsSensor(coordinator, entry),
             NearbyAvailabilityPercentageSensor(coordinator, entry),
@@ -364,6 +373,23 @@ def _current_stations(
         if not station.is_stale
         and station.distance_m is not None
         and station.distance_m <= coordinator.radius_m
+    )
+
+
+def _current_selection_stations(
+    coordinator: CurbChargeCoordinator,
+) -> tuple[ChargingStation, ...] | None:
+    """Return fresh provider-selected nearby stations, excluding remote favourites."""
+    stations = coordinator.data
+    if stations is None:
+        return None
+    nearby_ids = coordinator.nearby_station_ids
+    if nearby_ids is None:
+        return _current_stations(coordinator)
+    return tuple(
+        station
+        for station in stations.values()
+        if not station.is_stale and station.provider_id in nearby_ids
     )
 
 
@@ -693,6 +719,121 @@ class BestNearbyChargerSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEn
             "reason": self.coordinator.best_station_reason,
             "last_updated": _isoformat(self.coordinator.last_successful_update),
         }
+
+
+class _SelectedChargerSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEntity):
+    """Base for deterministic integration-level charger selections."""
+
+    _attr_has_entity_name = True
+    _selector: Callable[[Iterable[ChargingStation]], tuple[ChargingStation | None, str]]
+    _unique_id_suffix: str
+
+    def __init__(
+        self,
+        coordinator: CurbChargeCoordinator,
+        entry: ConfigEntry[Any],
+        selector: Callable[
+            [Iterable[ChargingStation]], tuple[ChargingStation | None, str]
+        ],
+    ) -> None:
+        super().__init__(coordinator)
+        self._selector = selector
+        self._attr_unique_id = (
+            f"{entry.unique_id or entry.entry_id}_{self._unique_id_suffix}"
+        )
+
+    def _selection(self) -> tuple[ChargingStation | None, str]:
+        return self._selector(_current_selection_stations(self.coordinator) or ())
+
+    @property
+    def native_value(self) -> str | None:
+        station, _reason = self._selection()
+        return None if station is None else station.name
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        station, reason = self._selection()
+        return _station_selection_attributes(self.coordinator, station, reason)
+
+
+class NearestAvailableChargerSensor(_SelectedChargerSensor):
+    """The nearest fresh station with known available connectors."""
+
+    _attr_translation_key = "nearest_available_charger"
+    _unique_id_suffix = "nearest_available_charger"
+
+    def __init__(self, coordinator: CurbChargeCoordinator, entry: ConfigEntry[Any]):
+        super().__init__(coordinator, entry, select_nearest_station)
+
+
+class CheapestAvailableChargerSensor(_SelectedChargerSensor):
+    """The cheapest fresh station with a comparable station-level price."""
+
+    _attr_translation_key = "cheapest_available_charger"
+    _unique_id_suffix = "cheapest_available_charger"
+
+    def __init__(self, coordinator: CurbChargeCoordinator, entry: ConfigEntry[Any]):
+        super().__init__(coordinator, entry, select_cheapest_station)
+
+
+class FastestAvailableChargerSensor(_SelectedChargerSensor):
+    """The fresh available station with the highest reported power."""
+
+    _attr_translation_key = "fastest_available_charger"
+    _unique_id_suffix = "fastest_available_charger"
+
+    def __init__(self, coordinator: CurbChargeCoordinator, entry: ConfigEntry[Any]):
+        super().__init__(coordinator, entry, select_fastest_station)
+
+
+def _station_selection_attributes(
+    coordinator: CurbChargeCoordinator,
+    station: ChargingStation | None,
+    reason: str,
+) -> dict[str, Any]:
+    """Build the common result shape for deterministic selection sensors."""
+    attributes: dict[str, Any] = {
+        "reason": reason,
+        "last_updated": _isoformat(coordinator.last_successful_update),
+    }
+    if station is None:
+        return attributes
+
+    tariff = station.tariff
+    tariff_status = _station_tariff_status(station)
+    currency = (
+        tariff.currency
+        if tariff is not None
+        and tariff.currency.strip()
+        and tariff_status is not TariffStatus.AMBIGUOUS
+        else None
+    )
+    price_per_kwh = None
+    if (
+        tariff is not None
+        and tariff.price_per_kwh is not None
+        and tariff.effective_status is TariffStatus.AVAILABLE
+        and tariff_status is TariffStatus.AVAILABLE
+    ):
+        price_per_kwh = float(tariff.price_per_kwh)
+    attributes.update(
+        {
+            "station_id": station.provider_id,
+            "provider": station.provider,
+            "country_code": station.country_code,
+            "name": station.name,
+            "address": station.address,
+            "distance_m": station.distance_m,
+            "available_connectors": station.available_connectors,
+            "total_connectors": station.total_connectors,
+            "max_power_kw": station.max_power_kw,
+            "price_per_kwh": price_per_kwh,
+            "currency": currency,
+            "latitude": station.latitude,
+            "longitude": station.longitude,
+        }
+    )
+    return attributes
 
 
 def create_station_sensors(
