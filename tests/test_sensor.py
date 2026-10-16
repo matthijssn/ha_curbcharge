@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal
 
+import pytest
 from homeassistant.components.sensor import SensorStateClass
 from homeassistant.const import PERCENTAGE, EntityCategory
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -19,6 +20,7 @@ from custom_components.curbcharge.models import (
     FavouriteStationReference,
     TariffStatus,
 )
+from custom_components.curbcharge.provider import ChargingProviderError
 from custom_components.curbcharge.sensor import (
     AvailabilityPercentageSensor,
     AvailableConnectorsSensor,
@@ -738,15 +740,77 @@ def test_summary_exposes_conflicting_connector_tariffs(hass, sample_stations):
 
 
 def test_best_nearby_sensor_exposes_selection_reason(hass, sample_stations):
-    station = sample_stations[0]
+    station = replace(
+        sample_stations[0],
+        tariff=ChargingTariff("EUR", Decimal("0.42"), None, None, None, "test"),
+    )
     coordinator = _coordinator(hass, station)
+    coordinator.last_successful_update = datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC)
     entry = MockConfigEntry(domain=DOMAIN, unique_id="hashed-area")
     sensor = BestNearbyChargerSensor(coordinator, entry)
+    attributes = sensor.extra_state_attributes
 
     assert sensor.native_value == station.name
-    assert sensor.extra_state_attributes["station_id"] == station.provider_id
-    assert sensor.extra_state_attributes["available_connectors"] == 2
-    assert sensor.extra_state_attributes["reason"] == "only_available_station"
+    assert attributes["result_status"] == "selected"
+    assert attributes["station_id"] == station.provider_id
+    assert attributes["provider_station_id"] == station.provider_id
+    assert attributes["station_name"] == station.name
+    assert attributes["address"] == station.address
+    assert attributes["available_connectors"] == 2
+    assert attributes["total_connectors"] == 4
+    assert attributes["max_power_kw"] == 50
+    assert attributes["price_per_kwh"] == 0.42
+    assert attributes["currency"] == "EUR"
+    assert attributes["provider_last_updated"] == station.last_updated.isoformat()
+    assert attributes["last_updated"] == "2025-01-02T03:04:05+00:00"
+    assert attributes["last_successful_update"] == attributes["last_updated"]
+    assert attributes["reason"] == "only_available_station"
+
+
+def test_best_nearby_result_status_distinguishes_empty_unknown_and_unavailable(
+    hass, sample_stations
+):
+    station = sample_stations[0]
+    coordinator = _coordinator(hass, station)
+    sensor = BestNearbyChargerSensor(
+        coordinator, MockConfigEntry(domain=DOMAIN, unique_id="status-area")
+    )
+
+    coordinator.async_set_updated_data({})
+    assert sensor.extra_state_attributes["result_status"] == "no_current_stations"
+
+    unknown = replace(station, availability_reported=False)
+    coordinator.async_set_updated_data({unknown.provider_id: unknown})
+    assert sensor.extra_state_attributes["result_status"] == "unknown_availability"
+
+    unavailable = replace(
+        station,
+        connectors=tuple(
+            replace(connector, available_count=0) for connector in station.connectors
+        ),
+    )
+    coordinator.async_set_updated_data({unavailable.provider_id: unavailable})
+    assert sensor.extra_state_attributes["result_status"] == "none_available"
+
+
+@pytest.mark.asyncio
+async def test_best_nearby_result_status_is_unavailable_on_provider_failure(
+    hass, sample_stations
+):
+    station = sample_stations[0]
+    provider = FakeProvider([(station,), ChargingProviderError("offline")])
+    coordinator = CurbChargeCoordinator(hass, provider, 52.0, 5.0, 500, 10, 5, True)
+    sensor = BestNearbyChargerSensor(
+        coordinator, MockConfigEntry(domain=DOMAIN, unique_id="failed-area")
+    )
+
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+
+    assert not sensor.available
+    assert sensor.native_value is None
+    assert sensor.extra_state_attributes["result_status"] == "unavailable"
+    assert "station_id" not in sensor.extra_state_attributes
 
 
 def test_selection_sensors_report_station_details_and_reasons(hass, sample_stations):
@@ -805,10 +869,13 @@ def test_selection_sensors_report_station_details_and_reasons(hass, sample_stati
         assert sensor.extra_state_attributes == {
             "reason": reason,
             "last_updated": "2025-01-02T03:04:05+00:00",
+            "last_successful_update": "2025-01-02T03:04:05+00:00",
             "station_id": station.provider_id,
+            "provider_station_id": station.provider_id,
             "provider": station.provider,
             "country_code": station.country_code,
             "name": station.name,
+            "station_name": station.name,
             "address": station.address,
             "distance_m": station.distance_m,
             "available_connectors": 1,
@@ -816,6 +883,7 @@ def test_selection_sensors_report_station_details_and_reasons(hass, sample_stati
             "max_power_kw": station.max_power_kw,
             "price_per_kwh": float(station.tariff.price_per_kwh),
             "currency": "EUR",
+            "provider_last_updated": station.last_updated.isoformat(),
             "latitude": station.latitude,
             "longitude": station.longitude,
         }
@@ -857,6 +925,7 @@ def test_selection_sensors_expose_reason_and_timestamp_without_results(
         assert sensor.extra_state_attributes == {
             "reason": "no_available_station",
             "last_updated": "2025-01-02T03:04:05+00:00",
+            "last_successful_update": "2025-01-02T03:04:05+00:00",
         }
 
     assert provider.station_calls == []
@@ -877,6 +946,7 @@ def test_selection_sensors_handle_uninitialized_coordinator(hass):
         assert sensor.extra_state_attributes == {
             "reason": "no_available_station",
             "last_updated": None,
+            "last_successful_update": None,
         }
 
     assert provider.station_calls == []
@@ -908,6 +978,7 @@ def test_cheapest_sensor_reports_mixed_currency_no_result(hass, sample_stations)
     assert sensor.extra_state_attributes == {
         "reason": "mixed_currencies",
         "last_updated": "2025-01-02T03:04:05+00:00",
+        "last_successful_update": "2025-01-02T03:04:05+00:00",
     }
     assert provider.station_calls == []
 

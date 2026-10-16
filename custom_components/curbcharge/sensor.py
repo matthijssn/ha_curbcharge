@@ -394,6 +394,24 @@ def _current_stations(
     )
 
 
+def _best_nearby_result_status(
+    coordinator: CurbChargeCoordinator,
+    selected_station: ChargingStation | None,
+) -> str:
+    """Describe why Best nearby has or does not have a current result."""
+    if not coordinator.last_update_success:
+        return "unavailable"
+    if selected_station is not None:
+        return "selected"
+
+    current_stations = _current_stations(coordinator)
+    if not current_stations:
+        return "no_current_stations"
+    if any(station.has_available_connectors is None for station in current_stations):
+        return "unknown_availability"
+    return "none_available"
+
+
 def _current_selection_stations(
     coordinator: CurbChargeCoordinator,
 ) -> tuple[ChargingStation, ...] | None:
@@ -704,39 +722,36 @@ class BestNearbyChargerSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEn
 
     @property
     def native_value(self) -> str | None:
+        if not self.coordinator.last_update_success:
+            return None
         station = self.coordinator.best_station
         return None if station is None else station.name
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        station = self.coordinator.best_station
-        if station is None:
-            return {
-                "reason": "no_available_station",
-                "last_updated": _isoformat(self.coordinator.last_successful_update),
-            }
-        tariff = station.tariff
-        return {
-            "station_id": station.provider_id,
-            "provider": station.provider,
-            "country_code": station.country_code,
-            "distance_m": station.distance_m,
-            "available_connectors": station.available_connectors,
-            "max_power_kw": station.max_power_kw,
-            "price_per_kwh": (
-                float(tariff.price_per_kwh)
-                if tariff is not None and tariff.price_per_kwh is not None
-                else None
+        coordinator = self.coordinator
+        station = coordinator.best_station if coordinator.last_update_success else None
+        last_successful_update = _isoformat(coordinator.last_successful_update)
+        attributes: dict[str, Any] = {
+            "result_status": _best_nearby_result_status(coordinator, station),
+            "reason": (
+                coordinator.best_station_reason
+                if station is not None
+                else "no_available_station"
             ),
-            "currency": tariff.currency if tariff else None,
-            "vat_percentage": (
-                float(tariff.vat_percentage)
-                if tariff and tariff.vat_percentage is not None
-                else None
-            ),
-            "reason": self.coordinator.best_station_reason,
-            "last_updated": _isoformat(self.coordinator.last_successful_update),
+            "last_updated": last_successful_update,
+            "last_successful_update": last_successful_update,
         }
+        if station is None:
+            return attributes
+        tariff = station.tariff
+        attributes.update(_selection_station_data_attributes(station))
+        attributes["vat_percentage"] = (
+            float(tariff.vat_percentage)
+            if tariff is not None and tariff.vat_percentage is not None
+            else None
+        )
+        return attributes
 
 
 class _SelectedChargerSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEntity):
@@ -813,10 +828,23 @@ def _station_selection_attributes(
     attributes: dict[str, Any] = {
         "reason": reason,
         "last_updated": _isoformat(coordinator.last_successful_update),
+        "last_successful_update": _isoformat(coordinator.last_successful_update),
     }
     if station is None:
         return attributes
 
+    attributes.update(_selection_station_data_attributes(station))
+    attributes.update(
+        {
+            "latitude": station.latitude,
+            "longitude": station.longitude,
+        }
+    )
+    return attributes
+
+
+def _selection_station_data_attributes(station: ChargingStation) -> dict[str, Any]:
+    """Return the shared, privacy-safe selected-station data contract."""
     tariff = station.tariff
     tariff_status = _station_tariff_status(station)
     currency = (
@@ -834,24 +862,22 @@ def _station_selection_attributes(
         and tariff_status is TariffStatus.AVAILABLE
     ):
         price_per_kwh = float(tariff.price_per_kwh)
-    attributes.update(
-        {
-            "station_id": station.provider_id,
-            "provider": station.provider,
-            "country_code": station.country_code,
-            "name": station.name,
-            "address": station.address,
-            "distance_m": station.distance_m,
-            "available_connectors": station.available_connectors,
-            "total_connectors": station.total_connectors,
-            "max_power_kw": station.max_power_kw,
-            "price_per_kwh": price_per_kwh,
-            "currency": currency,
-            "latitude": station.latitude,
-            "longitude": station.longitude,
-        }
-    )
-    return attributes
+    return {
+        "station_id": station.provider_id,
+        "provider_station_id": station.provider_id,
+        "provider": station.provider,
+        "country_code": station.country_code,
+        "name": station.name,
+        "station_name": station.name,
+        "address": station.address,
+        "distance_m": station.distance_m,
+        "available_connectors": station.available_connectors,
+        "total_connectors": station.total_connectors,
+        "max_power_kw": station.max_power_kw,
+        "price_per_kwh": price_per_kwh,
+        "currency": currency,
+        "provider_last_updated": _isoformat(station.last_updated),
+    }
 
 
 def create_station_sensors(
