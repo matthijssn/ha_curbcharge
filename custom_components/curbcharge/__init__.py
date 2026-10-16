@@ -191,6 +191,15 @@ async def _async_options_updated(
     location_movement_threshold_m = _location_movement_threshold(
         options, entry.data.get(CONF_LOCATION_SOURCE)
     )
+    try:
+        discovery_filters = (
+            DiscoveryFilterSettings.from_config(options)
+            if provider_id == PROVIDER_NDW_DOT_NL
+            else DiscoveryFilterSettings()
+        )
+    except ValueError:
+        await hass.config_entries.async_reload(entry.entry_id)
+        return
     if (
         location_movement_threshold_m is None
         or provider_id != coordinator.provider_id
@@ -220,6 +229,7 @@ async def _async_options_updated(
         include_unknown=include_unknown,
         favourites=favourites,
         location_movement_threshold_m=location_movement_threshold_m,
+        discovery_filters=discovery_filters,
     )
     await coordinator.async_request_refresh()
 

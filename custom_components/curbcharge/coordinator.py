@@ -204,6 +204,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         include_unknown: bool,
         favourites: tuple[FavouriteStationReference, ...],
         location_movement_threshold_m: int = DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
+        discovery_filters: DiscoveryFilterSettings | None = None,
     ) -> None:
         """Apply options without discarding station-missing history."""
         previous_default_interval = self._default_update_interval
@@ -214,6 +215,8 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         self.include_unknown = include_unknown
         self.favourites = favourites
         self.location_movement_threshold_m = location_movement_threshold_m
+        if discovery_filters is not None:
+            self.discovery_filters = discovery_filters
         self.favourite_ids = {favourite.provider_id for favourite in favourites}
         self._default_update_interval = timedelta(minutes=scan_interval_minutes)
         self.update_interval = (
