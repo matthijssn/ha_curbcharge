@@ -3,22 +3,42 @@
     "step": {
       "user": {
         "title": "Set up CurbCharge",
-        "description": "Choose how CurbCharge finds your search location.",
+        "description": "Choose whether CurbCharge uses the Home Assistant home location, manual coordinates, or an entity.",
         "data": {
           "location_source": "Location source"
         },
         "data_description": {
-          "location_source": "Use the Home Assistant home location or provide coordinates for this search."
+          "location_source": "Use Home Assistant home coordinates, enter coordinates, or select an entity that reports a location."
+        }
+      },
+      "entity_location": {
+        "title": "Select a location entity",
+        "description": "Choose any entity that currently reports valid latitude and longitude attributes. Only the entity ID is stored.",
+        "data": {
+          "location_entity": "Location entity"
+        },
+        "data_description": {
+          "location_entity": "The entity must currently report valid latitude and longitude coordinates."
         }
       },
       "reconfigure": {
         "title": "Change the search location",
-        "description": "Choose whether to use the current Home Assistant home location or enter new coordinates.",
+        "description": "Choose whether to use the Home Assistant home location, manual coordinates, or an entity.",
         "data": {
           "location_source": "Location source"
         },
         "data_description": {
           "location_source": "Changing the search area may change which nearby stations are included."
+        }
+      },
+      "reconfigure_entity_location": {
+        "title": "Select a new location entity",
+        "description": "Choose an entity that currently reports valid location coordinates. CurbCharge stores the entity ID, not its coordinates.",
+        "data": {
+          "location_entity": "Location entity"
+        },
+        "data_description": {
+          "location_entity": "If the previous entity is unavailable or has been removed, select a replacement."
         }
       },
       "reconfigure_manual_location": {
@@ -84,6 +104,7 @@
       "auth": "The provider rejected authentication.",
       "cannot_connect": "Could not connect to the charging provider.",
       "invalid_location": "Enter valid coordinates and a supported search area.",
+      "invalid_entity_location": "Select an entity that currently reports valid latitude and longitude coordinates.",
       "invalid_api_token": "Enter a non-empty printable ASCII API token.",
       "invalid_response": "The provider returned data in an unexpected format.",
       "location_not_configured": "Home coordinates are not configured in Home Assistant.",
@@ -107,7 +128,8 @@
           "max_stations": "Maximum stations",
           "provider": "Provider",
           "include_unknown": "Include stations without availability data",
-          "favourites": "Favourite charging points"
+          "favourites": "Favourite charging points",
+          "location_movement_threshold": "Location movement threshold (m)"
         },
         "data_description": {
           "scan_interval": "How often Home Assistant refreshes charging station data.",
@@ -115,7 +137,8 @@
           "max_stations": "Limit the number of stations and their entities.",
           "provider": "The data provider used to discover stations and availability.",
           "include_unknown": "Include stations when the provider reports no connector availability.",
-          "favourites": "Select charging points by name. Favourites remain available outside the search radius and are added beyond the nearby station limit."
+          "favourites": "Select charging points by name. Favourites remain available outside the search radius and are added beyond the nearby station limit.",
+          "location_movement_threshold": "Minimum distance the selected entity must move before the search location is updated. Set to 0 to disable the threshold."
         }
       }
     },
@@ -141,7 +164,8 @@
     "location_source": {
       "options": {
         "home": "Home Assistant home coordinates",
-        "manual": "Manual latitude and longitude"
+        "manual": "Manual latitude and longitude",
+        "entity": "Home Assistant entity"
       }
     },
     "provider": {

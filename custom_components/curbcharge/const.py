@@ -9,6 +9,7 @@ PLATFORMS = (Platform.BINARY_SENSOR, Platform.SENSOR)
 
 CONF_LOCATION_SOURCE = "location_source"
 CONF_LOCATION_ENTITY = "location_entity"
+CONF_LOCATION_MOVEMENT_THRESHOLD = "location_movement_threshold"
 CONF_PROVIDER = "provider"
 CONF_API_TOKEN = "api_token"
 CONF_SEARCH_RADIUS = "search_radius"
@@ -35,6 +36,7 @@ TARIFF_FEED_URL = "https://opendata.ndw.nu/charging_point_tariffs_ocpi.json.gz"
 
 DEFAULT_SCAN_INTERVAL_MINUTES = 5
 MIN_SCAN_INTERVAL_MINUTES = 1
+DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M = 100
 DEFAULT_SEARCH_RADIUS_M = 500
 MIN_SEARCH_RADIUS_M = 100
 MAX_SEARCH_RADIUS_M = 10_000
