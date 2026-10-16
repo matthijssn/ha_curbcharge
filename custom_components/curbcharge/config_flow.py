@@ -50,7 +50,7 @@ from .const import (
     MIN_MAX_STATIONS,
     MIN_SCAN_INTERVAL_MINUTES,
     MIN_SEARCH_RADIUS_M,
-    NDW_CONNECTOR_TYPE_CODES,
+    NDW_CONNECTOR_TYPE_SELECTOR_OPTIONS,
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NDW_DOT_NL,
 )
@@ -176,12 +176,23 @@ def _discovery_filter_fields(
 ) -> dict[Any, Any]:
     """Return translated NDW-only discovery filter fields."""
     settings = settings or DiscoveryFilterSettings()
+    selector_value_by_code = {
+        code: selector_value
+        for selector_value, code in NDW_CONNECTOR_TYPE_SELECTOR_OPTIONS
+    }
     return {
         vol.Required(
-            CONF_CONNECTOR_TYPES, default=list(settings.connector_types)
+            CONF_CONNECTOR_TYPES,
+            default=[
+                selector_value_by_code[connector_type]
+                for connector_type in settings.connector_types
+            ],
         ): selector.SelectSelector(
             selector.SelectSelectorConfig(
-                options=list(NDW_CONNECTOR_TYPE_CODES),
+                options=[
+                    selector_value
+                    for selector_value, _code in NDW_CONNECTOR_TYPE_SELECTOR_OPTIONS
+                ],
                 multiple=True,
                 mode=selector.SelectSelectorMode.LIST,
                 translation_key="ndw_connector_type",

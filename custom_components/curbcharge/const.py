@@ -50,14 +50,17 @@ DEFAULT_INCLUDE_UNKNOWN = True
 DEFAULT_CONNECTOR_TYPES: tuple[str, ...] = ()
 DEFAULT_MIN_POWER_KW: float | None = None
 DEFAULT_REQUIRE_AVAILABLE = False
-NDW_CONNECTOR_TYPE_CODES = (
-    "IEC_62196_T2",
-    "IEC_62196_T2_COMBO",
-    "CHADEMO",
-    "IEC_60309_2_SINGLE_16",
-    "IEC_60309_2_THREE_16",
-    "IEC_60309_2_THREE_32",
-    "DOMESTIC_A",
+NDW_CONNECTOR_TYPE_SELECTOR_OPTIONS = (
+    ("type-2", "IEC_62196_T2"),
+    ("ccs-combo-2", "IEC_62196_T2_COMBO"),
+    ("chademo", "CHADEMO"),
+    ("cee-16a-single-phase", "IEC_60309_2_SINGLE_16"),
+    ("cee-16a-three-phase", "IEC_60309_2_THREE_16"),
+    ("cee-32a-three-phase", "IEC_60309_2_THREE_32"),
+    ("domestic-a", "DOMESTIC_A"),
+)
+NDW_CONNECTOR_TYPE_CODES = tuple(
+    code for _selector_value, code in NDW_CONNECTOR_TYPE_SELECTOR_OPTIONS
 )
 
 MISSING_STATION_REFRESHES = 3

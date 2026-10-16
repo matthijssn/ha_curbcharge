@@ -18,6 +18,7 @@ from .const import (
     DEFAULT_MIN_POWER_KW,
     DEFAULT_REQUIRE_AVAILABLE,
     NDW_CONNECTOR_TYPE_CODES,
+    NDW_CONNECTOR_TYPE_SELECTOR_OPTIONS,
 )
 
 
@@ -75,11 +76,12 @@ class DiscoveryFilterSettings:
             raise ValueError("Invalid connector type filters")
 
         connector_types: list[str] = []
+        selector_to_code = dict(NDW_CONNECTOR_TYPE_SELECTOR_OPTIONS)
         for connector_type in raw_connector_types:
-            if (
-                not isinstance(connector_type, str)
-                or connector_type not in NDW_CONNECTOR_TYPE_CODES
-            ):
+            if not isinstance(connector_type, str):
+                raise ValueError("Invalid connector type filter")
+            connector_type = selector_to_code.get(connector_type, connector_type)
+            if connector_type not in NDW_CONNECTOR_TYPE_CODES:
                 raise ValueError("Invalid connector type filter")
             if connector_type not in connector_types:
                 connector_types.append(connector_type)
