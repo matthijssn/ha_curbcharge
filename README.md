@@ -229,6 +229,10 @@ configured search radius, and station limit.
 Each charging point is one Home Assistant device. CurbCharge creates:
 
 - **Available**: on when the provider reports at least one available connector.
+- **Availability percentage**: `100%` when **Available** is on, `0%` when the
+  provider reports no available connectors, and unknown when availability is
+  unknown. It mirrors the binary sensor; it is not a percentage of time
+  available or a ratio of available to total connectors.
 - **Available connectors**, **Occupied connectors**, **Unavailable
   connectors**, and **Total connectors**.
 - **Maximum charging power**, **Price per kWh**, and **Distance**.
@@ -321,11 +325,14 @@ OCPI file cached for six hours. The provider client may therefore make
 additional HTTP requests when more pages or uncached tariffs are needed.
 NDW's station `last_updated` time is shown separately from Home Assistant's
 last successful refresh time; upstream data can be delayed even immediately
-after a successful poll. Favourites outside the normal NDW search results use
-additional small bounding-box requests; the provider client spaces these
-requests to respect its rate limit. Belgium favourites use the cached location
-snapshot and status requests through the shared limiter, so a large favourite
-list can lengthen a refresh.
+after a successful poll. A provider timestamp describes its source record, not
+necessarily an availability change. CurbCharge reports provider data at its
+polling cadence; Home Assistant history records entity state changes, so a
+change between polls cannot appear in the integration's history. Favourites
+outside the normal NDW search results use additional small bounding-box
+requests; the provider client spaces these requests to respect its rate limit.
+Belgium favourites use the cached location snapshot and status requests through
+the shared limiter, so a large favourite list can lengthen a refresh.
 
 For an Entity source, CurbCharge samples coordinates during the normal
 coordinator refreshes. It does not subscribe to every entity state change or
@@ -434,6 +441,99 @@ action:
 mode: single
 ```
 
+### Historical availability and connector counts
+
+The **Available** binary sensor gives a per-station `on`/`off` timeline from
+provider snapshots. The **Availability percentage** sensor is the current
+snapshot expressed as `100%`, `0%`, or unknown; it does not calculate the
+percentage of time a charger was available. The nearby connector percentage is
+a separate, search-area aggregate weighted by known connector counts.
+
+To calculate how long a station was reported available, create Home Assistant's
+built-in [History Stats](https://www.home-assistant.io/integrations/history_stats/)
+helper for its **Available** binary sensor. Choose `time` for hours in the
+selected period or `ratio` for the portion of that period spent in `on`.
+For example, this YAML configuration creates a daily ratio:
+
+```yaml
+sensor:
+  - platform: history_stats
+    name: Station available today
+    entity_id: binary_sensor.your_station_available
+    state: "on"
+    type: ratio
+    start: "{{ today_at() }}"
+    end: "{{ now() }}"
+```
+
+The helper uses Home Assistant's recorded state history and is limited by its
+retention. Unknown provider availability appears as unknown, while stale
+station data or a coordinator failure can make the entities unavailable.
+These are gaps, not confirmation that the station was unavailable; review the
+source timeline before interpreting a ratio as complete uptime.
+
+Use a [History Graph](https://www.home-assistant.io/dashboards/history-graph/)
+for recent state changes and connector counts:
+
+```yaml
+type: history-graph
+title: Station availability and connector counts
+hours_to_show: 24
+entities:
+  - binary_sensor.your_station_available
+  - sensor.your_station_available_connectors
+  - sensor.your_station_total_connectors
+```
+
+For longer-term hourly trends, use Home Assistant's
+[Statistics Graph](https://www.home-assistant.io/dashboards/statistics-graph/)
+with the per-station percentage sensor:
+
+```yaml
+type: statistics-graph
+title: Station availability, hourly
+days_to_show: 30
+period: hour
+chart_type: line
+stat_types:
+  - mean
+entities:
+  - sensor.your_station_availability_percentage
+```
+
+Connector counts have different units, so graph them in a separate card:
+
+```yaml
+type: statistics-graph
+title: Connector counts, hourly
+days_to_show: 30
+period: hour
+chart_type: line
+stat_types:
+  - mean
+entities:
+  - sensor.your_station_available_connectors
+  - sensor.your_station_total_connectors
+```
+
+Home Assistant's Recorder keeps detailed state history for 10 days by default
+(`purge_keep_days`); this can be changed in the Home Assistant Recorder
+configuration. Five-minute statistics follow that retention, while hourly
+long-term statistics for measurement sensors such as availability percentage
+and connector counts are retained indefinitely. The hourly mean of the
+percentage sensor is a trend of reported `0%`/`100%` values, not an exact
+time-in-state calculation; it cannot show changes between provider polls.
+For numeric sensors with long-term statistics, History Graph may use hourly
+aggregates for older portions of its range; binary sensor transitions remain
+limited to retained detailed history.
+
+Recorder storage is managed by Home Assistant. Each enabled station entity
+included in Recorder adds history and eligible statistics, so following more
+stations increases database use. Choose Recorder retention and exclusions to
+suit your instance; long-term statistics persist until removed or the database
+is cleared. Replace the example entity IDs above with the IDs shown in your
+Home Assistant entity picker.
+
 ## Services
 
 CurbCharge is read-only and registers no custom services, device triggers, or
@@ -480,9 +580,12 @@ diagnostics; its changing coordinates are not persisted or included in
 diagnostics. Favourite IDs, names, and coordinates are not included in the
 diagnostic station list. CurbCharge does not log entity IDs, coordinates,
 credentials, or raw provider responses. The integration does not request
-credentials from NDW. To download diagnostics, open **Settings → Devices &
-services → CurbCharge**, open the integration menu, and select **Download
-diagnostics**.
+credentials from NDW. History and statistics are Home Assistant Recorder data
+and follow its database, retention, and exclusion settings; CurbCharge does
+not create a separate history database, change Recorder settings, or send
+recorded history to a provider. It does not predict availability or use AI. To
+download diagnostics, open **Settings → Devices & services → CurbCharge**, open
+the integration menu, and select **Download diagnostics**.
 
 ## Removing CurbCharge
 
