@@ -8,6 +8,7 @@ DOMAIN = "curbcharge"
 PLATFORMS = (Platform.BINARY_SENSOR, Platform.SENSOR)
 
 CONF_LOCATION_SOURCE = "location_source"
+CONF_LOCATION_ENTITY = "location_entity"
 CONF_PROVIDER = "provider"
 CONF_API_TOKEN = "api_token"
 CONF_SEARCH_RADIUS = "search_radius"
@@ -18,6 +19,7 @@ CONF_FAVOURITES = "favourites"
 
 LOCATION_HOME = "home"
 LOCATION_MANUAL = "manual"
+LOCATION_ENTITY = "entity"
 
 PROVIDER_NDW_DOT_NL = "ndw_dot_nl"
 COUNTRY_NL = "NL"
