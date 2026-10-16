@@ -217,6 +217,15 @@
       "best_nearby_charger": {
         "name": "Beste laadpunt in de buurt"
       },
+      "nearest_available_charger": {
+        "name": "Dichtstbijzijnde beschikbare laadpunt"
+      },
+      "cheapest_available_charger": {
+        "name": "Goedkoopste beschikbare laadpunt"
+      },
+      "fastest_available_charger": {
+        "name": "Snelste beschikbare laadpunt"
+      },
       "nearby_charging_units": {
         "name": "Laadpunten in de buurt"
       },

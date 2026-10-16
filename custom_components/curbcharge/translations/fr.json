@@ -217,6 +217,15 @@
       "best_nearby_charger": {
         "name": "Meilleure borne à proximité"
       },
+      "nearest_available_charger": {
+        "name": "Borne disponible la plus proche"
+      },
+      "cheapest_available_charger": {
+        "name": "Borne disponible la moins chère"
+      },
+      "fastest_available_charger": {
+        "name": "Borne disponible la plus rapide"
+      },
       "nearby_charging_units": {
         "name": "Unités de recharge à proximité"
       },

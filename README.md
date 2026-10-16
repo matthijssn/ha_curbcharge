@@ -236,8 +236,10 @@ Each charging point is one Home Assistant device. CurbCharge creates:
   status, tariff details, coordinates, and provider update timestamps.
 - The Status summary's `is_favorite` attribute identifies stations selected
   as favourites for this config entry.
-- Integration-level **Best nearby charger**, **Nearby charging units**, and
-  **Nearby available connectors** sensors. The charging-unit count covers
+- Integration-level **Best nearby charger**, **Nearest available charger**,
+  **Cheapest available charger**, **Fastest available charger**, **Nearby
+  charging units**, and **Nearby available connectors** sensors. The
+  charging-unit count covers
   current, non-stale records in that entry's configured search area (NDW
   charge-point records in the Netherlands and EVSEs in Belgium), not physical
   sites, available chargers, or nationwide coverage. Its attributes report
@@ -277,11 +279,29 @@ reserved or out-of-service connector as occupied. The unavailable count is
 `total - available`, which is the only additional count directly supported by
 the NDW availability response.
 
-The recommendation excludes stations with no reported available connectors.
-It prefers lower known prices when all candidate prices use the same currency,
-then shorter distance, more available connectors, higher power, and a stable
-station identifier. It never compares different currencies; its `reason`
+**Best nearby** keeps its existing ranking: lower known prices when all
+candidate prices use the same currency, then shorter distance, more available
+connectors, higher power, and a stable station identifier. Its `reason`
 attribute is a stable reason code.
+
+The three additional selectors offer deterministic alternatives. Each requires
+a fresh station with a known `available_connectors` count greater than zero;
+unknown availability, zero connectors, and stale records do not qualify.
+**Nearest available charger** requires a known distance and chooses the
+shortest. **Cheapest available charger** ignores unpriced stations, compares
+only unambiguous station-level prices in one currency, and returns no station
+if no price is known or known prices use multiple currencies. **Fastest
+available charger** chooses the highest positive station-level `max_power_kw`.
+This is the station's highest reported connector-group power, not a claim about
+the currently available physical plug.
+
+Ties are deterministic: nearest uses provider and station ID after distance;
+cheapest uses known/shorter distance after price; fastest uses distance after
+power. Provider and station ID break any remaining tie. Each selector sensor's
+state is the selected station name, or `unknown` when there is no selection.
+Attributes include station details, a stable `reason` code, and the last
+successful update time. These sensors use the existing coordinator data and
+make no extra provider requests.
 
 When a tracked search center moves, newly matching stations are added on the
 next successful refresh. A non-favourite station absent from three consecutive
@@ -324,6 +344,53 @@ marks station entities unavailable. It tries again on the next refresh;
 updates resume when valid coordinates return.
 
 ## Use cases and automations
+
+### Charger recommendations
+
+Add an **Entities** card and select **Nearest available charger**,
+**Cheapest available charger**, **Fastest available charger**, and optionally
+**Best nearby charger** in the Home Assistant card editor. The entity IDs are
+specific to your config entry; for YAML dashboards, replace the example IDs
+with the IDs shown in your Home Assistant entity picker:
+
+```yaml
+type: entities
+title: Charger recommendations
+entities:
+  - entity: sensor.your_nearest_available_charger
+  - entity: sensor.your_cheapest_available_charger
+  - entity: sensor.your_fastest_available_charger
+  - entity: sensor.your_best_nearby_charger
+```
+
+Automations can use the selected station name as the sensor state and read
+distance, price, currency, power, or the selection reason from its attributes.
+For example, notify when the cheapest available station changes:
+
+```yaml
+alias: Notify about the cheapest available charger
+trigger:
+  - platform: state
+    entity_id: sensor.your_cheapest_available_charger
+condition:
+  - condition: template
+    value_template: >
+      {{ trigger.to_state is not none
+         and trigger.to_state.state not in ['unknown', 'unavailable'] }}
+action:
+  - service: persistent_notification.create
+    data:
+      title: Cheapest available charger
+      message: >
+        {{ trigger.to_state.state }} is
+        {{ trigger.to_state.attributes.price_per_kwh }}
+        {{ trigger.to_state.attributes.currency }} per kWh,
+        {{ trigger.to_state.attributes.distance_m }} m away.
+mode: single
+```
+
+The values are recalculated with the regular coordinator refresh, so an
+automation responds to poll updates rather than every provider or GPS event.
 
 ### Availability notifications
 
