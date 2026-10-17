@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import cast
@@ -250,6 +250,24 @@ class ChargingStation:
     connector_count_reported: bool = True
     tariff_status: TariffStatus | None = None
     last_updated_source: ProviderTimestampSource | None = None
+
+    def provider_data_age_seconds(self, now: datetime) -> int | None:
+        """Return dynamic provider timestamp age in whole UTC seconds."""
+        if (
+            self.last_updated is None
+            or self.last_updated_source
+            not in (
+                ProviderTimestampSource.NDW_FEATURE,
+                ProviderTimestampSource.BELGIUM_EVSE_STATUS,
+            )
+            or self.last_updated.utcoffset() is None
+            or now.utcoffset() is None
+        ):
+            return None
+        age_seconds = (
+            now.astimezone(UTC) - self.last_updated.astimezone(UTC)
+        ).total_seconds()
+        return None if age_seconds < 0 else round(age_seconds)
 
     @property
     def available_connectors(self) -> int | None:

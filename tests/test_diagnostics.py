@@ -2,6 +2,7 @@
 
 import json
 from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -34,6 +35,7 @@ from custom_components.curbcharge.models import (
     ChargingTariff,
     EVSEStatus,
     FavouriteStationReference,
+    ProviderTimestampSource,
 )
 from tests.conftest import FakeProvider
 from tests.test_belgium import (
@@ -46,10 +48,15 @@ from tests.test_belgium import (
 
 
 @pytest.mark.asyncio
-async def test_diagnostics_redact_coordinates_and_addresses(hass, sample_stations):
+async def test_diagnostics_redact_coordinates_and_addresses(
+    hass, sample_stations, monkeypatch
+):
+    now = datetime(2026, 10, 17, 12, 0, tzinfo=UTC)
     station = replace(
         sample_stations[0],
         tariff=ChargingTariff("EUR", Decimal("0.42"), None, None, None, "NDW DOT-NL"),
+        last_updated=now - timedelta(seconds=65),
+        last_updated_source=ProviderTimestampSource.NDW_FEATURE,
     )
     stale = replace(sample_stations[1], is_stale=True)
     unknown = sample_stations[2]
@@ -85,6 +92,9 @@ async def test_diagnostics_redact_coordinates_and_addresses(hass, sample_station
         },
     )
     entry.runtime_data = coordinator
+    monkeypatch.setattr(
+        "custom_components.curbcharge.diagnostics.dt_util.utcnow", lambda: now
+    )
 
     diagnostics = await async_get_config_entry_diagnostics(hass, entry)
     serialized = json.dumps(diagnostics)
@@ -109,6 +119,8 @@ async def test_diagnostics_redact_coordinates_and_addresses(hass, sample_station
     assert len(diagnostics["stations"]) == 2
     assert diagnostics["stations"][0]["available_connectors"] == 2
     assert diagnostics["stations"][0]["distance_m_rounded"] == 0
+    assert diagnostics["stations"][0]["provider_data_age_seconds"] == 65
+    assert diagnostics["stations"][0]["provider_timestamp_source"] == "ndw_feature"
     assert diagnostics["stations"][0]["tariff"]["price_per_kwh"] == "0.42"
     unknown_diagnostics = next(
         station
@@ -117,6 +129,10 @@ async def test_diagnostics_redact_coordinates_and_addresses(hass, sample_station
     )
     assert unknown_diagnostics["availability_reported"] is False
     assert unknown_diagnostics["available_connectors"] is None
+    assert unknown_diagnostics[
+        "provider_data_age_seconds"
+    ] == unknown.provider_data_age_seconds(now)
+    assert unknown_diagnostics["provider_timestamp_source"] == "ndw_feature"
     assert len(provider.snapshots) == 1
 
 
