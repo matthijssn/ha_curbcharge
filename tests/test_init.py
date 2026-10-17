@@ -5,6 +5,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
@@ -1291,10 +1292,15 @@ async def test_setup_translates_first_refresh_rate_limit(hass, monkeypatch):
     provider = FakeProvider([ProviderRateLimitError("limited", retry_after=600)])
     monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
     entry.add_to_hass(hass)
+    entry._async_set_state(  # noqa: SLF001
+        hass, ConfigEntryState.SETUP_IN_PROGRESS, None
+    )
 
-    assert not await hass.config_entries.async_setup(entry.entry_id)
-    assert entry.error_reason_translation_domain == DOMAIN
-    assert entry.error_reason_translation_key == "rate_limited"
+    with pytest.raises(ConfigEntryNotReady) as error:
+        await curbcharge.async_setup_entry(hass, entry)
+
+    assert error.value.translation_domain == DOMAIN
+    assert error.value.translation_key == "rate_limited"
 
 
 @pytest.mark.asyncio
