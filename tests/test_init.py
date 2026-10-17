@@ -1299,6 +1299,7 @@ async def test_setup_translates_first_refresh_rate_limit(hass, monkeypatch):
     with pytest.raises(ConfigEntryNotReady) as error:
         await curbcharge.async_setup_entry(hass, entry)
 
+    assert len(provider.station_calls) == 1
     assert error.value.translation_domain == DOMAIN
     assert error.value.translation_key == "rate_limited"
 
