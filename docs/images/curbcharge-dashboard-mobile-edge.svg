@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="1040" viewBox="0 0 480 1040">
+  <rect width="480" height="1040" fill="#f2f4f8"/>
+  <text x="28" y="54" fill="#18212f" font-family="Arial, sans-serif" font-size="24" font-weight="700">CurbCharge</text>
+  <text x="28" y="82" fill="#586579" font-family="Arial, sans-serif" font-size="14">Mobile edge-state illustration</text>
+
+  <rect x="24" y="112" width="432" height="338" rx="16" fill="#fff" stroke="#d8dee8"/>
+  <text x="48" y="154" fill="#18212f" font-family="Arial, sans-serif" font-size="20" font-weight="700">Best nearby</text>
+  <rect x="278" y="130" width="154" height="34" rx="17" fill="#fff7e5" stroke="#d69b24"/>
+  <text x="355" y="152" text-anchor="middle" fill="#8a5c06" font-family="Arial, sans-serif" font-size="13" font-weight="700">No current stations</text>
+  <text x="48" y="202" fill="#586579" font-family="Arial, sans-serif" font-size="14">Available connectors</text>
+  <text x="432" y="202" text-anchor="end" fill="#18212f" font-family="Arial, sans-serif" font-size="16" font-weight="700">Unknown</text>
+  <text x="48" y="242" fill="#586579" font-family="Arial, sans-serif" font-size="14">Total connectors</text>
+  <text x="432" y="242" text-anchor="end" fill="#18212f" font-family="Arial, sans-serif" font-size="16" font-weight="700">Unknown</text>
+  <text x="48" y="282" fill="#586579" font-family="Arial, sans-serif" font-size="14">Price</text>
+  <text x="432" y="282" text-anchor="end" fill="#18212f" font-family="Arial, sans-serif" font-size="16" font-weight="700">Unknown</text>
+  <text x="48" y="326" fill="#586579" font-family="Arial, sans-serif" font-size="13">No station measurements are available to display.</text>
+  <text x="48" y="354" fill="#586579" font-family="Arial, sans-serif" font-size="13">Unknown values are not treated as zero.</text>
+  <line x1="48" y1="380" x2="432" y2="380" stroke="#e3e7ee"/>
+  <text x="48" y="412" fill="#586579" font-family="Arial, sans-serif" font-size="13">Last successful HA refresh</text>
+  <text x="432" y="412" text-anchor="end" fill="#18212f" font-family="Arial, sans-serif" font-size="13">Example time</text>
+
+  <rect x="24" y="474" width="432" height="338" rx="16" fill="#fff" stroke="#d8dee8"/>
+  <text x="48" y="516" fill="#18212f" font-family="Arial, sans-serif" font-size="20" font-weight="700">Best nearby</text>
+  <rect x="324" y="492" width="108" height="34" rx="17" fill="#fcebea" stroke="#c95b52"/>
+  <text x="378" y="514" text-anchor="middle" fill="#963c35" font-family="Arial, sans-serif" font-size="13" font-weight="700">Unavailable</text>
+  <text x="48" y="566" fill="#586579" font-family="Arial, sans-serif" font-size="14">Available connectors</text>
+  <text x="432" y="566" text-anchor="end" fill="#18212f" font-family="Arial, sans-serif" font-size="16" font-weight="700">Unknown</text>
+  <text x="48" y="606" fill="#586579" font-family="Arial, sans-serif" font-size="14">Station address</text>
+  <text x="432" y="606" text-anchor="end" fill="#18212f" font-family="Arial, sans-serif" font-size="16" font-weight="700">Unknown</text>
+  <text x="48" y="656" fill="#963c35" font-family="Arial, sans-serif" font-size="13">Previous station measurements are not reused.</text>
+  <line x1="48" y1="684" x2="432" y2="684" stroke="#e3e7ee"/>
+  <text x="48" y="718" fill="#586579" font-family="Arial, sans-serif" font-size="13">Provider update</text>
+  <text x="432" y="718" text-anchor="end" fill="#18212f" font-family="Arial, sans-serif" font-size="13">Unknown</text>
+  <text x="48" y="750" fill="#586579" font-family="Arial, sans-serif" font-size="13">Last successful HA refresh</text>
+  <text x="432" y="750" text-anchor="end" fill="#18212f" font-family="Arial, sans-serif" font-size="13">Unknown</text>
+
+  <text x="240" y="862" text-anchor="middle" fill="#586579" font-family="Arial, sans-serif" font-size="13">Separate illustrative states · synthetic values only</text>
+  <text x="240" y="890" text-anchor="middle" fill="#586579" font-family="Arial, sans-serif" font-size="13">No real address, coordinates, or provider data</text>
+</svg>

@@ -1,0 +1,63 @@
+title: CurbCharge
+views:
+  - title: Nearby
+    path: curbcharge
+    icon: mdi:ev-station
+    cards:
+      - type: markdown
+        content: >
+          Best nearby ranks current stations with known available connectors.
+          The recommendation is local to this integration entry and search area.
+      - type: entities
+        title: Best nearby
+        show_header_toggle: false
+        entities:
+          - entity: sensor.your_best_nearby_charger
+            name: Recommended station
+          - type: attribute
+            entity: sensor.your_best_nearby_charger
+            attribute: result_status
+            name: Recommendation status
+          - type: attribute
+            entity: sensor.your_best_nearby_charger
+            attribute: address
+            name: Address
+          - type: attribute
+            entity: sensor.your_best_nearby_charger
+            attribute: available_connectors
+            name: Available connectors
+          - type: attribute
+            entity: sensor.your_best_nearby_charger
+            attribute: total_connectors
+            name: Total connectors
+          - type: attribute
+            entity: sensor.your_best_nearby_charger
+            attribute: distance_m
+            name: Distance (m)
+          - type: attribute
+            entity: sensor.your_best_nearby_charger
+            attribute: max_power_kw
+            name: Maximum power (kW)
+          - type: attribute
+            entity: sensor.your_best_nearby_charger
+            attribute: price_per_kwh
+            name: Price per kWh
+          - type: attribute
+            entity: sensor.your_best_nearby_charger
+            attribute: currency
+            name: Currency
+          - type: attribute
+            entity: sensor.your_best_nearby_charger
+            attribute: provider_last_updated
+            name: Provider update
+          - type: attribute
+            entity: sensor.your_best_nearby_charger
+            attribute: last_successful_update
+            name: Last successful HA refresh
+      - type: entities
+        title: Nearby aggregates
+        show_header_toggle: false
+        entities:
+          - entity: sensor.your_nearby_charging_units
+          - entity: sensor.your_nearby_available_connectors
+          - entity: sensor.your_nearby_availability_percentage
