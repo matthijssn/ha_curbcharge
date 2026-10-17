@@ -5,6 +5,7 @@ from typing import Any
 from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 
 from . import CurbChargeConfigEntry
 from .const import (
@@ -40,6 +41,7 @@ async def async_get_config_entry_diagnostics(
         for station in (coordinator.data or {}).values()
         if not station.is_stale and station.provider_id not in coordinator.favourite_ids
     ]
+    now = dt_util.utcnow()
     return {
         "entry_data": async_redact_data(entry.data, TO_REDACT),
         "options": async_redact_data(entry.options, TO_REDACT),
@@ -117,6 +119,12 @@ async def async_get_config_entry_diagnostics(
                 "is_open": station.is_open,
                 "last_updated": (
                     station.last_updated.isoformat() if station.last_updated else None
+                ),
+                "provider_data_age_seconds": (station.provider_data_age_seconds(now)),
+                "provider_timestamp_source": (
+                    station.last_updated_source.value
+                    if station.last_updated_source is not None
+                    else None
                 ),
                 "connectors": [
                     {

@@ -1,7 +1,7 @@
 """Tests for CurbCharge sensor values and attributes."""
 
 from dataclasses import replace
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -18,6 +18,7 @@ from custom_components.curbcharge.models import (
     ConnectorStatus,
     EVSEStatus,
     FavouriteStationReference,
+    ProviderTimestampSource,
     TariffStatus,
 )
 from custom_components.curbcharge.provider import ChargingProviderError
@@ -778,6 +779,70 @@ def test_best_nearby_sensor_exposes_selection_reason(hass, sample_stations, capl
     assert str(station.longitude) not in caplog.text
 
 
+def test_summary_and_best_nearby_expose_provider_age_and_source(
+    hass, sample_stations, monkeypatch
+):
+    now = datetime(2025, 1, 2, 3, 6, 5, tzinfo=UTC)
+    provider_updated = now - timedelta(seconds=120, milliseconds=400)
+    ha_updated = now - timedelta(seconds=30)
+    station = replace(
+        sample_stations[0],
+        last_updated=provider_updated,
+        last_updated_source=ProviderTimestampSource.NDW_FEATURE,
+    )
+    coordinator = _coordinator(hass, station)
+    coordinator.last_successful_update = ha_updated
+    monkeypatch.setattr(
+        "custom_components.curbcharge.sensor.dt_util.utcnow", lambda: now
+    )
+
+    summary = StatusSummarySensor(coordinator, station).extra_state_attributes
+    best = BestNearbyChargerSensor(
+        coordinator, MockConfigEntry(domain=DOMAIN, unique_id="age-area")
+    ).extra_state_attributes
+
+    assert summary["last_updated"] == provider_updated.isoformat()
+    assert summary["last_successful_update"] == ha_updated.isoformat()
+    assert summary["provider_data_age_seconds"] == 120
+    assert summary["provider_timestamp_source"] == "ndw_feature"
+    assert best["provider_last_updated"] == provider_updated.isoformat()
+    assert best["last_updated"] == ha_updated.isoformat()
+    assert best["last_successful_update"] == ha_updated.isoformat()
+    assert best["provider_data_age_seconds"] == 120
+    assert best["provider_timestamp_source"] == "ndw_feature"
+
+
+def test_provider_age_is_unknown_for_missing_future_and_static_timestamps(
+    hass, sample_stations, monkeypatch
+):
+    now = datetime(2025, 1, 2, 3, 6, 5, tzinfo=UTC)
+    monkeypatch.setattr(
+        "custom_components.curbcharge.sensor.dt_util.utcnow", lambda: now
+    )
+    stations = (
+        replace(
+            sample_stations[0],
+            last_updated=None,
+            last_updated_source=ProviderTimestampSource.NDW_FEATURE,
+        ),
+        replace(
+            sample_stations[0],
+            last_updated=now + timedelta(seconds=1),
+            last_updated_source=ProviderTimestampSource.NDW_FEATURE,
+        ),
+        replace(
+            sample_stations[0],
+            last_updated=now - timedelta(hours=1),
+            last_updated_source=ProviderTimestampSource.BELGIUM_STATIC_FALLBACK,
+        ),
+    )
+
+    for station in stations:
+        coordinator = _coordinator(hass, station)
+        attributes = StatusSummarySensor(coordinator, station).extra_state_attributes
+        assert attributes["provider_data_age_seconds"] is None
+
+
 def test_best_nearby_result_status_distinguishes_empty_unknown_and_unavailable(
     hass, sample_stations
 ):
@@ -790,6 +855,8 @@ def test_best_nearby_result_status_distinguishes_empty_unknown_and_unavailable(
     coordinator.async_set_updated_data({})
     attributes = sensor.extra_state_attributes
     assert attributes["result_status"] == "no_current_stations"
+    assert attributes["provider_data_age_seconds"] is None
+    assert attributes["provider_timestamp_source"] is None
     assert "latitude" not in attributes
     assert "longitude" not in attributes
     assert "address" not in attributes
@@ -1077,7 +1144,9 @@ def test_entities_are_unavailable_without_current_station_data(hass, sample_stat
     assert percentage_sensor.native_value is None
     assert StatusSummarySensor(coordinator, station).native_value == "unknown"
     assert StatusSummarySensor(coordinator, station).extra_state_attributes == {
-        "provider_station_id": station.provider_id
+        "provider_station_id": station.provider_id,
+        "provider_data_age_seconds": None,
+        "provider_timestamp_source": None,
     }
 
     entry = MockConfigEntry(domain=DOMAIN, unique_id="hashed-area")

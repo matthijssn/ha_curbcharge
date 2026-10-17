@@ -15,6 +15,7 @@ from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfLength, UnitOf
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import dt as dt_util
 
 from .const import COUNTRY_BE, COUNTRY_NL
 from .coordinator import (
@@ -254,7 +255,11 @@ class StatusSummarySensor(CurbChargeStationEntity, SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         station = self.station
         if station is None:
-            return {"provider_station_id": self._station_id}
+            return {
+                "provider_station_id": self._station_id,
+                "provider_data_age_seconds": None,
+                "provider_timestamp_source": None,
+            }
         attributes = {
             "station_name": station.name,
             "available_connectors": station.available_connectors,
@@ -272,6 +277,14 @@ class StatusSummarySensor(CurbChargeStationEntity, SensorEntity):
             **_tariff_attributes(station),
             "latitude": station.latitude,
             "longitude": station.longitude,
+            "provider_data_age_seconds": station.provider_data_age_seconds(
+                dt_util.utcnow()
+            ),
+            "provider_timestamp_source": (
+                station.last_updated_source.value
+                if station.last_updated_source is not None
+                else None
+            ),
             "provider": station.provider,
             "country_code": station.country_code,
             "provider_station_id": station.provider_id,
@@ -741,11 +754,21 @@ class BestNearbyChargerSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEn
             ),
             "last_updated": last_successful_update,
             "last_successful_update": last_successful_update,
+            "provider_data_age_seconds": None,
+            "provider_timestamp_source": None,
         }
         if station is None:
             return attributes
         tariff = station.tariff
         attributes.update(_selection_station_data_attributes(station))
+        attributes["provider_data_age_seconds"] = station.provider_data_age_seconds(
+            dt_util.utcnow()
+        )
+        attributes["provider_timestamp_source"] = (
+            station.last_updated_source.value
+            if station.last_updated_source is not None
+            else None
+        )
         attributes["vat_percentage"] = (
             float(tariff.vat_percentage)
             if tariff is not None and tariff.vat_percentage is not None
