@@ -71,11 +71,13 @@
         "data": {
           "search_radius": "Search radius (m)",
           "max_stations": "Maximum stations",
+          "scan_interval": "Polling interval (minutes)",
           "provider": "Provider"
         },
         "data_description": {
           "search_radius": "Only public charging stations within this distance are included.",
           "max_stations": "Limit the number of stations and their entities.",
+          "scan_interval": "How often Home Assistant refreshes charging station data.",
           "provider": "The data provider used to discover stations and availability."
         }
       },

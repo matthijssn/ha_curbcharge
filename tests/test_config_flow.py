@@ -24,6 +24,7 @@ from custom_components.curbcharge.const import (
     CONF_SCAN_INTERVAL,
     CONF_SEARCH_RADIUS,
     DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
+    DEFAULT_SCAN_INTERVAL_MINUTES,
     DOMAIN,
     LOCATION_ENTITY,
     LOCATION_HOME,
@@ -53,12 +54,34 @@ pytestmark = pytest.mark.usefixtures("enable_custom_integrations")
 
 def _station_options(
     provider: str = PROVIDER_NDW_DOT_NL,
+    *,
+    scan_interval: int = DEFAULT_SCAN_INTERVAL_MINUTES,
 ) -> dict[str, int | str]:
     return {
         CONF_SEARCH_RADIUS: 500,
         CONF_MAX_STATIONS: 10,
+        CONF_SCAN_INTERVAL: scan_interval,
         CONF_PROVIDER: provider,
     }
+
+
+def test_station_options_schema_reuses_scan_interval_bounds():
+    schema = config_flow.station_options_schema()
+    values = {
+        CONF_SEARCH_RADIUS: 500,
+        CONF_MAX_STATIONS: 10,
+        CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+    }
+
+    assert schema(values)[CONF_SCAN_INTERVAL] == DEFAULT_SCAN_INTERVAL_MINUTES
+    assert schema({**values, CONF_SCAN_INTERVAL: 1})[CONF_SCAN_INTERVAL] == 1
+    assert schema({**values, CONF_SCAN_INTERVAL: 120})[CONF_SCAN_INTERVAL] == 120
+    with pytest.raises(vol.Invalid):
+        schema({**values, CONF_SCAN_INTERVAL: 0})
+    assert (
+        config_flow.options_schema({CONF_SCAN_INTERVAL: 12})({})[CONF_SCAN_INTERVAL]
+        == 12
+    )
 
 
 def _discovery_filters(
@@ -96,7 +119,7 @@ async def test_config_flow_uses_home_coordinates(hass, monkeypatch):
     assert result["step_id"] == "station_options"
 
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], _station_options()
+        result["flow_id"], _station_options(scan_interval=12)
     )
     assert result["step_id"] == "discovery_filters"
     result = await hass.config_entries.flow.async_configure(
@@ -106,6 +129,7 @@ async def test_config_flow_uses_home_coordinates(hass, monkeypatch):
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert provider.validation_calls == [(52.1, 5.1, 500)]
     assert result["data"][CONF_LOCATION_SOURCE] == LOCATION_HOME
+    assert result["data"][CONF_SCAN_INTERVAL] == 12
     assert result["data"][CONF_CONNECTOR_TYPES] == []
     assert result["data"][CONF_MIN_POWER_KW] is None
     assert result["data"][CONF_REQUIRE_AVAILABLE] is False

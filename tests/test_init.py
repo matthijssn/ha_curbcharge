@@ -28,6 +28,7 @@ from custom_components.curbcharge.const import (
     CONF_SCAN_INTERVAL,
     CONF_SEARCH_RADIUS,
     DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
+    DEFAULT_SCAN_INTERVAL_MINUTES,
     DOMAIN,
     LOCATION_ENTITY,
     LOCATION_HOME,
@@ -1147,6 +1148,26 @@ async def test_setup_requires_a_valid_location(hass):
         await curbcharge.async_setup_entry(hass, entry)
 
     assert error.value.translation_key == "location_not_configured"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("overrides", "expected_interval"),
+    [
+        ({}, DEFAULT_SCAN_INTERVAL_MINUTES),
+        ({CONF_SCAN_INTERVAL: 12}, 12),
+    ],
+)
+async def test_setup_uses_initial_scan_interval(
+    hass, monkeypatch, overrides, expected_interval
+):
+    entry = _entry(overrides)
+    provider = FakeProvider([()])
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    assert entry.runtime_data.scan_interval_minutes == expected_interval
 
 
 @pytest.mark.asyncio

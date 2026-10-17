@@ -132,14 +132,32 @@ def belgium_credentials_schema() -> vol.Schema:
     )
 
 
+def _scan_interval_field(default: Any) -> tuple[Any, Any]:
+    return (
+        vol.Required(CONF_SCAN_INTERVAL, default=default),
+        selector.NumberSelector(
+            selector.NumberSelectorConfig(
+                min=MIN_SCAN_INTERVAL_MINUTES,
+                step=1,
+                mode=selector.NumberSelectorMode.BOX,
+            )
+        ),
+    )
+
+
 def station_options_schema(
     *,
     radius: int = DEFAULT_SEARCH_RADIUS_M,
     max_stations: int = DEFAULT_MAX_STATIONS,
+    scan_interval_minutes: int = DEFAULT_SCAN_INTERVAL_MINUTES,
 ) -> vol.Schema:
     """Return the initial provider and station-search schema."""
+    scan_interval_key, scan_interval_selector = _scan_interval_field(
+        scan_interval_minutes
+    )
     return vol.Schema(
         {
+            scan_interval_key: scan_interval_selector,
             vol.Required(CONF_SEARCH_RADIUS, default=radius): selector.NumberSelector(
                 selector.NumberSelectorConfig(
                     min=MIN_SEARCH_RADIUS_M,
@@ -239,17 +257,11 @@ def options_schema(
     favourites = parse_favourite_references(
         defaults.get(CONF_FAVOURITES, []), provider_id
     )
+    scan_interval_key, scan_interval_selector = _scan_interval_field(
+        defaults.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES)
+    )
     schema: dict[Any, Any] = {
-        vol.Required(
-            CONF_SCAN_INTERVAL,
-            default=defaults.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES),
-        ): selector.NumberSelector(
-            selector.NumberSelectorConfig(
-                min=MIN_SCAN_INTERVAL_MINUTES,
-                step=1,
-                mode=selector.NumberSelectorMode.BOX,
-            )
-        ),
+        scan_interval_key: scan_interval_selector,
         vol.Required(
             CONF_SEARCH_RADIUS,
             default=defaults.get(CONF_SEARCH_RADIUS, DEFAULT_SEARCH_RADIUS_M),
@@ -347,6 +359,7 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._provider_id = PROVIDER_NDW_DOT_NL
         self._search_radius = DEFAULT_SEARCH_RADIUS_M
         self._max_stations = DEFAULT_MAX_STATIONS
+        self._scan_interval = DEFAULT_SCAN_INTERVAL_MINUTES
         self._discovery_filters = DiscoveryFilterSettings()
 
     async def async_step_user(
@@ -691,6 +704,7 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             provider_id = user_input[CONF_PROVIDER]
             radius = int(user_input[CONF_SEARCH_RADIUS])
             max_stations = int(user_input[CONF_MAX_STATIONS])
+            self._scan_interval = int(user_input[CONF_SCAN_INTERVAL])
             self._provider_id = provider_id
             self._search_radius = radius
             self._max_stations = max_stations
@@ -711,7 +725,11 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return await self.async_step_discovery_filters()
 
         return _show_form(
-            self, step_id="station_options", data_schema=station_options_schema()
+            self,
+            step_id="station_options",
+            data_schema=station_options_schema(
+                scan_interval_minutes=self._scan_interval
+            ),
         )
 
     async def async_step_discovery_filters(
@@ -789,6 +807,7 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             CONF_PROVIDER: self._provider_id,
             CONF_SEARCH_RADIUS: self._search_radius,
             CONF_MAX_STATIONS: self._max_stations,
+            CONF_SCAN_INTERVAL: self._scan_interval,
         }
         if self._location_source == LOCATION_MANUAL:
             data[CONF_LATITUDE] = self._latitude
