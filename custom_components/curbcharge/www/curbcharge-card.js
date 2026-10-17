@@ -37,6 +37,7 @@ const TEXT = {
     totalConnectors: "Total connectors",
     maximumPower: "Maximum charging power",
     price: "Price per kWh",
+    operator: "Operator",
     address: "Address",
     distance: "Distance",
     providerOpenStatus: "Provider-reported open status",
@@ -76,6 +77,7 @@ const TEXT = {
     totalConnectors: "Totaal aantal connectoren",
     maximumPower: "Maximaal laadvermogen",
     price: "Prijs per kWh",
+    operator: "Exploitant",
     address: "Adres",
     distance: "Afstand",
     providerOpenStatus: "Openstatus volgens provider",
@@ -115,6 +117,7 @@ const TEXT = {
     totalConnectors: "Total des connecteurs",
     maximumPower: "Puissance de charge maximale",
     price: "Prix par kWh",
+    operator: "Exploitant",
     address: "Adresse",
     distance: "Distance",
     providerOpenStatus: "Statut d'ouverture indiqué par le fournisseur",
@@ -154,6 +157,7 @@ const TEXT = {
     totalConnectors: "Anschlüsse gesamt",
     maximumPower: "Maximale Ladeleistung",
     price: "Preis pro kWh",
+    operator: "Betreiber",
     address: "Adresse",
     distance: "Entfernung",
     providerOpenStatus: "Vom Anbieter gemeldeter Öffnungsstatus",
@@ -379,6 +383,11 @@ export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
     );
   }
   if (options.show_station_details) {
+    const operator =
+      typeof values.operator === "string" ? values.operator.trim() : "";
+    if (operator) {
+      detailsRows.push([text.operator, operator]);
+    }
     detailsRows.push(
       [
         text.address,

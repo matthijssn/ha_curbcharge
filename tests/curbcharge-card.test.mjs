@@ -269,6 +269,7 @@ test("renders recommendation payload and separates provider and HA timestamps", 
         result_status: "selected",
         provider_station_id: "station-1",
         station_name: "Station One",
+        operator: "Example CPO",
         address: "Main Street 10",
         available_connectors: 2,
         total_connectors: 4,
@@ -291,24 +292,25 @@ test("renders recommendation payload and separates provider and HA timestamps", 
     ["Price per kWh", "0.42 EUR/kWh"],
   ]);
   assert.deepEqual(
-    data.detailsRows.slice(2, 6),
+    data.detailsRows.slice(2, 7),
     [
       ["Total connectors", "4"],
+      ["Operator", "Example CPO"],
       ["Address", "Main Street 10"],
       ["Maximum charging power", "150 kW"],
       ["Distance", "120 m"],
     ],
   );
-  assert.notEqual(data.detailsRows[7][1], data.detailsRows[8][1]);
+  assert.notEqual(data.detailsRows[8][1], data.detailsRows[9][1]);
   assert.equal(
-    data.detailsRows[7][1],
+    data.detailsRows[8][1],
     new Intl.DateTimeFormat("en", {
       dateStyle: "short",
       timeStyle: "short",
     }).format(new Date(providerTime)),
   );
   assert.equal(
-    data.detailsRows[8][1],
+    data.detailsRows[9][1],
     new Intl.DateTimeFormat("en", {
       dateStyle: "short",
       timeStyle: "short",
@@ -359,7 +361,7 @@ test("shows recommendation result states distinctly and suppresses unavailable d
   }
 });
 
-test("localizes recommendation states and station address in every supported language", () => {
+test("localizes recommendation states, operator, and address in every supported language", () => {
   const labels = {
     en: {
       selected: "Selected",
@@ -367,6 +369,7 @@ test("localizes recommendation states and station address in every supported lan
       unknown_availability: "Availability unknown",
       none_available: "None available",
       unavailable: "Unavailable",
+      operator: "Operator",
       address: "Address",
     },
     nl: {
@@ -375,6 +378,7 @@ test("localizes recommendation states and station address in every supported lan
       unknown_availability: "Beschikbaarheid onbekend",
       none_available: "Geen beschikbaar",
       unavailable: "Niet beschikbaar",
+      operator: "Exploitant",
       address: "Adres",
     },
     fr: {
@@ -383,6 +387,7 @@ test("localizes recommendation states and station address in every supported lan
       unknown_availability: "Disponibilité inconnue",
       none_available: "Aucun disponible",
       unavailable: "Indisponible",
+      operator: "Exploitant",
       address: "Adresse",
     },
     de: {
@@ -391,6 +396,7 @@ test("localizes recommendation states and station address in every supported lan
       unknown_availability: "Verfügbarkeit unbekannt",
       none_available: "Keine verfügbar",
       unavailable: "Nicht verfügbar",
+      operator: "Betreiber",
       address: "Adresse",
     },
   };
@@ -403,6 +409,7 @@ test("localizes recommendation states and station address in every supported lan
         attributes: {
           result_status: "selected",
           provider_station_id: "station-1",
+          operator: "Example CPO",
           address: "Main Street 10",
         },
       },
@@ -412,6 +419,27 @@ test("localizes recommendation states and station address in every supported lan
     assert.deepEqual(
       selected.detailsRows.find(([label]) => label === expected.address),
       [expected.address, "Main Street 10"],
+    );
+    assert.deepEqual(
+      selected.detailsRows.find(([label]) => label === expected.operator),
+      [expected.operator, "Example CPO"],
+    );
+
+    const noOperator = cardModule.buildCardData(
+      {
+        entity_id: "sensor.best_nearby_charger",
+        state: "Station One",
+        attributes: {
+          result_status: "selected",
+          provider_station_id: "station-1",
+          address: "Main Street 10",
+        },
+      },
+      { language },
+    );
+    assert.equal(
+      noOperator.detailsRows.some(([label]) => label === expected.operator),
+      false,
     );
 
     for (const resultStatus of [
