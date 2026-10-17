@@ -44,7 +44,10 @@ from custom_components.curbcharge.models import (
     FavouriteStationReference,
     StationDiscoveryResult,
 )
-from custom_components.curbcharge.provider import ChargingProviderError
+from custom_components.curbcharge.provider import (
+    ChargingProviderError,
+    ProviderRateLimitError,
+)
 from tests.conftest import FakeProvider
 
 pytestmark = pytest.mark.usefixtures("enable_custom_integrations")
@@ -1280,6 +1283,18 @@ async def test_setup_translates_first_refresh_failure(hass, monkeypatch):
     entry.add_to_hass(hass)
 
     assert not await hass.config_entries.async_setup(entry.entry_id)
+
+
+@pytest.mark.asyncio
+async def test_setup_translates_first_refresh_rate_limit(hass, monkeypatch):
+    entry = _entry()
+    provider = FakeProvider([ProviderRateLimitError("limited", retry_after=600)])
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    entry.add_to_hass(hass)
+
+    assert not await hass.config_entries.async_setup(entry.entry_id)
+    assert entry.error_reason_translation_domain == DOMAIN
+    assert entry.error_reason_translation_key == "rate_limited"
 
 
 @pytest.mark.asyncio

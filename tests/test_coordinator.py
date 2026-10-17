@@ -10,6 +10,7 @@ from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from custom_components.curbcharge.const import (
     DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
+    DOMAIN,
 )
 from custom_components.curbcharge.coordinator import CurbChargeCoordinator
 from custom_components.curbcharge.geography import distance_m
@@ -268,10 +269,13 @@ async def test_rate_limit_retry_after_extends_update_interval(hass):
     provider = FakeProvider([ProviderRateLimitError("limited", retry_after=600)])
     coordinator = _coordinator(hass, provider)
 
-    with pytest.raises(UpdateFailed):
+    with pytest.raises(UpdateFailed) as error:
         await coordinator._async_update_data()
 
     assert coordinator.update_interval >= timedelta(seconds=600)
+    assert error.value.retry_after == 600
+    assert error.value.translation_domain == DOMAIN
+    assert error.value.translation_key == "rate_limited"
 
 
 @pytest.mark.asyncio

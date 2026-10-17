@@ -146,15 +146,35 @@ async def test_config_flow_uses_manual_coordinates(hass, monkeypatch):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("entity_id", "state", "extra_attributes"),
+    [
+        ("sensor.vehicle_location", "moving", {}),
+        (
+            "zone.home",
+            "0",
+            {
+                "radius": 100,
+                "passive": False,
+                "persons": [],
+                "device_trackers": [],
+                "editable": True,
+            },
+        ),
+    ],
+)
 async def test_config_flow_uses_entity_location_without_storing_coordinates(
-    hass, monkeypatch
+    hass, monkeypatch, entity_id, state, extra_attributes
 ):
-    entity_id = "sensor.vehicle_location"
     location = (52.123456, 5.654321)
     hass.states.async_set(
         entity_id,
-        "moving",
-        {CONF_LATITUDE: location[0], CONF_LONGITUDE: location[1]},
+        state,
+        {
+            CONF_LATITUDE: location[0],
+            CONF_LONGITUDE: location[1],
+            **extra_attributes,
+        },
     )
     provider = FakeProvider()
     monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
