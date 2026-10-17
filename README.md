@@ -199,6 +199,102 @@ views:
           - entity: sensor.your_nearby_availability_percentage
 ```
 
+### Native map and tap-to-navigate links
+
+The built-in Map card can plot any entity with `latitude` and `longitude`
+attributes. Per-station **Status summary** sensors already provide them;
+**Best nearby** provides the selected destination coordinates. Replace both
+example IDs with the entities from your instance, or remove the Status summary
+row if it would duplicate the Best nearby marker:
+
+```yaml
+type: map
+title: CurbCharge stations
+default_zoom: 12
+entities:
+  - entity: sensor.your_best_nearby_charger
+    name: Best nearby
+  - entity: sensor.your_station_status_summary
+    name: Example station
+```
+
+The complete Map card example is in
+[`examples/curbcharge-map.yaml`](examples/curbcharge-map.yaml). The card may
+also show Home Assistant's Home zone; it is not used as a directions origin.
+
+For one-tap links, the built-in Markdown card below reads the selected entity's
+destination coordinates, using its address only if coordinates are absent.
+Change the entity ID in both `entity_id` and the template to use a per-station
+Status summary sensor instead:
+
+```yaml
+type: markdown
+entity_id: sensor.your_best_nearby_charger
+content: |-
+  {% set source_entity = 'sensor.your_best_nearby_charger' %}
+  {% set source_state = states(source_entity) %}
+  {% set result_status = state_attr(source_entity, 'result_status') %}
+  {% set selection_valid = result_status is none or result_status == 'selected' %}
+  {% set latitude = state_attr(source_entity, 'latitude') %}
+  {% set longitude = state_attr(source_entity, 'longitude') %}
+  {% set coordinates_valid = latitude is number and longitude is number and -90 <= latitude <= 90 and -180 <= longitude <= 180 %}
+  {% set raw_address = state_attr(source_entity, 'address') %}
+  {% set address = raw_address | trim if raw_address is string else '' %}
+  {% set has_address = address != '' %}
+  {% if source_state != 'unavailable' and selection_valid and (coordinates_valid or has_address) %}
+    {% if coordinates_valid %}
+      {% set destination = latitude|string ~ ',' ~ longitude|string %}
+      {% set geo_url = 'geo:' ~ destination ~ '?q=' ~ destination %}
+      {% set waze_parameter = 'll' %}
+    {% else %}
+      {% set destination = address %}
+      {% set geo_url = 'geo:0,0?q=' ~ (destination | urlencode) %}
+      {% set waze_parameter = 'q' %}
+    {% endif %}
+    {% set destination_encoded = destination | urlencode %}
+    {% set google_url = 'https://www.google.com/maps/dir/?api=1&destination=' ~ destination_encoded %}
+    {% set apple_url = 'https://maps.apple.com/directions?destination=' ~ destination_encoded %}
+    {% set waze_url = 'https://waze.com/ul?' ~ waze_parameter ~ '=' ~ destination_encoded ~ '&navigate=yes' %}
+    - [Google Maps directions]({{ google_url }})
+    - [Apple Maps directions]({{ apple_url }})
+    - [Waze navigation]({{ waze_url }})
+    - [Open map location (not directions)]({{ geo_url }})
+  {% else %}
+    No selected charger destination with a usable location is available.
+  {% endif %}
+```
+
+Best nearby links appear only for a selected, available recommendation. A
+Status summary with unknown connector availability can still provide directions
+when it has valid coordinates or an address. No link is shown for a missing
+destination or an unavailable/stale entity. The URLs omit route-origin
+parameters, so they do not send Home Assistant's home, search-area, or vehicle
+coordinates; a compatible map app can use the mobile device's current location.
+The `geo:` link opens a map location only and is not turn-by-turn navigation.
+
+These HTTPS links are opened only after the user taps them. App handoff depends
+on the operating system, browser, Companion App, and installed map apps.
+Google Maps and Waze may open their installed app or fall back to the provider
+website. Apple Maps links use Apple's unified Maps URL format on supported
+Apple operating systems; other devices may handle them differently. The
+optional `geo:` URI works only when the operating system has a compatible map
+handler. These are expected fallbacks, not guarantees for every device.
+
+Before relying on the links, use the Home Assistant Companion App on Android
+and iOS to tap each provider link with its app installed and absent, confirm the
+fallback behavior, and check that directions start from the mobile device. Also
+verify that the `geo:` link opens a location without claiming to start
+navigation.
+
+See the Home Assistant [Map card](https://www.home-assistant.io/dashboards/map/)
+and [Markdown card](https://www.home-assistant.io/dashboards/markdown/)
+documentation, plus the provider formats for
+[Google Maps](https://developers.google.com/maps/documentation/urls/get-started),
+[Apple Maps](https://developer.apple.com/documentation/mapkit/unified-map-urls),
+and [Waze](https://developers.google.com/waze/deeplinks).
+The complete templated card example is in
+[`examples/curbcharge-navigation.yaml`](examples/curbcharge-navigation.yaml).
+
 The native view has no custom-card dependency. If you prefer the bundled
 CurbCharge card's summary layout, set its `entity` to a station **Status
 summary** sensor or the Best nearby recommendation sensor:
