@@ -1,0 +1,62 @@
+"""Tests for the documented native CurbCharge dashboard YAML."""
+
+import re
+from pathlib import Path
+
+import yaml
+
+REPOSITORY_ROOT = Path(__file__).parent.parent
+README_PATH = REPOSITORY_ROOT / "README.md"
+DASHBOARD_PATH = REPOSITORY_ROOT / "examples" / "curbcharge-dashboard.yaml"
+
+
+def test_documented_dashboard_yaml_parses_and_matches_native_example():
+    readme = README_PATH.read_text(encoding="utf-8")
+    lovelace_section = readme.split("## Lovelace card", 1)[1].split(
+        "## Configuration", 1
+    )[0]
+    yaml_blocks = re.findall(r"```yaml\s*\n(.*?)\n```", lovelace_section, re.DOTALL)
+    parsed_examples = [yaml.safe_load(block) for block in yaml_blocks]
+    dashboard = yaml.safe_load(DASHBOARD_PATH.read_text(encoding="utf-8"))
+
+    native_block = next(
+        block for block in yaml_blocks if "sensor.your_nearby_charging_units" in block
+    )
+    assert yaml.safe_load(native_block) == dashboard
+    assert all(isinstance(example, dict) for example in parsed_examples)
+
+    cards = dashboard["views"][0]["cards"]
+    assert {card["type"] for card in cards} == {"markdown", "entities"}
+
+    entities_cards = [card for card in cards if card["type"] == "entities"]
+    recommendation_rows = entities_cards[0]["entities"]
+    displayed_attributes = {
+        row["attribute"]
+        for row in recommendation_rows
+        if row.get("type") == "attribute"
+    }
+    assert displayed_attributes >= {
+        "result_status",
+        "address",
+        "available_connectors",
+        "total_connectors",
+        "distance_m",
+        "max_power_kw",
+        "price_per_kwh",
+        "currency",
+        "provider_last_updated",
+        "last_successful_update",
+    }
+
+    aggregate_entities = {row["entity"] for row in entities_cards[1]["entities"]}
+    assert aggregate_entities >= {
+        "sensor.your_nearby_charging_units",
+        "sensor.your_nearby_available_connectors",
+        "sensor.your_nearby_availability_percentage",
+    }
+
+    native_section, optional_section = lovelace_section.split(
+        "### Optional: dynamic station list with Auto-Entities", 1
+    )
+    assert "custom:auto-entities" not in native_section
+    assert "custom:auto-entities" in optional_section
