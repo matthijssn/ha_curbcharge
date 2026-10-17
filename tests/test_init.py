@@ -1,7 +1,6 @@
 """Tests for setup, unloading, and dynamically discovered stations."""
 
 import asyncio
-import logging
 from dataclasses import replace
 from pathlib import Path
 
@@ -1287,16 +1286,32 @@ async def test_setup_translates_first_refresh_failure(hass, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_setup_translates_first_refresh_rate_limit(hass, monkeypatch, caplog):
+async def test_setup_translates_first_refresh_rate_limit(hass, monkeypatch):
     entry = _entry()
     provider = FakeProvider([ProviderRateLimitError("limited", retry_after=600)])
     monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    first_refresh_errors: list[ConfigEntryNotReady] = []
+    original_first_refresh = CurbChargeCoordinator.async_config_entry_first_refresh
+
+    async def capture_first_refresh(coordinator):
+        try:
+            await original_first_refresh(coordinator)
+        except ConfigEntryNotReady as err:
+            first_refresh_errors.append(err)
+            raise
+
+    monkeypatch.setattr(
+        CurbChargeCoordinator,
+        "async_config_entry_first_refresh",
+        capture_first_refresh,
+    )
     entry.add_to_hass(hass)
 
-    with caplog.at_level(logging.INFO):
-        assert not await hass.config_entries.async_setup(entry.entry_id)
+    assert not await hass.config_entries.async_setup(entry.entry_id)
 
-    assert "The charging provider is rate limiting requests." in caplog.text
+    assert first_refresh_errors
+    assert first_refresh_errors[0].translation_domain == DOMAIN
+    assert first_refresh_errors[0].translation_key == "rate_limited"
 
 
 @pytest.mark.asyncio
