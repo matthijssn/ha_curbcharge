@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
+from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from .api import create_provider
 from .const import (
@@ -159,7 +160,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
         discovery_filters=discovery_filters,
     )
     entry.runtime_data = coordinator
-    await coordinator.async_config_entry_first_refresh()
+    try:
+        await coordinator.async_config_entry_first_refresh()
+    except ConfigEntryNotReady as err:
+        cause = err.__cause__
+        if err.translation_key == "rate_limited" or (
+            isinstance(cause, UpdateFailed) and cause.translation_key == "rate_limited"
+        ):
+            raise ConfigEntryNotReady(
+                translation_domain=DOMAIN,
+                translation_key="rate_limited",
+            ) from err
+        raise
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     return True
