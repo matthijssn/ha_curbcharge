@@ -46,6 +46,14 @@ class EVSEStatus(StrEnum):
     UNKNOWN = "UNKNOWN"
 
 
+class ProviderTimestampSource(StrEnum):
+    """Origin of a station's provider record timestamp."""
+
+    NDW_FEATURE = "ndw_feature"
+    BELGIUM_EVSE_STATUS = "belgium_evse_status"
+    BELGIUM_STATIC_FALLBACK = "belgium_static_fallback"
+
+
 class TariffStatus(StrEnum):
     """How much of a provider tariff can be safely reported."""
 
@@ -241,6 +249,7 @@ class ChargingStation:
     evse_status: EVSEStatus | None = None
     connector_count_reported: bool = True
     tariff_status: TariffStatus | None = None
+    last_updated_source: ProviderTimestampSource | None = None
 
     @property
     def available_connectors(self) -> int | None:

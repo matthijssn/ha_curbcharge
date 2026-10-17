@@ -43,6 +43,7 @@ from .models import (
     ConnectorStatus,
     DiscoveryFilterSettings,
     FavouriteStationReference,
+    ProviderTimestampSource,
     StationDiscoveryResult,
     TariffStatus,
 )
@@ -512,7 +513,10 @@ def _station_from_feature(
     if not isinstance(is_open, bool):
         raise InvalidProviderResponseError("NDW DOT-NL returned invalid open status")
     operator = _optional_string(properties.get("operator_name"), "operator")
-    last_updated = _parse_datetime(properties.get("last_updated"))
+    raw_last_updated = properties.get("last_updated")
+    last_updated = (
+        None if raw_last_updated is None else _parse_datetime(raw_last_updated)
+    )
 
     raw_availabilities = properties.get("availabilities")
     if raw_availabilities is None:
@@ -552,6 +556,7 @@ def _station_from_feature(
         connectors=connectors,
         tariff=None,
         last_updated=last_updated,
+        last_updated_source=ProviderTimestampSource.NDW_FEATURE,
         availability_reported=availability_reported,
         is_open=is_open,
         country_code=COUNTRY_NL,

@@ -33,6 +33,7 @@ from custom_components.curbcharge.models import (
     ConnectorStatus,
     DiscoveryFilterSettings,
     FavouriteStationReference,
+    ProviderTimestampSource,
     TariffStatus,
 )
 from custom_components.curbcharge.provider import (
@@ -723,6 +724,24 @@ def test_connector_group_ids_are_stable_when_a_new_group_is_discovered(
     assert original_ids < updated_ids
 
 
+@pytest.mark.parametrize("remove_timestamp", [False, True])
+def test_missing_ndw_timestamp_preserves_valid_availability(
+    sample_geojson, remove_timestamp
+):
+    feature = copy.deepcopy(sample_geojson["features"][0])
+    if remove_timestamp:
+        feature["properties"].pop("last_updated")
+    else:
+        feature["properties"]["last_updated"] = None
+
+    station = _station_from_feature(feature, 52.0, 5.0)
+
+    assert station.last_updated is None
+    assert station.last_updated_source is ProviderTimestampSource.NDW_FEATURE
+    assert station.availability_reported
+    assert station.available_connectors == 2
+
+
 @pytest.mark.parametrize(
     "payload",
     [
@@ -762,8 +781,8 @@ def test_feature_collection_rejects_malformed_payloads(payload):
         (("properties", "cpo_id"), ""),
         (("properties", "open"), 1),
         (("properties", "operator_name"), 5),
-        (("properties", "last_updated"), None),
         (("properties", "last_updated"), "not-a-timestamp"),
+        (("properties", "last_updated"), "2026-10-11T12:00:00"),
         (("properties", "availabilities"), {}),
         (("properties", "availabilities", 0, "available"), True),
         (("properties", "availabilities", 0, "available"), 100),

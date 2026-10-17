@@ -22,6 +22,7 @@ from custom_components.curbcharge.models import (
     DiscoveryFilterSettings,
     EVSEStatus,
     FavouriteStationReference,
+    ProviderTimestampSource,
 )
 from custom_components.curbcharge.provider import (
     AuthenticationError,
@@ -242,6 +243,9 @@ async def test_belgium_provider_maps_location_evse_connectors_and_status():
     assert station.provider_id == "evse-internal-1"
     assert station.evse_id == "BE*EXAMPLE*1"
     assert station.evse_status is EVSEStatus.AVAILABLE
+    assert station.last_updated_source is ProviderTimestampSource.BELGIUM_EVSE_STATUS
+    assert station.last_updated is not None
+    assert station.last_updated.isoformat() == "2026-10-11T10:01:00+00:00"
     assert station.has_available_connectors is True
     assert station.available_connectors is None
     assert station.total_connectors == 2
@@ -259,6 +263,38 @@ async def test_belgium_provider_maps_location_evse_connectors_and_status():
         and connector.available_count is None
         for connector in station.connectors
     )
+
+
+@pytest.mark.asyncio
+async def test_belgium_missing_dynamic_timestamp_uses_static_provenance():
+    status_document = _status_document()
+    status_record = status_document["messageContainer"]["payload"][0][
+        "aegiEnergyInfrastructureStatusPublication"
+    ]["energyInfrastructureSiteStatus"][0]["energyInfrastructureStationStatus"][0][
+        "refillPointStatus"
+    ][0]["aegiElectricChargingPointStatus"]
+    status_record.pop("lastUpdated")
+    provider = BelgiumChargingProvider(
+        BelgiumDatexClient(
+            FakeSession(
+                [
+                    FakeResponse(_locations_document()),
+                    FakeResponse(status_document),
+                ]
+            ),
+            "token",
+            NoWaitLimiter(),
+        )
+    )
+
+    station = (await provider.async_get_stations(50.85, 4.35, 1000, 10)).nearby[0]
+
+    assert station.has_available_connectors is True
+    assert (
+        station.last_updated_source is ProviderTimestampSource.BELGIUM_STATIC_FALLBACK
+    )
+    assert station.last_updated is not None
+    assert station.last_updated.isoformat() == "2026-10-11T10:00:00+00:00"
 
 
 @pytest.mark.asyncio
@@ -373,6 +409,9 @@ async def test_belgium_unmatched_status_keeps_availability_unknown():
     assert not station.availability_reported
     assert station.evse_status is None
     assert station.has_available_connectors is None
+    assert (
+        station.last_updated_source is ProviderTimestampSource.BELGIUM_STATIC_FALLBACK
+    )
 
 
 @pytest.mark.asyncio
