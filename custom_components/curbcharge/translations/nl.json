@@ -71,11 +71,13 @@
         "data": {
           "search_radius": "Zoekradius (m)",
           "max_stations": "Maximumaantal laadpunten",
+          "scan_interval": "Bijwerkinterval (minuten)",
           "provider": "Provider"
         },
         "data_description": {
           "search_radius": "Neem alleen openbare laadpunten binnen deze afstand op.",
           "max_stations": "Beperk het aantal laadpunten en bijbehorende entiteiten.",
+          "scan_interval": "Hoe vaak Home Assistant de laadpuntgegevens vernieuwt.",
           "provider": "De gegevensprovider voor het vinden van laadpunten en beschikbaarheid."
         }
       },

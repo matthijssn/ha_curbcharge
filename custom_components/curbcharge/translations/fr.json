@@ -71,11 +71,13 @@
         "data": {
           "search_radius": "Rayon de recherche (m)",
           "max_stations": "Nombre maximal de bornes",
+          "scan_interval": "Intervalle d’actualisation (minutes)",
           "provider": "Fournisseur"
         },
         "data_description": {
           "search_radius": "Inclure uniquement les bornes publiques dans ce rayon.",
           "max_stations": "Limiter le nombre de bornes et d'entités associées.",
+          "scan_interval": "Fréquence d’actualisation des données des bornes par Home Assistant.",
           "provider": "Fournisseur de données utilisé pour découvrir les bornes et leur disponibilité."
         }
       },

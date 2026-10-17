@@ -396,18 +396,18 @@ Choose one of three location sources:
 Use **Reconfigure** on an existing entry to change its location source or to
 select a replacement if an Entity source was renamed or removed.
 
-Choose a search radius from 100 to 10,000 metres and a maximum of 1 to 50
-stations (default 10), then select NDW DOT-NL or the Belgium preview. Belgium
-setup also asks for the Eco-Movement API token and validates connectivity
-before creating the entry. The default polling interval is five minutes; the
-options flow permits intervals of one minute or longer, plus changes to the
-radius, station limit, and whether to include stations for which no
-availability data was returned. For Entity sources, the options flow also
-offers a movement threshold that defaults to 100 metres; set it to `0` to
-disable the threshold. Favourites can also be selected by their displayed
-names. They are stored per config entry, continue to be refreshed outside the
-search radius, and are added beyond the normal nearby station limit. The
-provider is selected during setup and cannot be switched from the options flow.
+Choose a polling interval in minutes (default 5; minimum 1), a search radius
+from 100 to 10,000 metres, and a maximum of 1 to 50 stations (default 10), then
+select NDW DOT-NL or the Belgium preview. Belgium setup also asks for the
+Eco-Movement API token and validates connectivity before creating the entry.
+You can change the polling interval, radius, station limit, and whether to
+include stations without availability data later in Options. For Entity
+sources, Options also offers a movement threshold that defaults to 100 metres;
+set it to `0` to disable the threshold. Favourites can also be selected by
+their displayed names. They are stored per config entry, continue to be
+refreshed outside the search radius, and are added beyond the normal nearby
+station limit. The provider is selected during setup and cannot be switched
+from Options.
 For NDW DOT-NL, an additional setup step and the Options flow offer connector
 type, minimum power, and require-available filters. Select zero or more
 connector types; if several are selected, any one may match, but the same
@@ -576,10 +576,13 @@ replace the last successful coordinator data.
 
 CurbCharge refreshes station data with a shared `DataUpdateCoordinator`. The
 coordinator calls the provider once per cycle; entities never make requests.
-The default interval is five minutes and can be reduced to one minute in
-options. NDW may paginate GeoJSON results, and tariffs come from a separate
-OCPI file cached for six hours. The provider client may therefore make
-additional HTTP requests when more pages or uncached tariffs are needed.
+Each config entry polls at its selected scan interval (five minutes by
+default, at least one minute). This is separate from the per-request throttle:
+NDW documents a maximum of 10 GeoJSON requests per second, and CurbCharge's
+shared limiter spaces requests and honors `Retry-After` responses. NDW may
+paginate GeoJSON results, and tariffs come from a separate OCPI file cached
+for six hours. The provider client may therefore make additional HTTP requests
+when more pages or uncached tariffs are needed.
 NDW discovery filters run locally on the normalized, radius-bounded results
 from the regular bounding-box refresh. They do not add provider requests;
 matching candidates are sorted and capped before tariff lookup.
