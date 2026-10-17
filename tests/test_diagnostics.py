@@ -92,6 +92,10 @@ async def test_diagnostics_redact_coordinates_and_addresses(hass, sample_station
     assert "52.123456" not in serialized
     assert "5.654321" not in serialized
     assert "Teststraat 1" not in serialized
+    assert "google.com/maps/dir" not in serialized
+    assert "maps.apple.com/directions" not in serialized
+    assert "waze.com/ul?" not in serialized
+    assert "geo:" not in serialized
     assert stale.provider_id not in serialized
     assert "diagnostic-secret-token" not in serialized
     assert "nested-data-secret-token" not in serialized
