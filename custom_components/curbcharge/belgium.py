@@ -35,6 +35,7 @@ from .models import (
     DiscoveryFilterSettings,
     EVSEStatus,
     FavouriteStationReference,
+    ProviderTimestampSource,
     StationDiscoveryResult,
 )
 from .provider import (
@@ -332,6 +333,9 @@ class BelgiumChargingProvider(BaseChargingProvider):
                 status = _evse_status(status_record.get("status"))
                 if status is EVSEStatus.REMOVED:
                     continue
+                status_last_updated = _optional_date(
+                    status_record.get("lastUpdated"), "EVSE status"
+                )
                 raw_energy_rate_updates = status_record.get("energyRateUpdate")
                 tariff = (
                     _ad_hoc_tariff(status_record, self.provider_name)
@@ -344,10 +348,14 @@ class BelgiumChargingProvider(BaseChargingProvider):
                         availability_reported=True,
                         evse_status=status,
                         last_updated=(
-                            _optional_date(
-                                status_record.get("lastUpdated"), "EVSE status"
-                            )
-                            or station.last_updated
+                            status_last_updated
+                            if status_last_updated is not None
+                            else station.last_updated
+                        ),
+                        last_updated_source=(
+                            ProviderTimestampSource.BELGIUM_EVSE_STATUS
+                            if status_last_updated is not None
+                            else ProviderTimestampSource.BELGIUM_STATIC_FALLBACK
                         ),
                         tariff=tariff,
                     )
@@ -433,6 +441,9 @@ def _parse_static_stations(
                             ),
                             last_updated=_optional_date(
                                 evse.get("lastUpdated"), "EVSE"
+                            ),
+                            last_updated_source=(
+                                ProviderTimestampSource.BELGIUM_STATIC_FALLBACK
                             ),
                             provider=PROVIDER_ECO_MOVEMENT_BE,
                             availability_reported=False,
