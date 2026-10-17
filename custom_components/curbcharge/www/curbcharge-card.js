@@ -25,7 +25,10 @@ const EDITOR_LABELS = {
 const TEXT = {
   en: {
     available: "Available",
+    selected: "Selected",
     noneAvailable: "None available",
+    noCurrentStations: "No current stations",
+    unknownAvailability: "Availability unknown",
     unknown: "Unknown",
     unavailable: "Unavailable",
     availableConnectors: "Available connectors",
@@ -34,6 +37,7 @@ const TEXT = {
     totalConnectors: "Total connectors",
     maximumPower: "Maximum charging power",
     price: "Price per kWh",
+    address: "Address",
     distance: "Distance",
     providerOpenStatus: "Provider-reported open status",
     open: "Open",
@@ -50,12 +54,15 @@ const TEXT = {
     showStationDetails: "Show station details",
     showUpdateTimes: "Show update times",
     entityMissing: "The configured entity was not found.",
-    wrongEntity: "Choose a CurbCharge status summary sensor.",
-    invalidConfig: "Use a CurbCharge status summary sensor and supported display options.",
+    wrongEntity: "Choose a CurbCharge status or recommendation sensor.",
+    invalidConfig: "Use a CurbCharge status or recommendation sensor and supported display options.",
   },
   nl: {
     available: "Beschikbaar",
+    selected: "Geselecteerd",
     noneAvailable: "Geen beschikbaar",
+    noCurrentStations: "Geen actuele stations",
+    unknownAvailability: "Beschikbaarheid onbekend",
     unknown: "Onbekend",
     unavailable: "Niet beschikbaar",
     availableConnectors: "Beschikbare connectoren",
@@ -64,6 +71,7 @@ const TEXT = {
     totalConnectors: "Totaal aantal connectoren",
     maximumPower: "Maximaal laadvermogen",
     price: "Prijs per kWh",
+    address: "Adres",
     distance: "Afstand",
     providerOpenStatus: "Openstatus volgens provider",
     open: "Open",
@@ -80,12 +88,15 @@ const TEXT = {
     showStationDetails: "Toon stationdetails",
     showUpdateTimes: "Toon updatetijden",
     entityMissing: "De ingestelde entiteit is niet gevonden.",
-    wrongEntity: "Kies een CurbCharge-statussensor.",
-    invalidConfig: "Gebruik een CurbCharge-statussensor en ondersteunde weergaveopties.",
+    wrongEntity: "Kies een CurbCharge-status- of aanbevelingssensor.",
+    invalidConfig: "Gebruik een CurbCharge-status- of aanbevelingssensor en ondersteunde weergaveopties.",
   },
   fr: {
     available: "Disponible",
+    selected: "Sélectionnée",
     noneAvailable: "Aucun disponible",
+    noCurrentStations: "Aucune station actuelle",
+    unknownAvailability: "Disponibilité inconnue",
     unknown: "Inconnu",
     unavailable: "Indisponible",
     availableConnectors: "Connecteurs disponibles",
@@ -94,6 +105,7 @@ const TEXT = {
     totalConnectors: "Total des connecteurs",
     maximumPower: "Puissance de charge maximale",
     price: "Prix par kWh",
+    address: "Adresse",
     distance: "Distance",
     providerOpenStatus: "Statut d'ouverture indiqué par le fournisseur",
     open: "Ouverte",
@@ -110,12 +122,15 @@ const TEXT = {
     showStationDetails: "Afficher les détails de la station",
     showUpdateTimes: "Afficher les heures de mise à jour",
     entityMissing: "L'entité configurée est introuvable.",
-    wrongEntity: "Choisissez un capteur de résumé CurbCharge.",
-    invalidConfig: "Utilisez un capteur de résumé CurbCharge et des options d'affichage prises en charge.",
+    wrongEntity: "Choisissez un capteur de statut ou de recommandation CurbCharge.",
+    invalidConfig: "Utilisez un capteur de statut ou de recommandation CurbCharge et des options d'affichage prises en charge.",
   },
   de: {
     available: "Verfügbar",
+    selected: "Ausgewählt",
     noneAvailable: "Keine verfügbar",
+    noCurrentStations: "Keine aktuellen Stationen",
+    unknownAvailability: "Verfügbarkeit unbekannt",
     unknown: "Unbekannt",
     unavailable: "Nicht verfügbar",
     availableConnectors: "Verfügbare Anschlüsse",
@@ -124,6 +139,7 @@ const TEXT = {
     totalConnectors: "Anschlüsse gesamt",
     maximumPower: "Maximale Ladeleistung",
     price: "Preis pro kWh",
+    address: "Adresse",
     distance: "Entfernung",
     providerOpenStatus: "Vom Anbieter gemeldeter Öffnungsstatus",
     open: "Geöffnet",
@@ -140,8 +156,8 @@ const TEXT = {
     showStationDetails: "Stationsdetails anzeigen",
     showUpdateTimes: "Aktualisierungszeiten anzeigen",
     entityMissing: "Die konfigurierte Entität wurde nicht gefunden.",
-    wrongEntity: "Wählen Sie einen CurbCharge-Statussensor aus.",
-    invalidConfig: "Verwenden Sie einen CurbCharge-Statussensor und unterstützte Anzeigeoptionen.",
+    wrongEntity: "Wählen Sie einen CurbCharge-Status- oder Empfehlungssensor aus.",
+    invalidConfig: "Verwenden Sie einen CurbCharge-Status- oder Empfehlungssensor und unterstützte Anzeigeoptionen.",
   },
 };
 
@@ -213,22 +229,37 @@ export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
 
   const options = { ...DEFAULT_CONFIG, ...config };
   const attributes = entity.attributes || {};
-  if (typeof attributes.provider_station_id !== "string") {
+  const isCurbChargeSensor =
+    typeof attributes.provider_station_id === "string" ||
+    typeof attributes.result_status === "string" ||
+    (typeof attributes.reason === "string" &&
+      Object.hasOwn(attributes, "last_successful_update"));
+  if (!isCurbChargeSensor) {
     return { error: text.wrongEntity };
   }
 
-  const unavailable = entity.state === "unavailable";
+  const unavailable =
+    entity.state === "unavailable" || attributes.result_status === "unavailable";
   const values = unavailable ? {} : attributes;
-  const stateLabels = {
+  const statusLabels = {
     available: text.available,
+    selected: text.selected,
     none_available: text.noneAvailable,
+    no_current_stations: text.noCurrentStations,
+    unknown_availability: text.unknownAvailability,
     unknown: text.unknown,
     unavailable: text.unavailable,
   };
-  const statusKey = Object.hasOwn(stateLabels, entity.state)
-    ? entity.state
-    : "unknown";
-  const status = stateLabels[statusKey];
+  const statusKey = unavailable
+    ? "unavailable"
+    : Object.hasOwn(statusLabels, attributes.result_status)
+      ? attributes.result_status
+      : Object.hasOwn(statusLabels, entity.state)
+        ? entity.state
+        : typeof attributes.provider_station_id === "string"
+          ? "selected"
+          : "unknown";
+  const status = statusLabels[statusKey];
   const openStatus =
     typeof values.is_open === "boolean"
       ? values.is_open
@@ -242,10 +273,16 @@ export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
     values.currency
       ? `${formatNumber(values.price_per_kwh, hass, text.unknown)} ${values.currency}/kWh`
       : text.unknown;
+  const providerUpdatedAt = Object.hasOwn(attributes, "provider_last_updated")
+    ? values.provider_last_updated
+    : typeof attributes.result_status === "string" ||
+        typeof attributes.reason === "string"
+      ? undefined
+      : values.last_updated;
   const primaryRows = [
     [
-    text.availableConnectors,
-    formatCount(values.available_connectors, hass, text.unknown),
+      text.availableConnectors,
+      formatCount(values.available_connectors, hass, text.unknown),
     ],
   ];
   if (options.show_price) {
@@ -256,57 +293,63 @@ export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
   if (options.show_connector_details) {
     detailsRows.push(
       [
-      text.occupiedConnectors,
-      formatCount(values.occupied_connectors, hass, text.unknown),
-    ],
-    [
-      text.unavailableConnectors,
-      formatCount(values.unavailable_connectors, hass, text.unknown),
-    ],
-    [
-      text.totalConnectors,
-      formatCount(values.total_connectors, hass, text.unknown),
-    ],
+        text.occupiedConnectors,
+        formatCount(values.occupied_connectors, hass, text.unknown),
+      ],
+      [
+        text.unavailableConnectors,
+        formatCount(values.unavailable_connectors, hass, text.unknown),
+      ],
+      [
+        text.totalConnectors,
+        formatCount(values.total_connectors, hass, text.unknown),
+      ],
     );
   }
   if (options.show_station_details) {
     detailsRows.push(
-    [
-      text.maximumPower,
-      typeof values.max_power_kw === "number" &&
-      Number.isFinite(values.max_power_kw)
-        ? `${formatNumber(values.max_power_kw, hass, text.unknown)} kW`
-        : text.unknown,
-    ],
-    [
-      text.distance,
-      typeof values.distance_m === "number" &&
-      Number.isFinite(values.distance_m)
-        ? `${formatNumber(values.distance_m, hass, text.unknown)} m`
-        : text.unknown,
-    ],
-    [text.providerOpenStatus, openStatus],
+      [
+        text.address,
+        typeof values.address === "string" && values.address.trim()
+          ? values.address
+          : text.unknown,
+      ],
+      [
+        text.maximumPower,
+        typeof values.max_power_kw === "number" &&
+        Number.isFinite(values.max_power_kw)
+          ? `${formatNumber(values.max_power_kw, hass, text.unknown)} kW`
+          : text.unknown,
+      ],
+      [
+        text.distance,
+        typeof values.distance_m === "number" &&
+        Number.isFinite(values.distance_m)
+          ? `${formatNumber(values.distance_m, hass, text.unknown)} m`
+          : text.unknown,
+      ],
+      [text.providerOpenStatus, openStatus],
     );
   }
   if (options.show_update_times) {
     detailsRows.push(
-    [
-      text.providerUpdated,
-      formatTimestamp(values.last_updated, hass, text.unknown),
-    ],
-    [
-      text.integrationUpdated,
-      formatTimestamp(values.last_successful_update, hass, text.unknown),
-    ],
+      [
+        text.providerUpdated,
+        formatTimestamp(providerUpdatedAt, hass, text.unknown),
+      ],
+      [
+        text.integrationUpdated,
+        formatTimestamp(values.last_successful_update, hass, text.unknown),
+      ],
     );
   }
 
   return {
     title:
-    attributes.station_name ||
-    attributes.friendly_name ||
-    entity.entity_id ||
-    "CurbCharge",
+      values.station_name ||
+      attributes.friendly_name ||
+      entity.entity_id ||
+      "CurbCharge",
     status,
     statusKey,
     layout: options.layout,
