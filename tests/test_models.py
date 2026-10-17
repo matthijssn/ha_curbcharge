@@ -1,6 +1,7 @@
 """Tests for typed station and connector availability models."""
 
 from dataclasses import replace
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
@@ -11,6 +12,7 @@ from custom_components.curbcharge.models import (
     DiscoveryFilterSettings,
     EVSEStatus,
     FavouriteStationReference,
+    ProviderTimestampSource,
     parse_favourite_references,
 )
 
@@ -82,6 +84,28 @@ def test_station_without_availability_remains_unknown(sample_stations):
     assert station.unknown_connectors is None
     assert station.max_power_kw is None
     assert station.connector_types == ()
+
+
+def test_provider_data_age_uses_utc_and_returns_zero_at_current_time(sample_stations):
+    now = datetime(2025, 1, 2, 3, 6, 5, tzinfo=UTC)
+    provider_timezone = timezone(timedelta(hours=5, minutes=30))
+    station = replace(
+        sample_stations[0],
+        last_updated=(now - timedelta(seconds=65)).astimezone(provider_timezone),
+        last_updated_source=ProviderTimestampSource.NDW_FEATURE,
+    )
+
+    assert (
+        station.provider_data_age_seconds(now.astimezone(timezone(timedelta(hours=-7))))
+        == 65
+    )
+    assert (
+        replace(
+            station,
+            last_updated=now.astimezone(provider_timezone),
+        ).provider_data_age_seconds(now)
+        == 0
+    )
 
 
 def test_discovery_filters_require_one_connector_group_to_match_all_criteria(

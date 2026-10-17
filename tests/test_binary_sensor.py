@@ -1,12 +1,32 @@
 """Tests for the station availability binary sensor."""
 
+from dataclasses import replace
+from datetime import UTC, datetime
+
 from custom_components.curbcharge.binary_sensor import StationAvailableBinarySensor
 from custom_components.curbcharge.coordinator import CurbChargeCoordinator
+from custom_components.curbcharge.models import ProviderTimestampSource
 from tests.conftest import FakeProvider
 
 
 def test_available_binary_sensor_tracks_reported_count(hass, sample_stations):
     station = sample_stations[0]
+    coordinator = CurbChargeCoordinator(
+        hass, FakeProvider(), 52.0, 5.0, 500, 10, 5, True
+    )
+    coordinator.async_set_updated_data({station.provider_id: station})
+    entity = StationAvailableBinarySensor(coordinator, station)
+
+    assert entity.is_on is True
+
+
+def test_available_binary_sensor_ignores_provider_record_age(hass, sample_stations):
+    station = replace(
+        sample_stations[0],
+        last_updated=datetime(2020, 1, 1, tzinfo=UTC),
+        last_updated_source=ProviderTimestampSource.NDW_FEATURE,
+    )
+    assert station.provider_data_age_seconds(datetime(2025, 1, 1, tzinfo=UTC)) > 0
     coordinator = CurbChargeCoordinator(
         hass, FakeProvider(), 52.0, 5.0, 500, 10, 5, True
     )
