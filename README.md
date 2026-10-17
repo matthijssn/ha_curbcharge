@@ -330,6 +330,11 @@ The card reads only the selected Home Assistant entity; it makes no provider
 requests. It displays the station name and address, availability, connector
 counts, maximum power, distance, price/currency when known, and update times.
 Labels follow the Home Assistant language in English, Dutch, French, or German.
+When the entity has a valid destination, a collapsed **Navigate** disclosure
+offers explicit Google Maps, Apple Maps, Waze, and open-map links; nothing opens
+until the user taps a link. It is hidden for an unavailable/stale entity or an
+unselected Best nearby result. A Status summary with unknown availability can
+still offer links when its destination is valid.
 
 For recommendation sensors, `provider_last_updated` is the provider station
 record time and `last_successful_update` is the last successful Home Assistant
