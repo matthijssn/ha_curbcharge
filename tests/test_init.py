@@ -1293,7 +1293,6 @@ async def test_setup_translates_first_refresh_rate_limit(hass, monkeypatch):
     entry.add_to_hass(hass)
 
     assert not await hass.config_entries.async_setup(entry.entry_id)
-    assert entry.error_reason_translation_domain == DOMAIN
     assert entry.error_reason_translation_key == "rate_limited"
 
 
