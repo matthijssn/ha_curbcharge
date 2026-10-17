@@ -756,6 +756,8 @@ def test_best_nearby_sensor_exposes_selection_reason(hass, sample_stations):
     assert attributes["provider_station_id"] == station.provider_id
     assert attributes["station_name"] == station.name
     assert attributes["address"] == station.address
+    assert attributes["latitude"] == station.latitude
+    assert attributes["longitude"] == station.longitude
     assert attributes["available_connectors"] == 2
     assert attributes["total_connectors"] == 4
     assert attributes["max_power_kw"] == 50
@@ -782,6 +784,19 @@ def test_best_nearby_result_status_distinguishes_empty_unknown_and_unavailable(
     unknown = replace(station, availability_reported=False)
     coordinator.async_set_updated_data({unknown.provider_id: unknown})
     assert sensor.extra_state_attributes["result_status"] == "unknown_availability"
+    attributes = sensor.extra_state_attributes
+    assert attributes["result_status"] == "no_current_stations"
+    assert "latitude" not in attributes
+    assert "longitude" not in attributes
+    assert "address" not in attributes
+
+    unknown = replace(station, availability_reported=False)
+    coordinator.async_set_updated_data({unknown.provider_id: unknown})
+    attributes = sensor.extra_state_attributes
+    assert attributes["result_status"] == "unknown_availability"
+    assert "latitude" not in attributes
+    assert "longitude" not in attributes
+    assert "address" not in attributes
 
     unavailable = replace(
         station,
@@ -791,6 +806,11 @@ def test_best_nearby_result_status_distinguishes_empty_unknown_and_unavailable(
     )
     coordinator.async_set_updated_data({unavailable.provider_id: unavailable})
     assert sensor.extra_state_attributes["result_status"] == "none_available"
+    attributes = sensor.extra_state_attributes
+    assert attributes["result_status"] == "none_available"
+    assert "latitude" not in attributes
+    assert "longitude" not in attributes
+    assert "address" not in attributes
 
 
 @pytest.mark.asyncio
@@ -811,6 +831,12 @@ async def test_best_nearby_result_status_is_unavailable_on_provider_failure(
     assert sensor.native_value is None
     assert sensor.extra_state_attributes["result_status"] == "unavailable"
     assert "station_id" not in sensor.extra_state_attributes
+    attributes = sensor.extra_state_attributes
+    assert attributes["result_status"] == "unavailable"
+    assert "station_id" not in attributes
+    assert "latitude" not in attributes
+    assert "longitude" not in attributes
+    assert "address" not in attributes
 
 
 def test_selection_sensors_report_station_details_and_reasons(hass, sample_stations):

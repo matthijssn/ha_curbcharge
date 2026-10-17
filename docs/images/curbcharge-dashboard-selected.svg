@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="820" viewBox="0 0 1200 820">
+  <rect width="1200" height="820" fill="#f2f4f8"/>
+  <text x="64" y="70" fill="#18212f" font-family="Arial, sans-serif" font-size="30" font-weight="700">CurbCharge dashboard</text>
+  <text x="64" y="102" fill="#586579" font-family="Arial, sans-serif" font-size="16">Desktop illustration · built-in Home Assistant cards</text>
+
+  <rect x="64" y="132" width="700" height="620" rx="16" fill="#fff" stroke="#d8dee8"/>
+  <text x="96" y="180" fill="#18212f" font-family="Arial, sans-serif" font-size="24" font-weight="700">Best nearby</text>
+  <rect x="602" y="150" width="126" height="38" rx="19" fill="#e8f5ef" stroke="#3c9a69"/>
+  <text x="665" y="175" text-anchor="middle" fill="#267147" font-family="Arial, sans-serif" font-size="15" font-weight="700">Selected</text>
+
+  <text x="96" y="232" fill="#586579" font-family="Arial, sans-serif" font-size="15">Recommended station</text>
+  <text x="96" y="269" fill="#18212f" font-family="Arial, sans-serif" font-size="26" font-weight="700">Example Station</text>
+  <line x1="96" y1="294" x2="732" y2="294" stroke="#e3e7ee"/>
+
+  <g font-family="Arial, sans-serif">
+    <text x="96" y="332" fill="#586579" font-size="15">Address</text>
+    <text x="732" y="332" text-anchor="end" fill="#18212f" font-size="16">Example Street 12</text>
+    <text x="96" y="374" fill="#586579" font-size="15">Available / total connectors</text>
+    <text x="732" y="374" text-anchor="end" fill="#18212f" font-size="16" font-weight="700">2 / 4</text>
+    <text x="96" y="416" fill="#586579" font-size="15">Distance</text>
+    <text x="732" y="416" text-anchor="end" fill="#18212f" font-size="16">240 m</text>
+    <text x="96" y="458" fill="#586579" font-size="15">Maximum power</text>
+    <text x="732" y="458" text-anchor="end" fill="#18212f" font-size="16">150 kW</text>
+    <text x="96" y="500" fill="#586579" font-size="15">Price</text>
+    <text x="732" y="500" text-anchor="end" fill="#18212f" font-size="16">0.42 EUR/kWh</text>
+  </g>
+
+  <rect x="96" y="532" width="636" height="1" fill="#e3e7ee"/>
+  <text x="96" y="572" fill="#586579" font-family="Arial, sans-serif" font-size="14">Provider station update</text>
+  <text x="732" y="572" text-anchor="end" fill="#18212f" font-family="Arial, sans-serif" font-size="15">Example time A</text>
+  <text x="96" y="612" fill="#586579" font-family="Arial, sans-serif" font-size="14">Last successful HA refresh</text>
+  <text x="732" y="612" text-anchor="end" fill="#18212f" font-family="Arial, sans-serif" font-size="15">Example time B</text>
+  <text x="96" y="696" fill="#586579" font-family="Arial, sans-serif" font-size="14">Best nearby uses the configured multi-factor ranking; it is not necessarily the closest station.</text>
+
+  <rect x="796" y="132" width="340" height="190" rx="16" fill="#fff" stroke="#d8dee8"/>
+  <text x="828" y="180" fill="#18212f" font-family="Arial, sans-serif" font-size="20" font-weight="700">Nearby aggregates</text>
+  <text x="828" y="226" fill="#586579" font-family="Arial, sans-serif" font-size="15">Charging units</text>
+  <text x="1104" y="226" text-anchor="end" fill="#18212f" font-family="Arial, sans-serif" font-size="22" font-weight="700">4</text>
+  <text x="828" y="266" fill="#586579" font-family="Arial, sans-serif" font-size="15">Available connectors</text>
+  <text x="1104" y="266" text-anchor="end" fill="#18212f" font-family="Arial, sans-serif" font-size="22" font-weight="700">6</text>
+  <text x="828" y="296" fill="#586579" font-family="Arial, sans-serif" font-size="12">Illustrative values for this search area only</text>
+
+  <rect x="796" y="346" width="340" height="190" rx="16" fill="#fff" stroke="#d8dee8"/>
+  <text x="828" y="394" fill="#18212f" font-family="Arial, sans-serif" font-size="20" font-weight="700">Connector availability</text>
+  <text x="828" y="444" fill="#586579" font-family="Arial, sans-serif" font-size="15">Known coverage</text>
+  <text x="1104" y="444" text-anchor="end" fill="#18212f" font-family="Arial, sans-serif" font-size="22" font-weight="700">75%</text>
+  <text x="828" y="484" fill="#586579" font-family="Arial, sans-serif" font-size="15">Nearby availability</text>
+  <text x="1104" y="484" text-anchor="end" fill="#18212f" font-family="Arial, sans-serif" font-size="22" font-weight="700">6 / 8</text>
+
+  <text x="600" y="790" text-anchor="middle" fill="#586579" font-family="Arial, sans-serif" font-size="13">Synthetic illustration only · example names, values, and timestamps · no real location data</text>
+</svg>
