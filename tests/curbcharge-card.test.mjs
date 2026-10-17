@@ -74,17 +74,17 @@ function visibleText(element) {
   return [element.textContent, ...element.children.map(visibleText)].join(" ");
 }
 
-test("rejects invalid configuration and non-summary entities", () => {
+test("rejects invalid configuration and non-CurbCharge entities", () => {
   const Card = elements.get("curbcharge-card");
   const card = new Card();
 
-  assert.throws(() => card.setConfig({}), /status summary sensor/);
+  assert.throws(() => card.setConfig({}), /status or recommendation sensor/);
   assert.deepEqual(
     cardModule.buildCardData(
       { entity_id: "sensor.other", state: "1", attributes: {} },
       { language: "en" },
     ),
-    { error: "Choose a CurbCharge status summary sensor." },
+    { error: "Choose a CurbCharge status or recommendation sensor." },
   );
 });
 
@@ -229,6 +229,7 @@ test("shows reported zeroes and leaves unknown counts unknown", () => {
         price_per_kwh: 0,
         currency: "EUR",
         distance_m: 0,
+        address: "Main Street 10",
         is_open: false,
       },
     },
@@ -243,8 +244,193 @@ test("shows reported zeroes and leaves unknown counts unknown", () => {
   );
   assert.deepEqual(
     data.detailsRows.map(([, value]) => value),
-    ["Unknown", "0", "0", "0 kW", "0 m", "Closed", "Unknown", "Unknown"],
+    [
+      "Unknown",
+      "0",
+      "0",
+      "Main Street 10",
+      "0 kW",
+      "0 m",
+      "Closed",
+      "Unknown",
+      "Unknown",
+    ],
   );
+});
+
+test("renders recommendation payload and separates provider and HA timestamps", () => {
+  const providerTime = "2025-01-02T03:04:05Z";
+  const refreshTime = "2025-01-02T04:05:06Z";
+  const data = cardModule.buildCardData(
+    {
+      entity_id: "sensor.best_nearby_charger",
+      state: "Station One",
+      attributes: {
+        result_status: "selected",
+        provider_station_id: "station-1",
+        station_name: "Station One",
+        address: "Main Street 10",
+        available_connectors: 2,
+        total_connectors: 4,
+        distance_m: 120,
+        max_power_kw: 150,
+        price_per_kwh: 0.42,
+        currency: "EUR",
+        provider_last_updated: providerTime,
+        last_updated: refreshTime,
+        last_successful_update: refreshTime,
+      },
+    },
+    { language: "en" },
+  );
+
+  assert.equal(data.title, "Station One");
+  assert.equal(data.status, "Selected");
+  assert.deepEqual(data.primaryRows, [
+    ["Available connectors", "2"],
+    ["Price per kWh", "0.42 EUR/kWh"],
+  ]);
+  assert.deepEqual(
+    data.detailsRows.slice(2, 6),
+    [
+      ["Total connectors", "4"],
+      ["Address", "Main Street 10"],
+      ["Maximum charging power", "150 kW"],
+      ["Distance", "120 m"],
+    ],
+  );
+  assert.notEqual(data.detailsRows[7][1], data.detailsRows[8][1]);
+  assert.equal(
+    data.detailsRows[7][1],
+    new Intl.DateTimeFormat("en", {
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(new Date(providerTime)),
+  );
+  assert.equal(
+    data.detailsRows[8][1],
+    new Intl.DateTimeFormat("en", {
+      dateStyle: "short",
+      timeStyle: "short",
+    }).format(new Date(refreshTime)),
+  );
+});
+
+test("shows recommendation result states distinctly and suppresses unavailable data", () => {
+  const cases = [
+    ["no_current_stations", "No current stations", "unknown"],
+    ["unknown_availability", "Availability unknown", "unknown"],
+    ["none_available", "None available", "unknown"],
+    ["unavailable", "Unavailable", "unavailable"],
+  ];
+
+  for (const [resultStatus, expectedStatus, state] of cases) {
+    const data = cardModule.buildCardData(
+      {
+        entity_id: "sensor.best_nearby_charger",
+        state,
+        attributes: {
+          result_status: resultStatus,
+          reason: "no_available_station",
+          last_successful_update: "2025-01-02T03:04:05Z",
+          ...(resultStatus === "unavailable"
+            ? {
+                station_name: "Stale Station",
+                available_connectors: 3,
+                price_per_kwh: 0.4,
+                currency: "EUR",
+              }
+            : {}),
+        },
+      },
+      { language: "en" },
+    );
+
+    assert.equal(data.status, expectedStatus);
+    assert.equal(data.primaryRows[0][1], "Unknown");
+    if (resultStatus === "unavailable") {
+      assert.notEqual(data.title, "Stale Station");
+      assert.ok(
+        [...data.primaryRows, ...data.detailsRows].every(
+          ([, value]) => value === "Unknown",
+        ),
+      );
+    }
+  }
+});
+
+test("localizes recommendation states and station address in every supported language", () => {
+  const labels = {
+    en: {
+      selected: "Selected",
+      no_current_stations: "No current stations",
+      unknown_availability: "Availability unknown",
+      none_available: "None available",
+      unavailable: "Unavailable",
+      address: "Address",
+    },
+    nl: {
+      selected: "Geselecteerd",
+      no_current_stations: "Geen actuele stations",
+      unknown_availability: "Beschikbaarheid onbekend",
+      none_available: "Geen beschikbaar",
+      unavailable: "Niet beschikbaar",
+      address: "Adres",
+    },
+    fr: {
+      selected: "Sélectionnée",
+      no_current_stations: "Aucune station actuelle",
+      unknown_availability: "Disponibilité inconnue",
+      none_available: "Aucun disponible",
+      unavailable: "Indisponible",
+      address: "Adresse",
+    },
+    de: {
+      selected: "Ausgewählt",
+      no_current_stations: "Keine aktuellen Stationen",
+      unknown_availability: "Verfügbarkeit unbekannt",
+      none_available: "Keine verfügbar",
+      unavailable: "Nicht verfügbar",
+      address: "Adresse",
+    },
+  };
+
+  for (const [language, expected] of Object.entries(labels)) {
+    const selected = cardModule.buildCardData(
+      {
+        entity_id: "sensor.best_nearby_charger",
+        state: "Station One",
+        attributes: {
+          result_status: "selected",
+          provider_station_id: "station-1",
+          address: "Main Street 10",
+        },
+      },
+      { language },
+    );
+    assert.equal(selected.status, expected.selected);
+    assert.deepEqual(
+      selected.detailsRows.find(([label]) => label === expected.address),
+      [expected.address, "Main Street 10"],
+    );
+
+    for (const resultStatus of [
+      "no_current_stations",
+      "unknown_availability",
+      "none_available",
+      "unavailable",
+    ]) {
+      const data = cardModule.buildCardData(
+        {
+          entity_id: "sensor.best_nearby_charger",
+          state: resultStatus === "unavailable" ? "unavailable" : "unknown",
+          attributes: { result_status: resultStatus },
+        },
+        { language },
+      );
+      assert.equal(data.status, expected[resultStatus]);
+    }
+  }
 });
 
 test("uses display options and starts details collapsed", () => {
@@ -340,10 +526,10 @@ test("keeps availability separate and localizes status labels", () => {
   assert.equal(data.status, "Aucun disponible");
   assert.equal(data.primaryRows[0][1], "Inconnu");
   assert.equal(
-    data.detailsRows[5][0],
+    data.detailsRows[6][0],
     "Statut d'ouverture indiqué par le fournisseur",
   );
-  assert.equal(data.detailsRows[5][1], "Ouverte");
+  assert.equal(data.detailsRows[6][1], "Ouverte");
 });
 
 test("labels the provider open flag separately from available connectors", () => {
@@ -363,7 +549,7 @@ test("labels the provider open flag separately from available connectors", () =>
 
   assert.equal(data.status, "Available");
   assert.deepEqual(data.primaryRows[0], ["Available connectors", "2"]);
-  assert.deepEqual(data.detailsRows[5], [
+  assert.deepEqual(data.detailsRows[6], [
     "Provider-reported open status",
     "Closed",
   ]);
@@ -391,8 +577,8 @@ test("localizes the provider open-status label in every supported language", () 
       { language },
     );
 
-    assert.equal(data.detailsRows[5][0], label);
-    assert.equal(data.detailsRows[5][1], closed);
+    assert.equal(data.detailsRows[6][0], label);
+    assert.equal(data.detailsRows[6][1], closed);
   }
 });
 
@@ -415,7 +601,7 @@ test("shows unavailable station state without reusing stale measurements", () =>
   assert.equal(data.status, "Unavailable");
   assert.deepEqual(
     [...data.primaryRows, ...data.detailsRows].map(([, value]) => value),
-    Array(10).fill("Unknown"),
+    Array(11).fill("Unknown"),
   );
 });
 
