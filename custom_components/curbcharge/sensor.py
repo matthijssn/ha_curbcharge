@@ -834,12 +834,6 @@ def _station_selection_attributes(
         return attributes
 
     attributes.update(_selection_station_data_attributes(station))
-    attributes.update(
-        {
-            "latitude": station.latitude,
-            "longitude": station.longitude,
-        }
-    )
     return attributes
 
 
@@ -870,6 +864,8 @@ def _selection_station_data_attributes(station: ChargingStation) -> dict[str, An
         "name": station.name,
         "station_name": station.name,
         "address": station.address,
+        "latitude": station.latitude,
+        "longitude": station.longitude,
         "distance_m": station.distance_m,
         "available_connectors": station.available_connectors,
         "total_connectors": station.total_connectors,
