@@ -739,7 +739,7 @@ def test_summary_exposes_conflicting_connector_tariffs(hass, sample_stations):
     assert price_attributes["tariff_status"] == "ambiguous"
 
 
-def test_best_nearby_sensor_exposes_selection_reason(hass, sample_stations):
+def test_best_nearby_sensor_exposes_selection_reason(hass, sample_stations, caplog):
     station = replace(
         sample_stations[0],
         tariff=ChargingTariff("EUR", Decimal("0.42"), None, None, None, "test"),
@@ -767,6 +767,15 @@ def test_best_nearby_sensor_exposes_selection_reason(hass, sample_stations):
     assert attributes["last_updated"] == "2025-01-02T03:04:05+00:00"
     assert attributes["last_successful_update"] == attributes["last_updated"]
     assert attributes["reason"] == "only_available_station"
+    assert not {
+        "google_maps_url",
+        "apple_maps_url",
+        "waze_url",
+        "geo_url",
+    }.intersection(attributes)
+    assert station.address not in caplog.text
+    assert str(station.latitude) not in caplog.text
+    assert str(station.longitude) not in caplog.text
 
 
 def test_best_nearby_result_status_distinguishes_empty_unknown_and_unavailable(

@@ -8,6 +8,8 @@ import yaml
 REPOSITORY_ROOT = Path(__file__).parent.parent
 README_PATH = REPOSITORY_ROOT / "README.md"
 DASHBOARD_PATH = REPOSITORY_ROOT / "examples" / "curbcharge-dashboard.yaml"
+MAP_PATH = REPOSITORY_ROOT / "examples" / "curbcharge-map.yaml"
+NAVIGATION_PATH = REPOSITORY_ROOT / "examples" / "curbcharge-navigation.yaml"
 
 
 def test_documented_dashboard_yaml_parses_and_matches_native_example():
@@ -18,11 +20,17 @@ def test_documented_dashboard_yaml_parses_and_matches_native_example():
     yaml_blocks = re.findall(r"```yaml\s*\n(.*?)\n```", lovelace_section, re.DOTALL)
     parsed_examples = [yaml.safe_load(block) for block in yaml_blocks]
     dashboard = yaml.safe_load(DASHBOARD_PATH.read_text(encoding="utf-8"))
+    map_example = yaml.safe_load(MAP_PATH.read_text(encoding="utf-8"))
+    navigation_example = yaml.safe_load(NAVIGATION_PATH.read_text(encoding="utf-8"))
 
     native_block = next(
         block for block in yaml_blocks if "sensor.your_nearby_charging_units" in block
     )
+    map_block = next(block for block in yaml_blocks if "type: map" in block)
+    navigation_block = next(block for block in yaml_blocks if "source_entity" in block)
     assert yaml.safe_load(native_block) == dashboard
+    assert yaml.safe_load(map_block) == map_example
+    assert yaml.safe_load(navigation_block) == navigation_example
     assert all(isinstance(example, dict) for example in parsed_examples)
 
     cards = dashboard["views"][0]["cards"]
@@ -54,6 +62,19 @@ def test_documented_dashboard_yaml_parses_and_matches_native_example():
         "sensor.your_nearby_available_connectors",
         "sensor.your_nearby_availability_percentage",
     }
+
+    map_entities = {row["entity"] for row in map_example["entities"]}
+    assert map_entities >= {
+        "sensor.your_best_nearby_charger",
+        "sensor.your_station_status_summary",
+    }
+    assert all(entity.startswith("sensor.") for entity in map_entities)
+
+    navigation_template = navigation_example["content"]
+    assert "state_attr(source_entity, 'latitude')" in navigation_template
+    assert "state_attr(source_entity, 'longitude')" in navigation_template
+    assert "origin=" not in navigation_template
+    assert "source=" not in navigation_template
 
     native_section, optional_section = lovelace_section.split(
         "### Optional: dynamic station list with Auto-Entities", 1
