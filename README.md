@@ -108,39 +108,115 @@ directory at `custom_components/curbcharge`, then restart Home Assistant.
 
 ## Lovelace card
 
-The single-station card is bundled with the integration; it is not a separate
-HACS plugin or a file that needs to be copied into `www`. The integration
-serves it at `/curbcharge/curbcharge-card.js`. In **Settings → Dashboards →
-Resources**, add that URL as a JavaScript module.
+The CurbCharge card is bundled with the integration; it is not a separate HACS
+plugin or a file that needs to be copied into `www`. The integration serves it
+at `/curbcharge/curbcharge-card.js`. In **Settings → Dashboards → Resources**,
+add that URL once as a JavaScript module. HACS updates the card with the
+integration; reload or restart Home Assistant after updating.
 
 Existing dashboards using `/local/curbcharge-card.js` only need a one-time
 resource URL change to `/curbcharge/curbcharge-card.js`; the card configuration
 does not need to change. After updating the resource, you can remove
 `/config/www/curbcharge-card.js` if no other dashboard uses it. Future card
-updates arrive with the integration after Home Assistant reloads or restarts.
+updates arrive with the integration. CurbCharge does not add a HACS frontend
+item, dependency, or manifest setting for this bundled card.
 
-Add the card to a dashboard and set `entity` to the station's **Status summary**
-sensor:
+### Native dashboard (no extra frontend cards)
+
+This copyable view uses only Home Assistant's built-in Markdown and Entities
+cards. It shows the integration-level **Best nearby** recommendation, useful
+station details, and nearby aggregate sensors. The complete YAML file is also
+available at [`examples/curbcharge-dashboard.yaml`](examples/curbcharge-dashboard.yaml).
+
+Replace each `sensor.your_...` value with the corresponding entity ID from your
+Home Assistant entity picker. Best nearby uses CurbCharge's multi-factor
+ranking; it is not necessarily the closest station. Use **Nearest available
+charger** when distance alone should determine the selection.
 
 ```yaml
-type: custom:curbcharge-card
-entity: sensor.your_station_status_summary
+title: CurbCharge
+views:
+  - title: Nearby
+    path: curbcharge
+    icon: mdi:ev-station
+    cards:
+      - type: markdown
+        content: >
+          Best nearby ranks current stations with known available connectors.
+          The recommendation is local to this integration entry and search area.
+      - type: entities
+        title: Best nearby
+        show_header_toggle: false
+        entities:
+          - entity: sensor.your_best_nearby_charger
+            name: Recommended station
+          - type: attribute
+            entity: sensor.your_best_nearby_charger
+            attribute: result_status
+            name: Recommendation status
+          - type: attribute
+            entity: sensor.your_best_nearby_charger
+            attribute: address
+            name: Address
+          - type: attribute
+            entity: sensor.your_best_nearby_charger
+            attribute: available_connectors
+            name: Available connectors
+          - type: attribute
+            entity: sensor.your_best_nearby_charger
+            attribute: total_connectors
+            name: Total connectors
+          - type: attribute
+            entity: sensor.your_best_nearby_charger
+            attribute: distance_m
+            name: Distance (m)
+          - type: attribute
+            entity: sensor.your_best_nearby_charger
+            attribute: max_power_kw
+            name: Maximum power (kW)
+          - type: attribute
+            entity: sensor.your_best_nearby_charger
+            attribute: price_per_kwh
+            name: Price per kWh
+          - type: attribute
+            entity: sensor.your_best_nearby_charger
+            attribute: currency
+            name: Currency
+          - type: attribute
+            entity: sensor.your_best_nearby_charger
+            attribute: provider_last_updated
+            name: Provider update
+          - type: attribute
+            entity: sensor.your_best_nearby_charger
+            attribute: last_successful_update
+            name: Last successful HA refresh
+      - type: entities
+        title: Nearby aggregates
+        show_header_toggle: false
+        entities:
+          - entity: sensor.your_nearby_charging_units
+          - entity: sensor.your_nearby_available_connectors
+          - entity: sensor.your_nearby_availability_percentage
 ```
 
-The card editor lets you choose the station entity, use the standard or compact
-layout, and show or hide price, connector details, station details, and update
-times. With only `entity` set, all metric groups are shown by default. The
-secondary details are available in an expandable section that starts collapsed.
-`show_price` controls the price metric; `show_connector_details` controls
-occupied, unavailable, and total counts;
-`show_station_details` controls maximum power, distance, and provider-reported
-open status; `show_update_times` controls the provider and Home Assistant
-timestamps.
-The same options can be set in YAML:
+The native view has no custom-card dependency. If you prefer the bundled
+CurbCharge card's summary layout, set its `entity` to a station **Status
+summary** sensor or the Best nearby recommendation sensor:
 
 ```yaml
 type: custom:curbcharge-card
-entity: sensor.your_station_status_summary
+entity: sensor.your_best_nearby_charger
+```
+
+Existing YAML that sets only `entity` to a Status summary sensor remains
+compatible. The card editor also offers standard or compact layout and controls
+for price, connector details, station details, and update times. Secondary
+details remain expandable and start collapsed. For YAML, the same options are
+available:
+
+```yaml
+type: custom:curbcharge-card
+entity: sensor.your_best_nearby_charger
 layout: compact
 show_price: true
 show_connector_details: true
@@ -148,13 +224,54 @@ show_station_details: false
 show_update_times: false
 ```
 
-The card reads only that Home Assistant entity; it makes no provider requests.
-It displays the station name, availability, available/occupied/unavailable/total
-connector counts, maximum power, price when known, distance, provider-reported
-open status, the provider update time, and the last successful integration
-update. Unknown values remain unknown, and unavailable station data is shown as
-unavailable. Labels follow the Home Assistant language in English, Dutch,
-French, or German.
+With only `entity` set, all metric groups are shown by default.
+`show_price` controls price; `show_connector_details` controls occupied,
+unavailable, and total counts; `show_station_details` controls address, maximum
+power, distance, and provider-reported open status; `show_update_times` controls
+provider and Home Assistant timestamps.
+
+The card reads only the selected Home Assistant entity; it makes no provider
+requests. It displays the station name and address, availability, connector
+counts, maximum power, distance, price/currency when known, and update times.
+Labels follow the Home Assistant language in English, Dutch, French, or German.
+
+For recommendation sensors, `provider_last_updated` is the provider station
+record time and `last_successful_update` is the last successful Home Assistant
+refresh. Best nearby's legacy `last_updated` meaning is preserved and should
+not be used as the provider timestamp. Its `result_status` distinguishes
+`selected`, `no_current_stations`, `unknown_availability`, `none_available`,
+and `unavailable`. Unknown values are not zero; when the entity is unavailable,
+the bundled card does not show old measurements as current.
+
+### Optional: dynamic station list with Auto-Entities
+
+Auto-Entities is a separate community frontend card. Install it separately
+through HACS Frontend and register the JavaScript module resource specified by
+its own installation instructions. This optional example is not required by
+CurbCharge and is separate from the native dashboard above:
+
+```yaml
+type: custom:auto-entities
+card:
+  type: entities
+  title: CurbCharge station summaries
+filter:
+  include:
+    - entity_id: "sensor.*_status_summary"
+sort:
+  method: name
+```
+
+Adjust the filter to include only the stations or areas you want to list.
+
+### Illustrations
+
+These desktop and mobile mockups use synthetic values only; they are not live
+Home Assistant captures and contain no real location data.
+
+![Synthetic desktop dashboard with a selected example station and nearby aggregate sensors](docs/images/curbcharge-dashboard-selected.svg)
+
+![Synthetic mobile dashboard showing no-current-station and unavailable edge states](docs/images/curbcharge-dashboard-mobile-edge.svg)
 
 ## Configuration
 
