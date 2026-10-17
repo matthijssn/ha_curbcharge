@@ -779,8 +779,15 @@ def test_best_nearby_sensor_exposes_selection_reason(hass, sample_stations, capl
     assert str(station.longitude) not in caplog.text
 
 
+@pytest.mark.parametrize(
+    "source",
+    [
+        ProviderTimestampSource.NDW_FEATURE,
+        ProviderTimestampSource.BELGIUM_EVSE_STATUS,
+    ],
+)
 def test_summary_and_best_nearby_expose_provider_age_and_source(
-    hass, sample_stations, monkeypatch
+    hass, sample_stations, monkeypatch, source
 ):
     now = datetime(2025, 1, 2, 3, 6, 5, tzinfo=UTC)
     provider_updated = now - timedelta(seconds=120, milliseconds=400)
@@ -788,7 +795,7 @@ def test_summary_and_best_nearby_expose_provider_age_and_source(
     station = replace(
         sample_stations[0],
         last_updated=provider_updated,
-        last_updated_source=ProviderTimestampSource.NDW_FEATURE,
+        last_updated_source=source,
     )
     coordinator = _coordinator(hass, station)
     coordinator.last_successful_update = ha_updated
@@ -804,12 +811,52 @@ def test_summary_and_best_nearby_expose_provider_age_and_source(
     assert summary["last_updated"] == provider_updated.isoformat()
     assert summary["last_successful_update"] == ha_updated.isoformat()
     assert summary["provider_data_age_seconds"] == 120
-    assert summary["provider_timestamp_source"] == "ndw_feature"
+    assert summary["provider_timestamp_source"] == source.value
     assert best["provider_last_updated"] == provider_updated.isoformat()
     assert best["last_updated"] == ha_updated.isoformat()
     assert best["last_successful_update"] == ha_updated.isoformat()
     assert best["provider_data_age_seconds"] == 120
-    assert best["provider_timestamp_source"] == "ndw_feature"
+    assert best["provider_timestamp_source"] == source.value
+
+
+def test_best_nearby_ranking_ignores_provider_record_age(
+    hass, sample_stations, monkeypatch
+):
+    now = datetime(2025, 1, 2, 3, 6, 5, tzinfo=UTC)
+    older_cheaper = replace(
+        _selection_station(sample_stations[0], distance=100, power=50, price="0.20"),
+        last_updated=now - timedelta(days=30),
+        last_updated_source=ProviderTimestampSource.NDW_FEATURE,
+    )
+    newer_costlier = replace(
+        _selection_station(sample_stations[1], distance=50, power=150, price="0.40"),
+        last_updated=now,
+        last_updated_source=ProviderTimestampSource.NDW_FEATURE,
+    )
+    coordinator = _coordinator(hass, older_cheaper)
+    coordinator.async_set_updated_data(
+        {
+            older_cheaper.provider_id: older_cheaper,
+            newer_costlier.provider_id: newer_costlier,
+        }
+    )
+    coordinator.nearby_station_ids = {
+        older_cheaper.provider_id,
+        newer_costlier.provider_id,
+    }
+    monkeypatch.setattr(
+        "custom_components.curbcharge.sensor.dt_util.utcnow", lambda: now
+    )
+    sensor = BestNearbyChargerSensor(
+        coordinator, MockConfigEntry(domain=DOMAIN, unique_id="age-ranking-area")
+    )
+
+    assert coordinator.best_station == older_cheaper
+    assert sensor.native_value == older_cheaper.name
+    assert sensor.extra_state_attributes["reason"] == "lowest_price_per_kwh"
+    assert (
+        sensor.extra_state_attributes["provider_data_age_seconds"] == 30 * 24 * 60 * 60
+    )
 
 
 def test_provider_age_is_unknown_for_missing_future_and_static_timestamps(

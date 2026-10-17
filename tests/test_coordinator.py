@@ -2,7 +2,7 @@
 
 import logging
 from dataclasses import replace
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from homeassistant.exceptions import ConfigEntryAuthFailed
@@ -16,6 +16,7 @@ from custom_components.curbcharge.geography import distance_m
 from custom_components.curbcharge.models import (
     DiscoveryFilterSettings,
     FavouriteStationReference,
+    ProviderTimestampSource,
     StationDiscoveryResult,
 )
 from custom_components.curbcharge.provider import (
@@ -111,7 +112,12 @@ async def test_coordinator_passes_ndw_filters_and_unknown_setting(
 async def test_temporarily_missing_stations_are_retained_then_removed(
     hass, sample_stations
 ):
-    station = sample_stations[0]
+    station = replace(
+        sample_stations[0],
+        last_updated=datetime(2020, 1, 1, tzinfo=UTC),
+        last_updated_source=ProviderTimestampSource.NDW_FEATURE,
+    )
+    assert station.provider_data_age_seconds(datetime(2025, 1, 1, tzinfo=UTC)) > 0
     provider = FakeProvider([(station,), (), (), ()])
     coordinator = _coordinator(hass, provider)
 
@@ -129,7 +135,12 @@ async def test_temporarily_missing_stations_are_retained_then_removed(
 
 @pytest.mark.asyncio
 async def test_provider_failure_does_not_remove_cached_stations(hass, sample_stations):
-    station = sample_stations[0]
+    station = replace(
+        sample_stations[0],
+        last_updated=datetime(2020, 1, 1, tzinfo=UTC),
+        last_updated_source=ProviderTimestampSource.NDW_FEATURE,
+    )
+    assert station.provider_data_age_seconds(datetime(2025, 1, 1, tzinfo=UTC)) > 0
     provider = FakeProvider([(station,), ProviderConnectionError("offline")])
     coordinator = _coordinator(hass, provider)
     await coordinator.async_refresh()
