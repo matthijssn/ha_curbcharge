@@ -342,7 +342,10 @@ refresh. Best nearby's legacy `last_updated` meaning is preserved and should
 not be used as the provider timestamp. Its `result_status` distinguishes
 `selected`, `no_current_stations`, `unknown_availability`, `none_available`,
 and `unavailable`. Unknown values are not zero; when the entity is unavailable,
-the bundled card does not show old measurements as current.
+the bundled card does not show old measurements as current. The Status summary
+and Best nearby also expose `provider_timestamp_source` and
+`provider_data_age_seconds`; see [Data updates](#data-updates) for their
+semantics.
 
 ### Optional: dynamic station list with Auto-Entities
 
@@ -476,7 +479,8 @@ Each charging point is one Home Assistant device. CurbCharge creates:
   connectors**, and **Total connectors**.
 - **Maximum charging power**, **Price per kWh**, and **Distance**.
 - **Status summary**, including connector types, operator, address, provider
-  status, tariff details, coordinates, and provider update timestamps.
+  status, tariff details, coordinates, provider timestamp provenance, and
+  provider-record age when known.
 - The Status summary's `is_favorite` attribute identifies stations selected
   as favourites for this config entry.
 - Integration-level **Best nearby charger**, **Nearest available charger**,
@@ -578,20 +582,59 @@ additional HTTP requests when more pages or uncached tariffs are needed.
 NDW discovery filters run locally on the normalized, radius-bounded results
 from the regular bounding-box refresh. They do not add provider requests;
 matching candidates are sorted and capped before tariff lookup.
-The Status summary's `last_updated` attribute is the provider's timestamp;
-`last_successful_update` is when the coordinator last completed a successful
-refresh. The provider timestamp describes its source record, not necessarily
-an availability change, and may be older than the latest poll. The coordinator
-timestamp does not advance on failed refreshes; station entities then become
-`unavailable`, not `off`. These attributes are distinct from the Home Assistant
-State object's `last_changed` and `last_updated` timestamps described above.
-CurbCharge reports provider data at its polling cadence; Home Assistant
-history records entity state changes, so a change between polls cannot appear
-in the integration's history. Favourites outside the normal NDW search results
-use additional small bounding-box requests; the provider client spaces these
-requests to respect its rate limit. Belgium favourites use the cached location
-snapshot and status requests through the shared limiter, so a large favourite
-list can lengthen a refresh.
+On the Status summary, `last_updated` is the provider record timestamp; on Best
+nearby, `provider_last_updated` is the provider record timestamp and the legacy
+`last_updated` remains the Home Assistant poll time. For both, `last_successful_update`
+is when the coordinator last completed a successful refresh. Provider
+timestamps describe their source record, not necessarily an availability
+change, and may be older than the latest poll. The coordinator timestamp does
+not advance on failed refreshes; station entities then become `unavailable`,
+not `off`. These attributes are distinct from the Home Assistant State object's
+`last_changed` and `last_updated` timestamps described above.
+
+`provider_timestamp_source` identifies the timestamp as an NDW feature time,
+a Belgium EVSE status time, or a Belgium static fallback. The derived
+`provider_data_age_seconds` is the whole-second age of a dynamic provider
+record, calculated in UTC when coordinator-backed attributes are written; it
+does not tick between polls. A missing or future timestamp, or a Belgium
+static fallback timestamp, yields unknown age (`None`). A missing NDW
+timestamp does not invalidate otherwise usable availability data. Malformed
+or timezone-naive provider timestamps are rejected as provider errors.
+
+The NDW source does not document a maximum update interval for an individual
+station, so an unchanged timestamp can be legitimate. CurbCharge applies no
+age cutoff and does not treat any age as a guarantee of current availability.
+The age attribute itself does not change reported availability, Best nearby
+ranking, notifications, or the coordinator's stale/unavailable behavior; only
+an explicitly configured user template or Blueprint condition can use an
+age limit. For Home Assistant-observed availability transitions and Recorder
+history, see [Reading observed availability transitions](#reading-observed-availability-transitions)
+and [Historical availability and connector counts](#historical-availability-and-connector-counts).
+
+For example, a native template condition can apply a user-chosen limit:
+
+```yaml
+condition:
+  - condition: template
+    value_template: >
+      {% set age = state_attr('sensor.your_status_summary', 'provider_data_age_seconds') %}
+      {{ age is not none and age < 900 }}
+```
+
+Replace the entity ID and choose a threshold appropriate for your use; `900`
+seconds (15 minutes) is illustrative only, not a CurbCharge freshness
+guarantee.
+
+These timestamps are distinct from the Home Assistant State object's
+`last_changed` and `last_updated` timestamps described above. CurbCharge
+reports provider data at its polling cadence; Home Assistant history records
+entity state changes, so a change between polls cannot appear in the
+integration's history.
+Favourites outside the normal NDW search results use additional small
+bounding-box requests; the provider client spaces these requests to respect
+its rate limit. Belgium favourites use the cached location snapshot and status
+requests through the shared limiter, so a large favourite list can lengthen a
+refresh.
 
 For an Entity source, CurbCharge samples coordinates during the normal
 coordinator refreshes. It does not subscribe to every entity state change or
