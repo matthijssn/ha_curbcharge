@@ -176,6 +176,9 @@
     "location_not_configured": {
       "message": "De ingestelde zoeklocatie is niet beschikbaar."
     },
+    "rate_limited": {
+      "message": "De laadprovider beperkt het aantal verzoeken. Wacht tot de limiet is hersteld en probeer het opnieuw."
+    },
     "unsupported_provider": {
       "message": "De ingestelde laadprovider wordt niet ondersteund."
     }

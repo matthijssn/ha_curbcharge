@@ -62,6 +62,30 @@ def test_resolve_any_entity_with_valid_location_attributes(hass):
     ) == (0.0, 0.0)
 
 
+def test_resolve_zone_entity_uses_center_coordinates(hass):
+    hass.states.async_set(
+        "zone.home",
+        "0",
+        {
+            CONF_LATITUDE: 52.1,
+            CONF_LONGITUDE: 5.1,
+            "radius": 100,
+            "passive": False,
+            "persons": [],
+            "device_trackers": [],
+            "editable": True,
+        },
+    )
+
+    assert resolve_location(
+        hass,
+        {
+            CONF_LOCATION_SOURCE: LOCATION_ENTITY,
+            CONF_LOCATION_ENTITY: "zone.home",
+        },
+    ) == (52.1, 5.1)
+
+
 @pytest.mark.parametrize("state", ["unknown", "unavailable"])
 def test_resolve_entity_rejects_unknown_or_unavailable_state(hass, state):
     hass.states.async_set(

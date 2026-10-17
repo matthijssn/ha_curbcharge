@@ -176,6 +176,9 @@
     "location_not_configured": {
       "message": "Der konfigurierte Ladestations-Suchstandort ist nicht verfügbar."
     },
+    "rate_limited": {
+      "message": "Der Ladeanbieter begrenzt die Anfragen. Warten Sie, bis das Limit zurückgesetzt wurde, und versuchen Sie es erneut."
+    },
     "unsupported_provider": {
       "message": "Der konfigurierte Ladestationsanbieter wird nicht unterstützt."
     }

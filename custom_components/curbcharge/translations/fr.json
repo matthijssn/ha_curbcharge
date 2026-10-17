@@ -176,6 +176,9 @@
     "location_not_configured": {
       "message": "La position de recherche configurée n'est pas disponible."
     },
+    "rate_limited": {
+      "message": "Le fournisseur de recharge limite les requêtes. Attendez la réinitialisation de la limite puis réessayez."
+    },
     "unsupported_provider": {
       "message": "Le fournisseur de données configuré n'est pas pris en charge."
     }

@@ -176,6 +176,9 @@
     "location_not_configured": {
       "message": "The configured charging search location is unavailable."
     },
+    "rate_limited": {
+      "message": "The charging provider is rate limiting requests. Wait for the rate limit to reset and try again."
+    },
     "unsupported_provider": {
       "message": "The configured charging provider is unsupported."
     }
