@@ -433,6 +433,273 @@ test("localizes recommendation states and station address in every supported lan
   }
 });
 
+test("builds navigation links from valid coordinates or an encoded address", () => {
+  const attributes = {
+    result_status: "selected",
+    provider_station_id: "station-1",
+    latitude: 0,
+    longitude: -73.9,
+    address: "Example Street 10",
+  };
+  const originalAttributes = { ...attributes };
+  const data = cardModule.buildCardData(
+    {
+      entity_id: "sensor.best_nearby_charger",
+      state: "Station One",
+      attributes,
+    },
+    { language: "en" },
+  );
+
+  assert.deepEqual(data.navigationLinks, [
+    {
+      label: "Google Maps directions",
+      url: "https://www.google.com/maps/dir/?api=1&destination=0%2C-73.9",
+    },
+    {
+      label: "Apple Maps directions",
+      url: "https://maps.apple.com/directions?destination=0%2C-73.9",
+    },
+    {
+      label: "Waze navigation",
+      url: "https://waze.com/ul?ll=0%2C-73.9&navigate=yes",
+    },
+    {
+      label: "Open map location (not directions)",
+      url: "geo:0,-73.9?q=0,-73.9",
+    },
+  ]);
+  assert.deepEqual(attributes, originalAttributes);
+  assert.ok(
+    data.navigationLinks.every(
+      ({ url }) => !url.includes("origin=") && !url.includes("source="),
+    ),
+  );
+
+  const addressFallback = cardModule.buildCardData(
+    {
+      entity_id: "sensor.best_nearby_charger",
+      state: "Station One",
+      attributes: {
+        result_status: "selected",
+        provider_station_id: "station-1",
+        latitude: 91,
+        longitude: -181,
+        address: "R&D Road 10",
+      },
+    },
+    { language: "en" },
+  );
+  assert.deepEqual(addressFallback.navigationLinks, [
+    {
+      label: "Google Maps directions",
+      url: "https://www.google.com/maps/dir/?api=1&destination=R%26D%20Road%2010",
+    },
+    {
+      label: "Apple Maps directions",
+      url: "https://maps.apple.com/directions?destination=R%26D%20Road%2010",
+    },
+    {
+      label: "Waze navigation",
+      url: "https://waze.com/ul?q=R%26D%20Road%2010&navigate=yes",
+    },
+    {
+      label: "Open map location (not directions)",
+      url: "geo:0,0?q=R%26D%20Road%2010",
+    },
+  ]);
+});
+
+test("allows navigation for unknown availability and hides unavailable destinations", () => {
+  const summary = cardModule.buildCardData(
+    {
+      entity_id: "sensor.station_status_summary",
+      state: "unknown",
+      attributes: {
+        provider_station_id: "station-1",
+        latitude: 0,
+        longitude: 0,
+      },
+    },
+    { language: "en" },
+  );
+  assert.equal(summary.navigationLinks.length, 4);
+
+  const noDestinationStates = [
+    {
+      entity_id: "sensor.best_nearby_charger",
+      state: "unknown",
+      attributes: {
+        result_status: "no_current_stations",
+        latitude: 52,
+        longitude: 5,
+        address: "Stale address",
+      },
+    },
+    {
+      entity_id: "sensor.best_nearby_charger",
+      state: "unknown",
+      attributes: {
+        result_status: "unknown_availability",
+        latitude: 52,
+        longitude: 5,
+      },
+    },
+    {
+      entity_id: "sensor.best_nearby_charger",
+      state: "unavailable",
+      attributes: {
+        result_status: "selected",
+        provider_station_id: "station-1",
+        latitude: 52,
+        longitude: 5,
+      },
+    },
+    {
+      entity_id: "sensor.station_status_summary",
+      state: "unavailable",
+      attributes: {
+        provider_station_id: "station-1",
+        latitude: 52,
+        longitude: 5,
+        address: "Stale address",
+      },
+    },
+    {
+      entity_id: "sensor.station_status_summary",
+      state: "available",
+      attributes: {
+        provider_station_id: "station-1",
+        latitude: 91,
+        longitude: 181,
+      },
+    },
+  ];
+
+  for (const entity of noDestinationStates) {
+    const data = cardModule.buildCardData(entity, { language: "en" });
+    assert.deepEqual(data.navigationLinks, []);
+  }
+});
+
+test("renders a collapsed, accessible Navigate disclosure with external links", () => {
+  const Card = elements.get("curbcharge-card");
+  const card = new Card();
+  card.setConfig({ entity: "sensor.best_nearby_charger" });
+  card.hass = {
+    language: "en",
+    states: {
+      "sensor.best_nearby_charger": {
+        entity_id: "sensor.best_nearby_charger",
+        state: "Station One",
+        attributes: {
+          result_status: "selected",
+          provider_station_id: "station-1",
+          latitude: 0,
+          longitude: -73.9,
+        },
+      },
+    },
+  };
+
+  const haCard = card.shadowRoot.children[1];
+  const navigation = haCard.children.find(
+    (child) => child.className === "navigation",
+  );
+  assert.ok(navigation);
+  assert.equal(navigation.open, false);
+  assert.equal(navigation.children[0].tagName, "summary");
+  assert.equal(navigation.children[0].textContent, "Navigate");
+  const links = navigation.children[1].children.map((row) => row.children[0]);
+  assert.deepEqual(
+    links.map((link) => link.textContent),
+    [
+      "Google Maps directions",
+      "Apple Maps directions",
+      "Waze navigation",
+      "Open map location (not directions)",
+    ],
+  );
+  assert.ok(
+    links.every(
+      (link) =>
+        link.attributes.get("target") === "_blank" &&
+        link.attributes.get("rel") === "noopener noreferrer",
+    ),
+  );
+
+  card.hass = {
+    language: "en",
+    states: {
+      "sensor.best_nearby_charger": {
+        entity_id: "sensor.best_nearby_charger",
+        state: "unknown",
+        attributes: { result_status: "no_current_stations" },
+      },
+    },
+  };
+  assert.equal(
+    card.shadowRoot.children[1].children.some(
+      (child) => child.className === "navigation",
+    ),
+    false,
+  );
+});
+
+test("localizes navigation disclosure and link labels in every supported language", () => {
+  const labels = {
+    en: [
+      "Navigate",
+      "Google Maps directions",
+      "Apple Maps directions",
+      "Waze navigation",
+      "Open map location (not directions)",
+    ],
+    nl: [
+      "Navigeren",
+      "Routebeschrijving in Google Maps",
+      "Routebeschrijving in Apple Kaarten",
+      "Navigatie met Waze",
+      "Locatie openen in een kaart (geen route)",
+    ],
+    fr: [
+      "Naviguer",
+      "Itinéraire avec Google Maps",
+      "Itinéraire avec Plans",
+      "Navigation avec Waze",
+      "Ouvrir l'emplacement sur une carte (sans itinéraire)",
+    ],
+    de: [
+      "Navigieren",
+      "Route mit Google Maps",
+      "Route mit Apple Karten",
+      "Navigation mit Waze",
+      "Kartenstandort öffnen (keine Navigation)",
+    ],
+  };
+
+  for (const [language, expected] of Object.entries(labels)) {
+    const data = cardModule.buildCardData(
+      {
+        entity_id: "sensor.station_status_summary",
+        state: "unknown",
+        attributes: {
+          provider_station_id: "station-1",
+          latitude: 52,
+          longitude: 5,
+        },
+      },
+      { language },
+    );
+
+    assert.equal(data.navigationLabel, expected[0]);
+    assert.deepEqual(
+      data.navigationLinks.map(({ label }) => label),
+      expected.slice(1),
+    );
+  }
+});
+
 test("uses display options and starts details collapsed", () => {
   const config = {
     entity: "sensor.station_status_summary",
