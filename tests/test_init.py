@@ -1,6 +1,7 @@
 """Tests for setup, unloading, and dynamically discovered stations."""
 
 import asyncio
+import logging
 from dataclasses import replace
 from pathlib import Path
 
@@ -1286,14 +1287,16 @@ async def test_setup_translates_first_refresh_failure(hass, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_setup_translates_first_refresh_rate_limit(hass, monkeypatch):
+async def test_setup_translates_first_refresh_rate_limit(hass, monkeypatch, caplog):
     entry = _entry()
     provider = FakeProvider([ProviderRateLimitError("limited", retry_after=600)])
     monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
     entry.add_to_hass(hass)
 
-    assert not await hass.config_entries.async_setup(entry.entry_id)
-    assert entry.error_reason_translation_key == "rate_limited"
+    with caplog.at_level(logging.INFO):
+        assert not await hass.config_entries.async_setup(entry.entry_id)
+
+    assert "The charging provider is rate limiting requests." in caplog.text
 
 
 @pytest.mark.asyncio
