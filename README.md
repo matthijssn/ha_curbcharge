@@ -327,9 +327,10 @@ power, distance, and provider-reported open status; `show_update_times` controls
 provider and Home Assistant timestamps.
 
 The card reads only the selected Home Assistant entity; it makes no provider
-requests. It displays the station name and address, availability, connector
-counts, maximum power, distance, price/currency when known, and update times.
-Labels follow the Home Assistant language in English, Dutch, French, or German.
+requests. It displays the station name and operator when available, address,
+availability, connector counts, maximum power, distance, price/currency when
+known, and update times. Labels follow the Home Assistant language in English,
+Dutch, French, or German.
 When the entity has a valid destination, a collapsed **Navigate** disclosure
 offers explicit Google Maps, Apple Maps, Waze, and open-map links; nothing opens
 until the user taps a link. It is hidden for an unavailable/stale entity or an

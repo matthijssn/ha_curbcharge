@@ -886,6 +886,7 @@ def _selection_station_data_attributes(station: ChargingStation) -> dict[str, An
         "country_code": station.country_code,
         "name": station.name,
         "station_name": station.name,
+        "operator": station.operator,
         "address": station.address,
         "latitude": station.latitude,
         "longitude": station.longitude,

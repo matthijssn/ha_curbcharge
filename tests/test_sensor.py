@@ -757,6 +757,7 @@ def test_best_nearby_sensor_exposes_selection_reason(hass, sample_stations, capl
     assert attributes["provider_station_id"] == station.provider_id
     assert attributes["station_name"] == station.name
     assert attributes["address"] == station.address
+    assert attributes["operator"] == station.operator
     assert attributes["latitude"] == station.latitude
     assert attributes["longitude"] == station.longitude
     assert attributes["available_connectors"] == 2
@@ -764,6 +765,7 @@ def test_best_nearby_sensor_exposes_selection_reason(hass, sample_stations, capl
     assert attributes["max_power_kw"] == 50
     assert attributes["price_per_kwh"] == 0.42
     assert attributes["currency"] == "EUR"
+    assert attributes["operator"] == station.operator
     assert attributes["provider_last_updated"] == station.last_updated.isoformat()
     assert attributes["last_updated"] == "2025-01-02T03:04:05+00:00"
     assert attributes["last_successful_update"] == attributes["last_updated"]
@@ -1017,6 +1019,7 @@ def test_selection_sensors_report_station_details_and_reasons(hass, sample_stati
             "country_code": station.country_code,
             "name": station.name,
             "station_name": station.name,
+            "operator": station.operator,
             "address": station.address,
             "distance_m": station.distance_m,
             "available_connectors": 1,
