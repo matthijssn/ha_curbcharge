@@ -45,6 +45,11 @@ const TEXT = {
     providerUpdated: "Provider station update",
     integrationUpdated: "Last successful update",
     details: "More details",
+    navigate: "Navigate",
+    googleDirections: "Google Maps directions",
+    appleDirections: "Apple Maps directions",
+    wazeNavigation: "Waze navigation",
+    openMap: "Open map location (not directions)",
     entity: "Station entity",
     layout: "Layout",
     standard: "Standard",
@@ -79,6 +84,11 @@ const TEXT = {
     providerUpdated: "Laatste providerupdate",
     integrationUpdated: "Laatste geslaagde update",
     details: "Meer details",
+    navigate: "Navigeren",
+    googleDirections: "Routebeschrijving in Google Maps",
+    appleDirections: "Routebeschrijving in Apple Kaarten",
+    wazeNavigation: "Navigatie met Waze",
+    openMap: "Locatie openen in een kaart (geen route)",
     entity: "Station-entiteit",
     layout: "Weergave",
     standard: "Standaard",
@@ -113,6 +123,11 @@ const TEXT = {
     providerUpdated: "Dernière mise à jour du fournisseur",
     integrationUpdated: "Dernière actualisation réussie",
     details: "Plus de détails",
+    navigate: "Naviguer",
+    googleDirections: "Itinéraire avec Google Maps",
+    appleDirections: "Itinéraire avec Plans",
+    wazeNavigation: "Navigation avec Waze",
+    openMap: "Ouvrir l'emplacement sur une carte (sans itinéraire)",
     entity: "Entité de station",
     layout: "Présentation",
     standard: "Standard",
@@ -147,6 +162,11 @@ const TEXT = {
     providerUpdated: "Letzte Aktualisierung des Anbieters",
     integrationUpdated: "Letzte erfolgreiche Aktualisierung",
     details: "Weitere Details",
+    navigate: "Navigieren",
+    googleDirections: "Route mit Google Maps",
+    appleDirections: "Route mit Apple Karten",
+    wazeNavigation: "Navigation mit Waze",
+    openMap: "Kartenstandort öffnen (keine Navigation)",
     entity: "Station-Entität",
     layout: "Layout",
     standard: "Standard",
@@ -201,6 +221,57 @@ function formatTimestamp(value, hass, unknown) {
     dateStyle: "short",
     timeStyle: "short",
   }).format(date);
+}
+
+function buildNavigationLinks(entity, attributes, text) {
+  if (
+    entity.state === "unavailable" ||
+    (typeof attributes.result_status === "string" &&
+      attributes.result_status !== "selected")
+  ) {
+    return [];
+  }
+
+  const latitude = attributes.latitude;
+  const longitude = attributes.longitude;
+  const coordinatesValid =
+    typeof latitude === "number" &&
+    Number.isFinite(latitude) &&
+    latitude >= -90 &&
+    latitude <= 90 &&
+    typeof longitude === "number" &&
+    Number.isFinite(longitude) &&
+    longitude >= -180 &&
+    longitude <= 180;
+  const address =
+    typeof attributes.address === "string" ? attributes.address.trim() : "";
+  if (!coordinatesValid && !address) {
+    return [];
+  }
+
+  const destination = coordinatesValid
+    ? `${latitude},${longitude}`
+    : address;
+  const encodedDestination = encodeURIComponent(destination);
+  const wazeParameter = coordinatesValid ? "ll" : "q";
+  const geoUrl = coordinatesValid
+    ? `geo:${destination}?q=${destination}`
+    : `geo:0,0?q=${encodedDestination}`;
+  return [
+    {
+      label: text.googleDirections,
+      url: `https://www.google.com/maps/dir/?api=1&destination=${encodedDestination}`,
+    },
+    {
+      label: text.appleDirections,
+      url: `https://maps.apple.com/directions?destination=${encodedDestination}`,
+    },
+    {
+      label: text.wazeNavigation,
+      url: `https://waze.com/ul?${wazeParameter}=${encodedDestination}&navigate=yes`,
+    },
+    { label: text.openMap, url: geoUrl },
+  ];
 }
 
 export function validateConfig(config) {
@@ -279,6 +350,7 @@ export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
         typeof attributes.reason === "string"
       ? undefined
       : values.last_updated;
+  const navigationLinks = buildNavigationLinks(entity, attributes, text);
   const primaryRows = [
     [
       text.availableConnectors,
@@ -354,6 +426,8 @@ export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
     statusKey,
     layout: options.layout,
     detailsLabel: text.details,
+    navigationLabel: text.navigate,
+    navigationLinks,
     primaryRows,
     detailsRows,
   };
@@ -477,18 +551,20 @@ class CurbChargeCard extends HTMLElement {
         font-weight: 700;
         line-height: 1.15;
       }
-      .details > summary {
+      .details > summary, .navigation > summary {
         border-top: 1px solid var(--divider-color);
         cursor: pointer;
         font-weight: 600;
         padding: 12px 0 2px;
       }
-      .details > summary:focus-visible {
+      .details > summary:focus-visible, .navigation > summary:focus-visible {
         border-radius: 4px;
         outline: 2px solid var(--primary-color);
         outline-offset: 3px;
       }
       .details-grid { padding-top: 10px; }
+      .navigation-links { display: grid; gap: 8px; margin: 10px 0 0; padding-left: 20px; }
+      .navigation-links a { color: var(--primary-color); }
       .error { color: var(--error-color); }
     `;
     const card = document.createElement("ha-card");
@@ -535,6 +611,28 @@ class CurbChargeCard extends HTMLElement {
       }
       details.append(summary, detailsGrid);
       card.append(details);
+    }
+
+    if (data.navigationLinks.length > 0) {
+      const navigation = document.createElement("details");
+      navigation.className = "navigation";
+      navigation.open = false;
+      const summary = document.createElement("summary");
+      summary.textContent = data.navigationLabel;
+      const list = document.createElement("ul");
+      list.className = "navigation-links";
+      for (const item of data.navigationLinks) {
+        const row = document.createElement("li");
+        const link = document.createElement("a");
+        link.setAttribute("href", item.url);
+        link.setAttribute("target", "_blank");
+        link.setAttribute("rel", "noopener noreferrer");
+        link.textContent = item.label;
+        row.append(link);
+        list.append(row);
+      }
+      navigation.append(summary, list);
+      card.append(navigation);
     }
   }
 }
