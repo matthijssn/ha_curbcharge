@@ -1,0 +1,34 @@
+type: markdown
+entity_id: sensor.your_best_nearby_charger
+content: |-
+  {% set source_entity = 'sensor.your_best_nearby_charger' %}
+  {% set source_state = states(source_entity) %}
+  {% set result_status = state_attr(source_entity, 'result_status') %}
+  {% set selection_valid = result_status is none or result_status == 'selected' %}
+  {% set latitude = state_attr(source_entity, 'latitude') %}
+  {% set longitude = state_attr(source_entity, 'longitude') %}
+  {% set coordinates_valid = latitude is number and longitude is number and -90 <= latitude <= 90 and -180 <= longitude <= 180 %}
+  {% set raw_address = state_attr(source_entity, 'address') %}
+  {% set address = raw_address | trim if raw_address is string else '' %}
+  {% set has_address = address != '' %}
+  {% if source_state != 'unavailable' and selection_valid and (coordinates_valid or has_address) %}
+    {% if coordinates_valid %}
+      {% set destination = latitude|string ~ ',' ~ longitude|string %}
+      {% set geo_url = 'geo:' ~ destination ~ '?q=' ~ destination %}
+      {% set waze_parameter = 'll' %}
+    {% else %}
+      {% set destination = address %}
+      {% set geo_url = 'geo:0,0?q=' ~ (destination | urlencode) %}
+      {% set waze_parameter = 'q' %}
+    {% endif %}
+    {% set destination_encoded = destination | urlencode %}
+    {% set google_url = 'https://www.google.com/maps/dir/?api=1&destination=' ~ destination_encoded %}
+    {% set apple_url = 'https://maps.apple.com/directions?destination=' ~ destination_encoded %}
+    {% set waze_url = 'https://waze.com/ul?' ~ waze_parameter ~ '=' ~ destination_encoded ~ '&navigate=yes' %}
+    - [Google Maps directions]({{ google_url }})
+    - [Apple Maps directions]({{ apple_url }})
+    - [Waze navigation]({{ waze_url }})
+    - [Open map location (not directions)]({{ geo_url }})
+  {% else %}
+    No selected charger destination with a usable location is available.
+  {% endif %}
