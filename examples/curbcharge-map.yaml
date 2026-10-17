@@ -1,0 +1,8 @@
+type: map
+title: CurbCharge stations
+default_zoom: 12
+entities:
+  - entity: sensor.your_best_nearby_charger
+    name: Best nearby
+  - entity: sensor.your_station_status_summary
+    name: Example station
