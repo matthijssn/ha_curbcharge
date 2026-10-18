@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from importlib import import_module
+from types import SimpleNamespace
 
 import pytest
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
@@ -94,6 +95,34 @@ def test_discovery_filter_schema_serializes_with_probatio():
     )
 
     assert fields
+
+
+def test_probatio_filter_schema_uses_serializable_range(monkeypatch):
+    voluptuous = import_module("voluptuous")
+    probatio = SimpleNamespace(
+        __name__="probatio",
+        All=voluptuous.All,
+        Any=voluptuous.Any,
+        Optional=voluptuous.Optional,
+        Range=voluptuous.Range,
+        Required=voluptuous.Required,
+    )
+    monkeypatch.setattr(config_flow, "vol", probatio)
+    monkeypatch.setattr(
+        config_flow,
+        "_validate_minimum_power_kw",
+        lambda _value: pytest.fail("Probatio schemas must not contain callables"),
+    )
+
+    fields = config_flow._discovery_filter_fields()
+    minimum_power_key = next(
+        key for key in fields if getattr(key, "schema", None) == CONF_MIN_POWER_KW
+    )
+    schema = voluptuous.Schema({minimum_power_key: fields[minimum_power_key]})
+
+    assert schema({CONF_MIN_POWER_KW: 7.2})[CONF_MIN_POWER_KW] == 7.2
+    with pytest.raises(voluptuous.Invalid):
+        schema({CONF_MIN_POWER_KW: 0})
 
 
 def _station_options(
@@ -863,7 +892,10 @@ def test_ndw_discovery_filter_options_default_and_validate():
         "CHADEMO",
         "DOMESTIC_A",
     }
-    for invalid_power in (0, -1):
+    invalid_power_values = (0, -1)
+    if config_flow.vol.__name__ == "voluptuous":
+        invalid_power_values += (float("inf"), float("nan"))
+    for invalid_power in invalid_power_values:
         with pytest.raises(flow_schema.Invalid):
             schema({**values, **_discovery_filters(minimum_power_kw=invalid_power)})
     with pytest.raises(flow_schema.Invalid):
@@ -876,6 +908,13 @@ def test_ndw_discovery_filter_options_default_and_validate():
     assert CONF_CONNECTOR_TYPES not in belgium_values
     with pytest.raises(flow_schema.Invalid):
         belgium_schema({**values, CONF_PROVIDER: PROVIDER_NDW_DOT_NL})
+
+
+def test_minimum_power_validator_rejects_non_finite_values():
+    assert config_flow._validate_minimum_power_kw(7.2) == 7.2
+    for invalid_power in (0, -1, float("inf"), float("nan"), True):
+        with pytest.raises(flow_schema.Invalid):
+            config_flow._validate_minimum_power_kw(invalid_power)
 
 
 def test_options_allow_one_minute_and_reject_zero():
