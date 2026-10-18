@@ -74,13 +74,19 @@ from .provider import (
 
 type FlowSchema = Any
 
+
 # Core 2026.10 uses probatio; keep Voluptuous for older supported releases.
-try:
-    vol = import_module("probatio")
-except ModuleNotFoundError as err:
-    if err.name != "probatio":
-        raise
-    vol = import_module("voluptuous")
+def _load_flow_schema_module() -> Any:
+    """Select the schema library available in the current Home Assistant."""
+    try:
+        return import_module("probatio")
+    except ModuleNotFoundError as err:
+        if err.name != "probatio":
+            raise
+        return import_module("voluptuous")
+
+
+vol = _load_flow_schema_module()
 
 
 def manual_location_schema(
