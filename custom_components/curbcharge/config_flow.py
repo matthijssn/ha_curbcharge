@@ -242,23 +242,13 @@ def _discovery_filter_fields(
                         mode=selector.NumberSelectorMode.BOX,
                     )
                 ),
-                _validate_minimum_power_kw,
+                vol.Range(min=0, min_included=False),
             ),
         ),
         vol.Required(
             CONF_REQUIRE_AVAILABLE, default=settings.require_available
         ): selector.BooleanSelector(),
     }
-
-
-def _validate_minimum_power_kw(value: Any) -> float:
-    """Validate the positive, finite power selector value."""
-    try:
-        settings = DiscoveryFilterSettings.from_config({CONF_MIN_POWER_KW: value})
-    except ValueError as err:
-        raise vol.Invalid("Minimum power must be a finite positive number") from err
-    assert settings.minimum_power_kw is not None
-    return settings.minimum_power_kw
 
 
 def options_schema(
@@ -752,7 +742,19 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Configure the optional NDW connector-group filters."""
         if user_input is not None:
-            self._discovery_filters = DiscoveryFilterSettings.from_config(user_input)
+            try:
+                self._discovery_filters = DiscoveryFilterSettings.from_config(
+                    user_input
+                )
+            except ValueError:
+                return _show_form(
+                    self,
+                    step_id="discovery_filters",
+                    data_schema=vol.Schema(
+                        _discovery_filter_fields(self._discovery_filters)
+                    ),
+                    errors={"base": "invalid_discovery_filters"},
+                )
             return await self._async_validate_and_create_entry()
 
         return _show_form(
@@ -864,11 +866,21 @@ class CurbChargeOptionsFlow(config_entries.OptionsFlow):
         )
 
         if user_input is not None:
-            discovery_filters = (
-                DiscoveryFilterSettings.from_config(user_input)
-                if provider_id == PROVIDER_NDW_DOT_NL
-                else None
-            )
+            try:
+                discovery_filters = (
+                    DiscoveryFilterSettings.from_config(user_input)
+                    if provider_id == PROVIDER_NDW_DOT_NL
+                    else None
+                )
+            except ValueError:
+                return _show_form(
+                    self,
+                    step_id="init",
+                    data_schema=options_schema(
+                        defaults, favourite_options=favourite_options
+                    ),
+                    errors={"base": "invalid_discovery_filters"},
+                )
             try:
                 favourites = _selected_favourites(
                     user_input.get(CONF_FAVOURITES),

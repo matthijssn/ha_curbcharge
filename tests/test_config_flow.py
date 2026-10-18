@@ -6,6 +6,7 @@ from importlib import import_module
 import pytest
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers import config_validation as cv
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.curbcharge import config_flow
@@ -80,6 +81,19 @@ def test_flow_schema_module_propagates_unrelated_import_errors(monkeypatch):
 
     with pytest.raises(ModuleNotFoundError, match="broken_dependency"):
         config_flow._load_flow_schema_module()
+
+
+def test_discovery_filter_schema_serializes_with_probatio():
+    to_field_list = getattr(config_flow.vol, "to_field_list", None)
+    if to_field_list is None:
+        pytest.skip("Probatio field-list serialization is unavailable")
+
+    fields = to_field_list(
+        config_flow.vol.Schema(config_flow._discovery_filter_fields()),
+        custom_serializer=cv.custom_serializer,
+    )
+
+    assert fields
 
 
 def _station_options(
@@ -166,6 +180,30 @@ async def test_config_flow_uses_home_coordinates(hass, monkeypatch):
     assert "latitude" not in result["data"]
     assert "longitude" not in result["data"]
     assert "52.1" not in result["result"].unique_id
+
+
+@pytest.mark.asyncio
+async def test_discovery_filter_flow_shows_error_for_non_finite_power(hass):
+    hass.config.latitude = 52.1
+    hass.config.longitude = 5.1
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_HOME}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _station_options()
+    )
+    flow = hass.config_entries.flow._progress[result["flow_id"]]
+
+    result = await flow.async_step_discovery_filters(
+        _discovery_filters(minimum_power_kw=float("nan"))
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "discovery_filters"
+    assert result["errors"] == {"base": "invalid_discovery_filters"}
 
 
 @pytest.mark.asyncio
@@ -825,7 +863,7 @@ def test_ndw_discovery_filter_options_default_and_validate():
         "CHADEMO",
         "DOMESTIC_A",
     }
-    for invalid_power in (0, -1, float("inf"), float("nan")):
+    for invalid_power in (0, -1):
         with pytest.raises(flow_schema.Invalid):
             schema({**values, **_discovery_filters(minimum_power_kw=invalid_power)})
     with pytest.raises(flow_schema.Invalid):
@@ -937,6 +975,38 @@ async def test_options_flow_saves_integer_intervals_and_search_limits(hass):
         CONF_REQUIRE_AVAILABLE: True,
         CONF_FAVOURITES: [],
     }
+
+
+@pytest.mark.asyncio
+async def test_options_flow_keeps_form_open_for_non_finite_power(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="invalid-filter-area",
+        data={
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+        },
+    )
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    flow = hass.config_entries.options._progress[result["flow_id"]]
+
+    result = await flow.async_step_init(
+        {
+            CONF_SCAN_INTERVAL: 5,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+            CONF_INCLUDE_UNKNOWN: True,
+            CONF_FAVOURITES: [],
+            **_discovery_filters(minimum_power_kw=float("inf")),
+        }
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "init"
+    assert result["errors"] == {"base": "invalid_discovery_filters"}
 
 
 @pytest.mark.asyncio

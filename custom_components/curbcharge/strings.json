@@ -122,6 +122,7 @@
       "invalid_location": "Enter valid coordinates and a supported search area.",
       "invalid_entity_location": "Select an entity that currently reports valid latitude and longitude coordinates.",
       "invalid_api_token": "Enter a non-empty printable ASCII API token.",
+      "invalid_discovery_filters": "Enter valid discovery filters. Minimum power must be a finite positive number.",
       "invalid_response": "The provider returned data in an unexpected format.",
       "location_not_configured": "Home coordinates are not configured in Home Assistant.",
       "rate_limited": "The provider is rate limiting requests. Try again later.",
@@ -165,6 +166,7 @@
       }
     },
     "error": {
+      "invalid_discovery_filters": "Enter valid discovery filters. Minimum power must be a finite positive number.",
       "invalid_favourites": "One or more selected favourites are no longer available. Refresh the options and try again."
     }
   },

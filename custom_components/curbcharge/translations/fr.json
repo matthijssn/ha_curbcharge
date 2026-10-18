@@ -122,6 +122,7 @@
       "invalid_location": "Saisissez des coordonnées valides et une zone de recherche prise en charge.",
       "invalid_entity_location": "Sélectionnez une entité qui fournit actuellement des coordonnées de latitude et longitude valides.",
       "invalid_api_token": "Saisissez un jeton API ASCII imprimable non vide.",
+      "invalid_discovery_filters": "Saisissez des filtres valides. La puissance minimale doit être un nombre fini positif.",
       "invalid_response": "Le fournisseur a renvoyé des données dans un format inattendu.",
       "location_not_configured": "Les coordonnées du domicile ne sont pas configurées dans Home Assistant.",
       "rate_limited": "Le fournisseur limite le nombre de requêtes. Réessayez plus tard.",
@@ -165,6 +166,7 @@
       }
     },
     "error": {
+      "invalid_discovery_filters": "Saisissez des filtres valides. La puissance minimale doit être un nombre fini positif.",
       "invalid_favourites": "Une ou plusieurs bornes favorites sélectionnées ne sont plus disponibles. Actualisez les options et réessayez."
     }
   },
