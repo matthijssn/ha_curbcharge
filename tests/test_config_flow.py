@@ -71,7 +71,10 @@ def test_flow_schema_module_falls_back_to_voluptuous(monkeypatch):
 
 def test_flow_schema_module_propagates_unrelated_import_errors(monkeypatch):
     def fail_import(name: str):
-        raise ModuleNotFoundError("No module named 'broken_dependency'", name=name)
+        assert name == "probatio"
+        raise ModuleNotFoundError(
+            "No module named 'broken_dependency'", name="broken_dependency"
+        )
 
     monkeypatch.setattr(config_flow, "import_module", fail_import)
 
