@@ -6,14 +6,25 @@ The protected `main` branch requires the `test`, `hassfest`, and `hacs` check
 contexts. The Hassfest and HACS workflows use distinct job contexts so each
 validator can block merges independently.
 
-Install the test tools and run:
+Install the Python test tools:
 
 ```bash
-pip install pytest pytest-homeassistant-custom-component pytest-cov ruff mypy
+pip install -r requirements-dev.txt
+```
+
+Run the Python checks:
+
+```bash
 pytest --cov=custom_components/curbcharge --cov-fail-under=96
 ruff check .
 ruff format --check .
 mypy
+```
+
+The frontend test uses Node.js separately:
+
+```bash
+node --test tests/curbcharge-card.test.mjs
 ```
 
 ## Preparing a release

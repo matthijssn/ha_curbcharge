@@ -15,7 +15,7 @@ jobs:
       - uses: actions/setup-python@v7.0.0
         with:
           python-version: "3.13"
-      - run: pip install pytest pytest-homeassistant-custom-component pytest-cov ruff mypy
+      - run: pip install -r requirements-dev.txt
       - run: ruff check .
       - run: ruff format --check .
       - run: node --test tests/curbcharge-card.test.mjs
