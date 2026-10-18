@@ -1,37 +1,31 @@
 """Tests for the documented native CurbCharge dashboard YAML."""
 
-import re
 from pathlib import Path
 
 import yaml
 
 REPOSITORY_ROOT = Path(__file__).parent.parent
-README_PATH = REPOSITORY_ROOT / "README.md"
+GUIDE_PATH = REPOSITORY_ROOT / "docs" / "dashboards-and-automations.md"
 DASHBOARD_PATH = REPOSITORY_ROOT / "examples" / "curbcharge-dashboard.yaml"
 MAP_PATH = REPOSITORY_ROOT / "examples" / "curbcharge-map.yaml"
 NAVIGATION_PATH = REPOSITORY_ROOT / "examples" / "curbcharge-navigation.yaml"
 
 
-def test_documented_dashboard_yaml_parses_and_matches_native_example():
-    readme = README_PATH.read_text(encoding="utf-8")
-    lovelace_section = readme.split("## Lovelace card", 1)[1].split(
-        "## Configuration", 1
+def test_documented_dashboard_examples_parse_and_link_to_canonical_files():
+    guide = GUIDE_PATH.read_text(encoding="utf-8")
+    lovelace_section = guide.split("## Lovelace card", 1)[1].split(
+        "## Use cases and automations", 1
     )[0]
-    yaml_blocks = re.findall(r"```yaml\s*\n(.*?)\n```", lovelace_section, re.DOTALL)
-    parsed_examples = [yaml.safe_load(block) for block in yaml_blocks]
     dashboard = yaml.safe_load(DASHBOARD_PATH.read_text(encoding="utf-8"))
     map_example = yaml.safe_load(MAP_PATH.read_text(encoding="utf-8"))
     navigation_example = yaml.safe_load(NAVIGATION_PATH.read_text(encoding="utf-8"))
-
-    native_block = next(
-        block for block in yaml_blocks if "sensor.your_nearby_charging_units" in block
+    assert "](../examples/curbcharge-dashboard.yaml)" in lovelace_section
+    assert "](../examples/curbcharge-map.yaml)" in lovelace_section
+    assert "](../examples/curbcharge-navigation.yaml)" in lovelace_section
+    assert all(
+        isinstance(example, dict)
+        for example in (dashboard, map_example, navigation_example)
     )
-    map_block = next(block for block in yaml_blocks if "type: map" in block)
-    navigation_block = next(block for block in yaml_blocks if "source_entity" in block)
-    assert yaml.safe_load(native_block) == dashboard
-    assert yaml.safe_load(map_block) == map_example
-    assert yaml.safe_load(navigation_block) == navigation_example
-    assert all(isinstance(example, dict) for example in parsed_examples)
 
     cards = dashboard["views"][0]["cards"]
     assert {card["type"] for card in cards} == {"markdown", "entities"}
