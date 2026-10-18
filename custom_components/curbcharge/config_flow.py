@@ -214,6 +214,11 @@ def _discovery_filter_fields(
         code: selector_value
         for selector_value, code in NDW_CONNECTOR_TYPE_SELECTOR_OPTIONS
     }
+    minimum_power_validator = (
+        vol.Range(min=0, min_included=False)
+        if vol.__name__ == "probatio"
+        else _validate_minimum_power_kw
+    )
     return {
         vol.Required(
             CONF_CONNECTOR_TYPES,
@@ -242,13 +247,23 @@ def _discovery_filter_fields(
                         mode=selector.NumberSelectorMode.BOX,
                     )
                 ),
-                vol.Range(min=0, min_included=False),
+                minimum_power_validator,
             ),
         ),
         vol.Required(
             CONF_REQUIRE_AVAILABLE, default=settings.require_available
         ): selector.BooleanSelector(),
     }
+
+
+def _validate_minimum_power_kw(value: Any) -> float:
+    """Validate the positive, finite power selector value."""
+    try:
+        settings = DiscoveryFilterSettings.from_config({CONF_MIN_POWER_KW: value})
+    except ValueError as err:
+        raise vol.Invalid("Minimum power must be a finite positive number") from err
+    assert settings.minimum_power_kw is not None
+    return settings.minimum_power_kw
 
 
 def options_schema(
