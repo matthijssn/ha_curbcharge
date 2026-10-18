@@ -3,7 +3,6 @@
 from dataclasses import replace
 
 import pytest
-import voluptuous as vol
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
 from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -49,6 +48,7 @@ from custom_components.curbcharge.provider import (
 )
 from tests.conftest import FakeProvider
 
+flow_schema = config_flow.vol
 pytestmark = pytest.mark.usefixtures("enable_custom_integrations")
 
 
@@ -76,7 +76,7 @@ def test_station_options_schema_reuses_scan_interval_bounds():
     assert schema(values)[CONF_SCAN_INTERVAL] == DEFAULT_SCAN_INTERVAL_MINUTES
     assert schema({**values, CONF_SCAN_INTERVAL: 1})[CONF_SCAN_INTERVAL] == 1
     assert schema({**values, CONF_SCAN_INTERVAL: 120})[CONF_SCAN_INTERVAL] == 120
-    with pytest.raises(vol.Invalid):
+    with pytest.raises(flow_schema.Invalid):
         schema({**values, CONF_SCAN_INTERVAL: 0})
     assert (
         config_flow.options_schema({CONF_SCAN_INTERVAL: 12})({})[CONF_SCAN_INTERVAL]
@@ -675,11 +675,11 @@ async def test_belgium_duplicate_search_area_aborts_before_asking_for_token(hass
 
 
 def test_manual_coordinates_and_radius_are_range_validated():
-    with pytest.raises(vol.Invalid):
+    with pytest.raises(flow_schema.Invalid):
         config_flow.manual_location_schema()({"latitude": 91, "longitude": 5})
-    with pytest.raises(vol.Invalid):
+    with pytest.raises(flow_schema.Invalid):
         config_flow.manual_location_schema()({"latitude": 52, "longitude": 181})
-    with pytest.raises(vol.Invalid):
+    with pytest.raises(flow_schema.Invalid):
         config_flow.station_options_schema()(
             {
                 CONF_SEARCH_RADIUS: 10_001,
@@ -699,7 +699,7 @@ def test_manual_coordinates_and_radius_are_range_validated():
         )[CONF_PROVIDER]
         == PROVIDER_NDW_DOT_NL
     )
-    with pytest.raises(vol.Invalid):
+    with pytest.raises(flow_schema.Invalid):
         config_flow.station_options_schema()(
             {
                 CONF_SEARCH_RADIUS: 500,
@@ -796,9 +796,9 @@ def test_ndw_discovery_filter_options_default_and_validate():
         "DOMESTIC_A",
     }
     for invalid_power in (0, -1, float("inf"), float("nan")):
-        with pytest.raises(vol.Invalid):
+        with pytest.raises(flow_schema.Invalid):
             schema({**values, **_discovery_filters(minimum_power_kw=invalid_power)})
-    with pytest.raises(vol.Invalid):
+    with pytest.raises(flow_schema.Invalid):
         schema({**values, **_discovery_filters(["UNKNOWN_CODE"])})
 
     belgium_schema = config_flow.options_schema(
@@ -806,7 +806,7 @@ def test_ndw_discovery_filter_options_default_and_validate():
     )
     belgium_values = belgium_schema({**values, CONF_PROVIDER: PROVIDER_ECO_MOVEMENT_BE})
     assert CONF_CONNECTOR_TYPES not in belgium_values
-    with pytest.raises(vol.Invalid):
+    with pytest.raises(flow_schema.Invalid):
         belgium_schema({**values, CONF_PROVIDER: PROVIDER_NDW_DOT_NL})
 
 
@@ -822,7 +822,7 @@ def test_options_allow_one_minute_and_reject_zero():
 
     assert schema(valid)[CONF_SCAN_INTERVAL] == 1
     assert schema(valid)[CONF_FAVOURITES] == []
-    with pytest.raises(vol.Invalid):
+    with pytest.raises(flow_schema.Invalid):
         schema({**valid, CONF_SCAN_INTERVAL: 0})
 
 
@@ -848,7 +848,7 @@ def test_entity_movement_threshold_defaults_and_is_entity_only():
         ]
         == 0
     )
-    with pytest.raises(vol.Invalid):
+    with pytest.raises(flow_schema.Invalid):
         entity_schema({**options, CONF_LOCATION_MOVEMENT_THRESHOLD: -1})
 
 
@@ -881,6 +881,8 @@ async def test_options_flow_saves_integer_intervals_and_search_limits(hass):
     entry.add_to_hass(hass)
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["type"] is FlowResultType.FORM
+    assert isinstance(result["data_schema"], flow_schema.Schema)
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
