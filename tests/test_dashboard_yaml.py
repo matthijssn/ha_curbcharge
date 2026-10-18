@@ -5,6 +5,7 @@ from pathlib import Path
 import yaml
 
 REPOSITORY_ROOT = Path(__file__).parent.parent
+README_PATH = REPOSITORY_ROOT / "README.md"
 GUIDE_PATH = REPOSITORY_ROOT / "docs" / "dashboards-and-automations.md"
 DASHBOARD_PATH = REPOSITORY_ROOT / "examples" / "curbcharge-dashboard.yaml"
 MAP_PATH = REPOSITORY_ROOT / "examples" / "curbcharge-map.yaml"
@@ -12,10 +13,19 @@ NAVIGATION_PATH = REPOSITORY_ROOT / "examples" / "curbcharge-navigation.yaml"
 
 
 def test_documented_dashboard_examples_parse_and_link_to_canonical_files():
+    readme = README_PATH.read_text(encoding="utf-8")
     guide = GUIDE_PATH.read_text(encoding="utf-8")
     lovelace_section = guide.split("## Lovelace card", 1)[1].split(
         "## Use cases and automations", 1
     )[0]
+    assert all(
+        f"]({path})" in readme
+        for path in (
+            "docs/usage.md",
+            "docs/dashboards-and-automations.md",
+            "docs/development.md",
+        )
+    )
     dashboard = yaml.safe_load(DASHBOARD_PATH.read_text(encoding="utf-8"))
     map_example = yaml.safe_load(MAP_PATH.read_text(encoding="utf-8"))
     navigation_example = yaml.safe_load(NAVIGATION_PATH.read_text(encoding="utf-8"))
