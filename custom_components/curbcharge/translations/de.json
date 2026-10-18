@@ -122,6 +122,7 @@
       "invalid_location": "Geben Sie gültige Koordinaten und ein unterstütztes Suchgebiet ein.",
       "invalid_entity_location": "Wählen Sie eine Entität aus, die aktuell gültige Breiten- und Längengradkoordinaten meldet.",
       "invalid_api_token": "Geben Sie ein nicht leeres, druckbares ASCII-API-Token ein.",
+      "invalid_discovery_filters": "Geben Sie gültige Filter ein. Die Mindestleistung muss eine endliche positive Zahl sein.",
       "invalid_response": "Der Anbieter hat Daten in einem unerwarteten Format zurückgegeben.",
       "location_not_configured": "Die Home-Assistant-Standortkoordinaten sind nicht konfiguriert.",
       "rate_limited": "Der Anbieter begrenzt die Anfragen. Versuchen Sie es später erneut.",
@@ -165,6 +166,7 @@
       }
     },
     "error": {
+      "invalid_discovery_filters": "Geben Sie gültige Filter ein. Die Mindestleistung muss eine endliche positive Zahl sein.",
       "invalid_favourites": "Eine oder mehrere ausgewählte bevorzugte Ladestationen sind nicht mehr verfügbar. Aktualisieren Sie die Optionen und versuchen Sie es erneut."
     }
   },

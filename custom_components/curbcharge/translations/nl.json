@@ -122,6 +122,7 @@
       "invalid_location": "Voer geldige coördinaten en een ondersteund zoekgebied in.",
       "invalid_entity_location": "Selecteer een entiteit die momenteel geldige breedte- en lengtegraad rapporteert.",
       "invalid_api_token": "Voer een niet-lege, afdrukbare ASCII-API-token in.",
+      "invalid_discovery_filters": "Voer geldige filters in. Het minimumvermogen moet een eindig positief getal zijn.",
       "invalid_response": "De provider heeft gegevens in een onverwacht formaat geretourneerd.",
       "location_not_configured": "De thuiscoördinaten zijn niet ingesteld in Home Assistant.",
       "rate_limited": "De provider beperkt het aantal verzoeken. Probeer het later opnieuw.",
@@ -165,6 +166,7 @@
       }
     },
     "error": {
+      "invalid_discovery_filters": "Voer geldige filters in. Het minimumvermogen moet een eindig positief getal zijn.",
       "invalid_favourites": "Een of meer geselecteerde favorieten zijn niet meer beschikbaar. Vernieuw de opties en probeer het opnieuw."
     }
   },
