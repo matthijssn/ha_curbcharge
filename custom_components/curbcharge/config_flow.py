@@ -5,9 +5,9 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Mapping
 from dataclasses import asdict
-from typing import TYPE_CHECKING, Any, cast
+from importlib import import_module
+from typing import TYPE_CHECKING, Any
 
-import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
@@ -72,10 +72,20 @@ from .provider import (
     UnsupportedProviderError,
 )
 
+type FlowSchema = Any
+
+# Core 2026.10 uses probatio; keep Voluptuous for older supported releases.
+try:
+    vol = import_module("probatio")
+except ModuleNotFoundError as err:
+    if err.name != "probatio":
+        raise
+    vol = import_module("voluptuous")
+
 
 def manual_location_schema(
     latitude: float | None = None, longitude: float | None = None
-) -> vol.Schema:
+) -> FlowSchema:
     """Return the schema for manually entered coordinates."""
     return vol.Schema(
         {
@@ -107,7 +117,7 @@ def manual_location_schema(
     )
 
 
-def entity_location_schema(entity_id: str | None = None) -> vol.Schema:
+def entity_location_schema(entity_id: str | None = None) -> FlowSchema:
     """Return a generic Home Assistant entity selector for location sources."""
     key = (
         vol.Required(CONF_LOCATION_ENTITY)
@@ -121,7 +131,7 @@ def entity_location_schema(entity_id: str | None = None) -> vol.Schema:
     )
 
 
-def belgium_credentials_schema() -> vol.Schema:
+def belgium_credentials_schema() -> FlowSchema:
     """Return a password field for the Belgium provider token."""
     return vol.Schema(
         {
@@ -150,7 +160,7 @@ def station_options_schema(
     radius: int = DEFAULT_SEARCH_RADIUS_M,
     max_stations: int = DEFAULT_MAX_STATIONS,
     scan_interval_minutes: int = DEFAULT_SCAN_INTERVAL_MINUTES,
-) -> vol.Schema:
+) -> FlowSchema:
     """Return the initial provider and station-search schema."""
     scan_interval_key, scan_interval_selector = _scan_interval_field(
         scan_interval_minutes
@@ -249,7 +259,7 @@ def options_schema(
     defaults: dict[str, Any],
     *,
     favourite_options: list[selector.SelectOptionDict] | None = None,
-) -> vol.Schema:
+) -> FlowSchema:
     """Return the editable runtime options schema."""
     provider_id = defaults.get(CONF_PROVIDER, PROVIDER_NDW_DOT_NL)
     if provider_id not in (PROVIDER_NDW_DOT_NL, PROVIDER_ECO_MOVEMENT_BE):
@@ -333,14 +343,13 @@ def _show_form(
     flow: config_entries.ConfigFlow | config_entries.OptionsFlow,
     *,
     step_id: str,
-    data_schema: vol.Schema,
+    data_schema: FlowSchema,
     errors: dict[str, str] | None = None,
 ) -> FlowResult:
-    """Show a voluptuous form across Home Assistant's flow type changes."""
-    # HA 2026.10 types use probatio; voluptuous remains needed for HA 2024.12.
+    """Show a form using the schema library for the installed Core version."""
     return flow.async_show_form(
         step_id=step_id,
-        data_schema=cast(Any, data_schema),
+        data_schema=data_schema,
         errors=errors,
     )
 
@@ -1002,7 +1011,7 @@ def _selected_favourites(
 
 def _location_source_schema(
     default: str = LOCATION_HOME,
-) -> vol.Schema:
+) -> FlowSchema:
     return vol.Schema(
         {
             vol.Required(
