@@ -46,6 +46,7 @@ from custom_components.curbcharge.models import (
     DiscoveryFilterSettings,
     FavouriteStationReference,
     StationDiscoveryResult,
+    parse_favourite_references,
 )
 from custom_components.curbcharge.provider import (
     ChargingProviderError,
@@ -481,6 +482,122 @@ def _provider_station(station, provider_id, provider_name, country_code):
 
 
 @pytest.mark.asyncio
+async def test_favorite_sensors_follow_coordinator_changes_without_provider_calls(
+    hass, monkeypatch, sample_stations
+):
+    station = _provider_station(
+        sample_stations[0],
+        PROVIDER_ECO_MOVEMENT_BE,
+        "Eco-Movement Belgium",
+        "BE",
+    )
+    assert station.location is not None
+    provider = FakeProvider([(station,)])
+    provider.provider_id = PROVIDER_ECO_MOVEMENT_BE
+    provider.provider_name = "Eco-Movement Belgium"
+    provider.country_code = "BE"
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    entry = _entry(
+        {CONF_PROVIDER: PROVIDER_ECO_MOVEMENT_BE, CONF_API_TOKEN: "test-token"},
+        unique_id="favorite-sensor-dynamic",
+    )
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    coordinator = entry.runtime_data
+    registry = er.async_get(hass)
+    device_registry = dr.async_get(hass)
+    status_unique_id = (
+        f"{station.provider}_{station.provider_id}_{entry.entry_id}_favorite_status"
+    )
+    summary_unique_id = f"{entry.entry_id}_favorite_summary"
+
+    def registry_entry(unique_id: str):
+        return next(
+            (
+                entity
+                for entity in er.async_entries_for_config_entry(
+                    registry, entry.entry_id
+                )
+                if entity.unique_id == unique_id
+            ),
+            None,
+        )
+
+    assert registry_entry(status_unique_id) is None
+    summary = registry_entry(summary_unique_id)
+    assert summary is not None
+    summary_state = hass.states.get(summary.entity_id)
+    assert summary_state is not None and summary_state.state == "0"
+    assert len(provider.station_calls) == 1
+
+    favourite = parse_favourite_references(
+        [_favorite_reference(station)], station.provider
+    )[0]
+    coordinator.update_options(
+        radius_m=coordinator.radius_m,
+        max_stations=coordinator.max_stations,
+        scan_interval_minutes=coordinator.scan_interval_minutes,
+        include_unknown=coordinator.include_unknown,
+        favourites=(favourite,),
+        location_movement_threshold_m=coordinator.location_movement_threshold_m,
+        discovery_filters=coordinator.discovery_filters,
+    )
+    coordinator.async_update_listeners()
+    await hass.async_block_till_done()
+
+    status = registry_entry(status_unique_id)
+    assert status is not None
+    status_state = hass.states.get(status.entity_id)
+    assert status_state is not None
+    assert status_state.state in {"available", "none_available"}
+    summary_state = hass.states.get(summary.entity_id)
+    assert summary_state is not None and summary_state.state == "1"
+
+    station_identifier = station_device_identifier(
+        station.provider, station.provider_id
+    )
+    station_device = next(
+        device
+        for device in dr.async_entries_for_config_entry(device_registry, entry.entry_id)
+        if station_identifier in device.identifiers
+    )
+    parent_identifier = location_device_identifier(
+        station.provider, station.location.provider_id
+    )
+    parent_device = next(
+        device
+        for device in dr.async_entries_for_config_entry(device_registry, entry.entry_id)
+        if parent_identifier in device.identifiers
+    )
+    assert status.device_id == station_device.id
+    assert getattr(station_device, "parent_device_id", None) == parent_device.id or (
+        getattr(station_device, "via_device_id", None) == parent_device.id
+    )
+    assert len(provider.station_calls) == 1
+
+    coordinator.update_options(
+        radius_m=coordinator.radius_m,
+        max_stations=coordinator.max_stations,
+        scan_interval_minutes=coordinator.scan_interval_minutes,
+        include_unknown=coordinator.include_unknown,
+        favourites=(),
+        location_movement_threshold_m=coordinator.location_movement_threshold_m,
+        discovery_filters=coordinator.discovery_filters,
+    )
+    coordinator.async_update_listeners()
+    await hass.async_block_till_done()
+
+    assert registry_entry(status_unique_id) is None
+    assert hass.states.get(status.entity_id) is None
+    summary_state = hass.states.get(summary.entity_id)
+    assert summary_state is not None and summary_state.state == "0"
+    assert len(provider.station_calls) == 1
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("provider_id", "provider_name", "country_code"),
     [
@@ -503,7 +620,10 @@ async def test_setup_unload_and_reload_keep_stable_entities(
     overrides: dict[str, object] = {CONF_PROVIDER: provider_id}
     if provider_id == PROVIDER_ECO_MOVEMENT_BE:
         overrides[CONF_API_TOKEN] = "test-token"
-    entry = _entry(overrides)
+    entry = _entry(
+        overrides,
+        options={CONF_FAVOURITES: [_favorite_reference(station)]},
+    )
     entry.add_to_hass(hass)
 
     assert await hass.config_entries.async_setup(entry.entry_id)
@@ -558,6 +678,9 @@ async def test_setup_unload_and_reload_keep_stable_entities(
         f"{provider_id}_{station.provider_id}_price_per_kwh",
         f"{provider_id}_{station.provider_id}_status_summary",
     }
+    expected_favorite_status_entity = (
+        f"{provider_id}_{station.provider_id}_{entry.entry_id}_favorite_status"
+    )
     expected_selection_entities = {
         f"{entry.unique_id}_nearest_available_charger",
         f"{entry.unique_id}_cheapest_available_charger",
@@ -571,6 +694,7 @@ async def test_setup_unload_and_reload_keep_stable_entities(
         for connector in station.connectors
     }
     assert expected_station_entities <= before
+    assert expected_favorite_status_entity in before
     assert expected_selection_entities <= before
     assert expected_connector_entities <= before
     assert len(provider.station_calls) == 1

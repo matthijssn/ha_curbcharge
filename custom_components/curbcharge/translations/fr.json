@@ -255,6 +255,17 @@
           "unknown": "Inconnu"
         }
       },
+      "favorite_status": {
+        "name": "État du favori",
+        "state": {
+          "available": "Disponible",
+          "none_available": "Aucun disponible",
+          "unknown": "Inconnu"
+        }
+      },
+      "favorite_summary": {
+        "name": "Résumé des favoris"
+      },
       "best_nearby_charger": {
         "name": "Meilleure borne à proximité"
       },
