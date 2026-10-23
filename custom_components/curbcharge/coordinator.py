@@ -149,23 +149,6 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
                 raise UpdateFailed("Provider returned an unexpected favourite")
             current[station.provider_id] = station
 
-        for favourite in self.favourites:
-            if favourite.provider_id in current:
-                continue
-            previous = (self.data or {}).get(favourite.provider_id)
-            current[favourite.provider_id] = (
-                replace(previous, is_stale=True)
-                if previous is not None
-                else _favourite_placeholder(
-                    favourite,
-                    self.provider_id,
-                    self.provider_name,
-                    self.country_code,
-                    self.latitude,
-                    self.longitude,
-                )
-            )
-
         missing_refreshes: dict[str, int] = {}
         removed: set[str] = set()
         for favourite in self.favourites:
