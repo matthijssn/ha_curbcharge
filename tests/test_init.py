@@ -219,6 +219,55 @@ async def test_invalid_favorite_migration_fails_without_discarding_options(
 
 
 @pytest.mark.asyncio
+async def test_migration_accepts_current_version(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="current-favorite-version",
+        version=2,
+        data={CONF_PROVIDER: PROVIDER_NDW_DOT_NL},
+    )
+    entry.add_to_hass(hass)
+
+    assert await curbcharge.async_migrate_entry(hass, entry)
+    assert entry.options == {}
+
+
+@pytest.mark.asyncio
+async def test_migration_rejects_unknown_version(hass, caplog):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="unknown-favorite-version",
+        version=3,
+        data={CONF_PROVIDER: PROVIDER_NDW_DOT_NL},
+    )
+    entry.add_to_hass(hass)
+
+    with caplog.at_level(logging.ERROR):
+        assert not await curbcharge.async_migrate_entry(hass, entry)
+
+    assert entry.version == 3
+    assert "version 3" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_migration_rejects_invalid_provider(hass, caplog):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="invalid-favorite-provider",
+        version=1,
+        data={CONF_PROVIDER: 123},
+        options={CONF_FAVOURITES: []},
+    )
+    entry.add_to_hass(hass)
+
+    with caplog.at_level(logging.ERROR):
+        assert not await curbcharge.async_migrate_entry(hass, entry)
+
+    assert entry.version == 1
+    assert "invalid provider" in caplog.text
+
+
+@pytest.mark.asyncio
 async def test_saved_favourite_placeholder_recovers_after_restart(
     hass, monkeypatch, sample_stations
 ):
