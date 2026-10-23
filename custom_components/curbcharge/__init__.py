@@ -299,8 +299,9 @@ async def _async_options_updated(
         location_movement_threshold_m=location_movement_threshold_m,
         discovery_filters=discovery_filters,
     )
-    if favourites_only_changed:
+    if favourites_changed:
         coordinator.async_update_listeners()
+    if favourites_only_changed:
         return
     await coordinator.async_request_refresh()
 

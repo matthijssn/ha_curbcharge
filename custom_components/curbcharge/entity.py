@@ -7,7 +7,11 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.device_registry import DeviceEntry, DeviceInfo
+from homeassistant.helpers.device_registry import (
+    DeviceEntry,
+    DeviceInfo,
+    DeviceRegistry,
+)
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import (
     AddEntitiesCallback,
@@ -99,6 +103,34 @@ def location_device_identifier(provider: str, location_id: str) -> tuple[str, st
     return DOMAIN, f"{provider}:location:{location_id}"
 
 
+def get_or_create_location_device(
+    device_registry: DeviceRegistry,
+    entry: ConfigEntry,
+    station: ChargingStation,
+) -> tuple[DeviceEntry, tuple[str, str]] | None:
+    """Get the provider-reported location device for a station, if distinct."""
+    location = station.location
+    if (
+        location is None
+        or location.provider != station.provider
+        or location.provider_id == station.provider_id
+    ):
+        return None
+
+    parent_identifier = location_device_identifier(
+        location.provider, location.provider_id
+    )
+    parent_device = device_registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={parent_identifier},
+        name=f"{location.name} ({location.provider}:{location.provider_id})",
+        manufacturer=location.operator,
+        model=location.provider_name,
+        serial_number=location.provider_id,
+    )
+    return parent_device, parent_identifier
+
+
 def setup_dynamic_station_entities(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -123,31 +155,15 @@ def setup_dynamic_station_entities(
             if station_id in known_station_ids:
                 continue
 
-            location = station.location
-            parent_device = None
-            parent_identifier = None
-            if (
-                location is not None
-                and location.provider == station.provider
-                and location.provider_id != station.provider_id
-            ):
-                parent_identifier = location_device_identifier(
-                    location.provider, location.provider_id
-                )
-                parent_device = device_registry.async_get_or_create(
-                    config_entry_id=entry.entry_id,
-                    identifiers={parent_identifier},
-                    name=(
-                        f"{location.name} ({location.provider}:{location.provider_id})"
-                    ),
-                    manufacturer=location.operator,
-                    model=location.provider_name,
-                    serial_number=location.provider_id,
-                )
-                parent_identifiers_by_station[station_id] = parent_identifier
+            parent_device_info = get_or_create_location_device(
+                device_registry, entry, station
+            )
+            if parent_device_info is not None:
+                parent_identifiers_by_station[station_id] = parent_device_info[1]
 
             entities = list(create_entities(station))
-            if parent_device is not None and parent_identifier is not None:
+            if parent_device_info is not None:
+                parent_device, parent_identifier = parent_device_info
                 for entity in entities:
                     if isinstance(entity, CurbChargeStationEntity):
                         entity.attach_to_location_device(

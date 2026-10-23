@@ -297,6 +297,17 @@
           "unknown": "Unknown"
         }
       },
+      "favorite_status": {
+        "name": "Favorite status",
+        "state": {
+          "available": "Available",
+          "none_available": "None available",
+          "unknown": "Unknown"
+        }
+      },
+      "favorite_summary": {
+        "name": "Favorite summary"
+      },
       "best_nearby_charger": {
         "name": "Best nearby charger"
       },

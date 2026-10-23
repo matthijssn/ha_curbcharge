@@ -297,6 +297,17 @@
           "unknown": "Unbekannt"
         }
       },
+      "favorite_status": {
+        "name": "Favoritenstatus",
+        "state": {
+          "available": "Verfügbar",
+          "none_available": "Keine verfügbar",
+          "unknown": "Unbekannt"
+        }
+      },
+      "favorite_summary": {
+        "name": "Favoritenübersicht"
+      },
       "best_nearby_charger": {
         "name": "Beste Ladestation in der Nähe"
       },

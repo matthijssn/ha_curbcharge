@@ -9,8 +9,13 @@ from homeassistant.components.sensor import SensorStateClass
 from homeassistant.const import PERCENTAGE, EntityCategory
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.curbcharge.const import DOMAIN, PROVIDER_ECO_MOVEMENT_BE
+from custom_components.curbcharge.const import (
+    DOMAIN,
+    MISSING_STATION_REFRESHES,
+    PROVIDER_ECO_MOVEMENT_BE,
+)
 from custom_components.curbcharge.coordinator import CurbChargeCoordinator
+from custom_components.curbcharge.entity import station_device_identifier
 from custom_components.curbcharge.models import (
     ChargingConnector,
     ChargingLocation,
@@ -30,6 +35,8 @@ from custom_components.curbcharge.sensor import (
     ConnectorGroupSensor,
     DistanceSensor,
     FastestAvailableChargerSensor,
+    FavoriteStatusSensor,
+    FavoriteSummarySensor,
     MaximumChargingPowerSensor,
     NearbyAvailabilityPercentageSensor,
     NearbyAvailableConnectorsSensor,
@@ -40,6 +47,7 @@ from custom_components.curbcharge.sensor import (
     StatusSummarySensor,
     TotalConnectorsSensor,
     UnavailableConnectorsSensor,
+    async_setup_dynamic_favorite_status_sensors,
 )
 from tests.conftest import FakeProvider
 
@@ -745,13 +753,16 @@ def test_best_nearby_sensor_exposes_selection_reason(hass, sample_stations, capl
         sample_stations[0],
         tariff=ChargingTariff("EUR", Decimal("0.42"), None, None, None, "test"),
     )
-    coordinator = _coordinator(hass, station)
+    coordinator = _coordinator(
+        hass, station, favourites=(_favourite_reference(station),)
+    )
     coordinator.last_successful_update = datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC)
     entry = MockConfigEntry(domain=DOMAIN, unique_id="hashed-area")
     sensor = BestNearbyChargerSensor(coordinator, entry)
     attributes = sensor.extra_state_attributes
 
     assert sensor.native_value == station.name
+    assert attributes["is_favorite"] is True
     assert attributes["result_status"] == "selected"
     assert attributes["station_id"] == station.provider_id
     assert attributes["provider_station_id"] == station.provider_id
@@ -1013,6 +1024,7 @@ def test_selection_sensors_report_station_details_and_reasons(hass, sample_stati
             "reason": reason,
             "last_updated": "2025-01-02T03:04:05+00:00",
             "last_successful_update": "2025-01-02T03:04:05+00:00",
+            "is_favorite": station.provider_id in coordinator.favourite_ids,
             "station_id": station.provider_id,
             "provider_station_id": station.provider_id,
             "provider": station.provider,
@@ -1140,6 +1152,264 @@ def test_status_summary_exposes_favourite_per_config_entry(hass, sample_stations
     assert not StatusSummarySensor(regular_coordinator, station).extra_state_attributes[
         "is_favorite"
     ]
+
+    favourite_entry = MockConfigEntry(
+        domain=DOMAIN, entry_id="favorite-entry-one", unique_id="favorite-area-one"
+    )
+    regular_entry = MockConfigEntry(
+        domain=DOMAIN, entry_id="favorite-entry-two", unique_id="favorite-area-two"
+    )
+    favourite_sensor = FavoriteStatusSensor(
+        favourite_coordinator, station, favourite_entry
+    )
+    regular_sensor = FavoriteStatusSensor(regular_coordinator, station, regular_entry)
+    favourite_summary = FavoriteSummarySensor(favourite_coordinator, favourite_entry)
+    regular_summary = FavoriteSummarySensor(regular_coordinator, regular_entry)
+    assert favourite_sensor.extra_state_attributes["is_favorite"]
+    assert not regular_sensor.extra_state_attributes["is_favorite"]
+    assert favourite_sensor.unique_id != regular_sensor.unique_id
+    assert favourite_summary.unique_id != regular_summary.unique_id
+    assert favourite_sensor.device_info["identifiers"] == {
+        station_device_identifier(station.provider, station.provider_id)
+    }
+    assert (
+        regular_sensor.device_info["identifiers"]
+        == favourite_sensor.device_info["identifiers"]
+    )
+
+    other_provider_station = replace(station, provider=PROVIDER_ECO_MOVEMENT_BE)
+    other_provider = FakeProvider()
+    other_provider.provider_id = PROVIDER_ECO_MOVEMENT_BE
+    other_coordinator = _coordinator(
+        hass,
+        other_provider_station,
+        provider=other_provider,
+        favourites=(_favourite_reference(other_provider_station),),
+    )
+    other_sensor = FavoriteStatusSensor(
+        other_coordinator, other_provider_station, favourite_entry
+    )
+    assert other_sensor.unique_id != favourite_sensor.unique_id
+    assert (
+        other_sensor.device_info["identifiers"]
+        != favourite_sensor.device_info["identifiers"]
+    )
+
+
+def test_favorite_status_requires_known_connector_counts(hass, sample_stations):
+    station = sample_stations[0]
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="favorite-status")
+    favourite = _favourite_reference(station)
+
+    available_sensor = FavoriteStatusSensor(
+        _coordinator(hass, station, favourites=(favourite,)), station, entry
+    )
+    assert available_sensor.native_value == "available"
+    attributes = available_sensor.extra_state_attributes
+    assert attributes["available_connectors"] == station.available_connectors
+    assert attributes["total_connectors"] == station.total_connectors
+    assert attributes["max_power_kw"] == station.max_power_kw
+    assert "price_per_kwh" in attributes
+    assert "currency" in attributes
+    assert attributes["provider_update_success"] is True
+    assert attributes["is_stale"] is False
+
+    zero_station = replace(
+        station,
+        provider_id="known-zero",
+        availability_reported=True,
+        connector_count_reported=True,
+        connectors=tuple(
+            replace(connector, available_count=0) for connector in station.connectors
+        ),
+    )
+    zero_sensor = FavoriteStatusSensor(
+        _coordinator(
+            hass,
+            zero_station,
+            favourites=(_favourite_reference(zero_station),),
+        ),
+        zero_station,
+        entry,
+    )
+    assert zero_sensor.native_value == "none_available"
+
+    unknown_station = replace(
+        station, provider_id="unknown-availability", availability_reported=False
+    )
+    unknown_sensor = FavoriteStatusSensor(
+        _coordinator(
+            hass,
+            unknown_station,
+            favourites=(_favourite_reference(unknown_station),),
+        ),
+        unknown_station,
+        entry,
+    )
+    assert unknown_sensor.native_value == "unknown"
+
+    stale_station = replace(station, is_stale=True)
+    stale_sensor = FavoriteStatusSensor(
+        _coordinator(
+            hass, stale_station, favourites=(_favourite_reference(stale_station),)
+        ),
+        stale_station,
+        entry,
+    )
+    assert not stale_sensor.available
+    assert stale_sensor.extra_state_attributes["is_stale"] is True
+
+    no_data_coordinator = _coordinator(hass, station, favourites=(favourite,))
+    no_data_coordinator.async_set_updated_data({})
+    no_data_sensor = FavoriteStatusSensor(no_data_coordinator, station, entry)
+    assert no_data_sensor.native_value == "unknown"
+    assert no_data_sensor.extra_state_attributes["available_connectors"] is None
+
+
+@pytest.mark.asyncio
+async def test_favorite_status_setup_requires_an_active_platform(
+    hass, monkeypatch, sample_stations
+):
+    monkeypatch.setattr(
+        "custom_components.curbcharge.sensor.async_get_current_platform",
+        lambda: None,
+    )
+    coordinator = _coordinator(hass, sample_stations[0])
+
+    with pytest.raises(RuntimeError, match="require an active platform"):
+        await async_setup_dynamic_favorite_status_sensors(
+            hass,
+            MockConfigEntry(domain=DOMAIN, unique_id="favorite-no-platform"),
+            coordinator,
+            lambda _entities: None,
+        )
+
+
+@pytest.mark.asyncio
+async def test_favorite_status_distinguishes_provider_failure(hass, sample_stations):
+    station = sample_stations[0]
+    snapshots = [(station,), ChargingProviderError("offline"), (station,)]
+    provider = FakeProvider(snapshots)
+    coordinator = _coordinator(
+        hass, station, provider=provider, favourites=(_favourite_reference(station),)
+    )
+    sensor = FavoriteStatusSensor(
+        coordinator,
+        station,
+        MockConfigEntry(domain=DOMAIN, unique_id="failed-favorite-status"),
+    )
+
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+
+    assert not sensor.available
+    attributes = sensor.extra_state_attributes
+    assert attributes["provider_update_success"] is False
+    assert attributes["is_stale"] is False
+
+    await coordinator.async_refresh()
+
+    assert sensor.available
+    assert sensor.extra_state_attributes["provider_update_success"] is True
+
+
+def test_favorite_summary_counts_and_recommends_fresh_available_favorites(
+    hass, sample_stations
+):
+    nearest_eur = _selection_station(
+        sample_stations[0], distance=100, power=50, price="0.40"
+    )
+    highest_power_usd = replace(
+        _selection_station(sample_stations[1], distance=200, power=150, price="0.30"),
+        provider_id="available-usd",
+        tariff=ChargingTariff("USD", Decimal("0.30"), None, None, None, "test"),
+    )
+    known_zero = replace(
+        sample_stations[0],
+        provider_id="known-zero",
+        availability_reported=True,
+        connector_count_reported=True,
+        connectors=tuple(
+            replace(connector, available_count=0)
+            for connector in sample_stations[0].connectors
+        ),
+    )
+    unknown = replace(
+        sample_stations[0],
+        provider_id="unknown-availability",
+        availability_reported=False,
+    )
+    stale = replace(sample_stations[1], provider_id="stale-favorite", is_stale=True)
+    missing_id = "missing-favorite"
+    stations = (nearest_eur, highest_power_usd, known_zero, unknown, stale)
+    favourites = tuple(_favourite_reference(station) for station in stations) + (
+        FavouriteStationReference(
+            provider=nearest_eur.provider,
+            provider_id=missing_id,
+            name=missing_id,
+            latitude=nearest_eur.latitude,
+            longitude=nearest_eur.longitude,
+        ),
+    )
+    coordinator = _coordinator(hass, nearest_eur, favourites=favourites)
+    coordinator.async_set_updated_data(
+        {station.provider_id: station for station in stations}
+    )
+    coordinator._missing_refreshes.update(  # noqa: SLF001
+        {
+            stale.provider_id: MISSING_STATION_REFRESHES,
+            missing_id: MISSING_STATION_REFRESHES,
+        }
+    )
+    coordinator.last_successful_update = datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC)
+    summary = FavoriteSummarySensor(
+        coordinator,
+        MockConfigEntry(
+            domain=DOMAIN, entry_id="favorite-summary-entry", unique_id="favorite-area"
+        ),
+    )
+
+    assert summary.native_value == 6
+    attributes = summary.extra_state_attributes
+    assert attributes["configured_count"] == 6
+    assert attributes["discovered_count"] == 4
+    assert attributes["known_count"] == 3
+    assert attributes["available_count"] == 2
+    assert attributes["unknown_count"] == 1
+    assert attributes["stale_count"] == 2
+    assert attributes["missing_count"] == 2
+    assert attributes["last_successful_update"] == "2025-01-02T03:04:05+00:00"
+    assert attributes["cheapest_available_favorite"]["reason"] == "mixed_currencies"
+    assert attributes["nearest_available_favorite"]["station_id"] == (
+        nearest_eur.provider_id
+    )
+    assert attributes["highest_power_available_favorite"]["station_id"] == (
+        highest_power_usd.provider_id
+    )
+
+
+@pytest.mark.asyncio
+async def test_favorite_summary_reports_unavailable_during_provider_failure(
+    hass, sample_stations
+):
+    station = sample_stations[0]
+    provider = FakeProvider([(station,), ChargingProviderError("offline")])
+    coordinator = _coordinator(
+        hass, station, provider=provider, favourites=(_favourite_reference(station),)
+    )
+    summary = FavoriteSummarySensor(
+        coordinator, MockConfigEntry(domain=DOMAIN, unique_id="failed-summary")
+    )
+
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+
+    assert not summary.available
+    attributes = summary.extra_state_attributes
+    assert attributes["configured_count"] == 1
+    assert attributes["provider_update_success"] is False
+    assert attributes["discovered_count"] is None
+    assert attributes["cheapest_available_favorite"]["reason"] == "unavailable"
 
 
 def test_nearby_aggregates_and_best_exclude_remote_favourites(hass, sample_stations):
