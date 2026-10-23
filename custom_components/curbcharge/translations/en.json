@@ -170,6 +170,36 @@
       "invalid_favourites": "One or more selected favourites are no longer available. Refresh the options and try again."
     }
   },
+  "services": {
+    "add_favorite": {
+      "name": "Add favorite",
+      "description": "Save a freshly discovered charging station as a favorite.",
+      "fields": {
+        "config_entry_id": {
+          "name": "CurbCharge configuration entry",
+          "description": "Select the loaded CurbCharge entry to update."
+        },
+        "station_id": {
+          "name": "Station ID",
+          "description": "Provider-local ID of a station from the latest successful nearby search."
+        }
+      }
+    },
+    "remove_favorite": {
+      "name": "Remove favorite",
+      "description": "Remove a saved favorite from a CurbCharge configuration entry.",
+      "fields": {
+        "config_entry_id": {
+          "name": "CurbCharge configuration entry",
+          "description": "Select the loaded CurbCharge entry that contains the favorite."
+        },
+        "station_id": {
+          "name": "Station ID",
+          "description": "Provider-local ID of the saved favorite to remove. It may be stale or missing upstream."
+        }
+      }
+    }
+  },
   "exceptions": {
     "authentication_failed": {
       "message": "Authentication with the charging provider failed."
@@ -185,6 +215,18 @@
     },
     "unsupported_provider": {
       "message": "The configured charging provider is unsupported."
+    },
+    "config_entry_not_loaded": {
+      "message": "Select a loaded CurbCharge configuration entry."
+    },
+    "favorite_not_found": {
+      "message": "The station ID is not a saved favorite for this configuration entry."
+    },
+    "invalid_station_id": {
+      "message": "Enter a non-empty station ID."
+    },
+    "station_not_discovered": {
+      "message": "The station must be freshly discovered by this configuration entry before it can be added as a favorite."
     }
   },
   "selector": {

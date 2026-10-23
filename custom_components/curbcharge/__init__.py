@@ -9,6 +9,7 @@ from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import UpdateFailed
@@ -47,14 +48,17 @@ from .coordinator import CurbChargeCoordinator
 from .location import resolve_location
 from .models import DiscoveryFilterSettings, parse_favourite_references
 from .provider import ChargingProviderError
+from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
 
 type CurbChargeConfigEntry = ConfigEntry[CurbChargeCoordinator]
 
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
 
 async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
-    """Serve the bundled Lovelace card without copying it into the config dir."""
+    """Register CurbCharge services and serve the bundled Lovelace card."""
     card_path = Path(__file__).parent / "www" / "curbcharge-card.js"
     await hass.http.async_register_static_paths(
         [
@@ -65,6 +69,7 @@ async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
             )
         ]
     )
+    async_setup_services(hass)
     return True
 
 
@@ -276,6 +281,15 @@ async def _async_options_updated(
         await hass.config_entries.async_reload(entry.entry_id)
         return
 
+    favourites_changed = favourites != coordinator.favourites
+    favourites_only_changed = favourites_changed and (
+        radius_m == coordinator.radius_m
+        and max_stations == coordinator.max_stations
+        and scan_interval == coordinator.scan_interval_minutes
+        and include_unknown == coordinator.include_unknown
+        and location_movement_threshold_m == coordinator.location_movement_threshold_m
+        and discovery_filters == coordinator.discovery_filters
+    )
     coordinator.update_options(
         radius_m=radius_m,
         max_stations=max_stations,
@@ -285,6 +299,9 @@ async def _async_options_updated(
         location_movement_threshold_m=location_movement_threshold_m,
         discovery_filters=discovery_filters,
     )
+    if favourites_only_changed:
+        coordinator.async_update_listeners()
+        return
     await coordinator.async_request_refresh()
 
 

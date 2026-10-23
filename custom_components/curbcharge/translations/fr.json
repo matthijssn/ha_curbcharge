@@ -170,6 +170,36 @@
       "invalid_favourites": "Une ou plusieurs bornes favorites sélectionnées ne sont plus disponibles. Actualisez les options et réessayez."
     }
   },
+  "services": {
+    "add_favorite": {
+      "name": "Ajouter un favori",
+      "description": "Enregistrer comme favorite une borne récemment découverte.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Entrée de configuration CurbCharge",
+          "description": "Sélectionnez l'entrée CurbCharge chargée à modifier."
+        },
+        "station_id": {
+          "name": "ID de borne",
+          "description": "ID local au fournisseur d'une borne trouvée lors de la dernière recherche réussie à proximité."
+        }
+      }
+    },
+    "remove_favorite": {
+      "name": "Supprimer un favori",
+      "description": "Supprimer un favori enregistré d'une entrée de configuration CurbCharge.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Entrée de configuration CurbCharge",
+          "description": "Sélectionnez l'entrée CurbCharge chargée contenant ce favori."
+        },
+        "station_id": {
+          "name": "ID de borne",
+          "description": "ID local au fournisseur du favori à supprimer. La borne peut être obsolète ou absente chez le fournisseur."
+        }
+      }
+    }
+  },
   "exceptions": {
     "authentication_failed": {
       "message": "L'authentification auprès du fournisseur de données a échoué."
@@ -185,6 +215,18 @@
     },
     "unsupported_provider": {
       "message": "Le fournisseur de données configuré n'est pas pris en charge."
+    },
+    "config_entry_not_loaded": {
+      "message": "Sélectionnez une entrée de configuration CurbCharge chargée."
+    },
+    "favorite_not_found": {
+      "message": "Cet ID de borne n'est pas un favori enregistré pour cette entrée de configuration."
+    },
+    "invalid_station_id": {
+      "message": "Saisissez un ID de borne non vide."
+    },
+    "station_not_discovered": {
+      "message": "La borne doit avoir été récemment découverte par cette entrée avant de pouvoir être ajoutée aux favoris."
     }
   },
   "selector": {

@@ -170,6 +170,36 @@
       "invalid_favourites": "Een of meer geselecteerde favorieten zijn niet meer beschikbaar. Vernieuw de opties en probeer het opnieuw."
     }
   },
+  "services": {
+    "add_favorite": {
+      "name": "Favoriet toevoegen",
+      "description": "Sla een recent gevonden laadpunt op als favoriet.",
+      "fields": {
+        "config_entry_id": {
+          "name": "CurbCharge-configuratie-item",
+          "description": "Selecteer het geladen CurbCharge-configuratie-item dat moet worden bijgewerkt."
+        },
+        "station_id": {
+          "name": "Laadpunt-ID",
+          "description": "Provider-lokale ID van een laadpunt uit de laatste geslaagde zoekopdracht in de buurt."
+        }
+      }
+    },
+    "remove_favorite": {
+      "name": "Favoriet verwijderen",
+      "description": "Verwijder een opgeslagen favoriet uit een CurbCharge-configuratie-item.",
+      "fields": {
+        "config_entry_id": {
+          "name": "CurbCharge-configuratie-item",
+          "description": "Selecteer het geladen CurbCharge-configuratie-item met deze favoriet."
+        },
+        "station_id": {
+          "name": "Laadpunt-ID",
+          "description": "Provider-lokale ID van de opgeslagen favoriet. Het laadpunt kan verouderd zijn of ontbreken bij de provider."
+        }
+      }
+    }
+  },
   "exceptions": {
     "authentication_failed": {
       "message": "De authenticatie bij de laadprovider is mislukt."
@@ -185,6 +215,18 @@
     },
     "unsupported_provider": {
       "message": "De ingestelde laadprovider wordt niet ondersteund."
+    },
+    "config_entry_not_loaded": {
+      "message": "Selecteer een geladen CurbCharge-configuratie-item."
+    },
+    "favorite_not_found": {
+      "message": "Deze laadpunt-ID is geen opgeslagen favoriet voor dit configuratie-item."
+    },
+    "invalid_station_id": {
+      "message": "Voer een niet-lege laadpunt-ID in."
+    },
+    "station_not_discovered": {
+      "message": "Dit laadpunt moet eerst recent door dit configuratie-item zijn gevonden voordat het als favoriet kan worden toegevoegd."
     }
   },
   "selector": {

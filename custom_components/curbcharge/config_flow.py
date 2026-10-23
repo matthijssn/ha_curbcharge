@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Mapping
-from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
 from homeassistant import config_entries
@@ -71,22 +70,9 @@ from .provider import (
     UnsupportedLocationError,
     UnsupportedProviderError,
 )
+from .schema import vol
 
 type FlowSchema = Any
-
-
-# Core 2026.10 uses probatio; keep Voluptuous for older supported releases.
-def _load_flow_schema_module() -> Any:
-    """Select the schema library available in the current Home Assistant."""
-    try:
-        return import_module("probatio")
-    except ModuleNotFoundError as err:
-        if err.name != "probatio":
-            raise
-        return import_module("voluptuous")
-
-
-vol = _load_flow_schema_module()
 
 
 def manual_location_schema(
@@ -973,24 +959,7 @@ def _favourite_selector_options(
 
 
 def _favourite_reference(station: ChargingStation) -> FavouriteStationReference:
-    location = station.location
-    location_id = (
-        location.provider_id
-        if (
-            location is not None
-            and location.provider == station.provider
-            and location.provider_id != station.provider_id
-        )
-        else None
-    )
-    return FavouriteStationReference(
-        provider=station.provider,
-        provider_id=station.provider_id,
-        name=station.provider_id,
-        latitude=station.latitude,
-        longitude=station.longitude,
-        location_id=location_id,
-    )
+    return FavouriteStationReference.from_station(station)
 
 
 def _favourite_label(station: ChargingStation) -> str:
