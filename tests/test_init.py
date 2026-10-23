@@ -1,6 +1,7 @@
 """Tests for setup, unloading, and dynamically discovered stations."""
 
 import asyncio
+import logging
 from dataclasses import replace
 from pathlib import Path
 
@@ -115,24 +116,106 @@ def _favorite_reference(station) -> dict[str, object]:
     has_parent_location = (
         location is not None and location.provider_id != station.provider_id
     )
-    return {
-        "provider": station.provider,
-        "provider_id": station.provider_id,
-        "name": station.address or station.name,
-        "latitude": station.latitude,
-        "longitude": station.longitude,
-        "location_id": (
+    return FavouriteStationReference(
+        provider=station.provider,
+        provider_id=station.provider_id,
+        name=station.provider_id,
+        latitude=station.latitude,
+        longitude=station.longitude,
+        location_id=(
             location.provider_id
             if location is not None and has_parent_location
             else None
         ),
-        "location_name": location.name
-        if location is not None and has_parent_location
-        else None,
-        "location_operator": (
-            location.operator if location is not None and has_parent_location else None
-        ),
+    ).as_config()
+
+
+@pytest.mark.asyncio
+async def test_migrate_v1_favorites_to_stable_references(hass):
+    legacy_favorite = {
+        "provider": PROVIDER_NDW_DOT_NL,
+        "provider_id": "station-1",
+        "name": "Private station address",
+        "latitude": 52.0,
+        "longitude": 5.0,
+        "location_id": "site-1",
+        "location_name": "Private site name",
+        "location_operator": "Private operator",
     }
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="favorite-migration",
+        version=1,
+        data={CONF_PROVIDER: PROVIDER_NDW_DOT_NL},
+        options={
+            CONF_FAVOURITES: [legacy_favorite],
+            CONF_SCAN_INTERVAL: 5,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    assert await curbcharge.async_migrate_entry(hass, entry)
+
+    assert entry.version == 2
+    assert entry.options == {
+        CONF_FAVOURITES: [
+            {
+                "provider": PROVIDER_NDW_DOT_NL,
+                "provider_id": "station-1",
+                "name": "station-1",
+                "latitude": 52.0,
+                "longitude": 5.0,
+                "location_id": "site-1",
+            }
+        ],
+        CONF_SCAN_INTERVAL: 5,
+    }
+
+
+@pytest.mark.asyncio
+async def test_migrate_v1_without_favorites_defaults_to_empty(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="empty-favorite-migration",
+        version=1,
+        data={CONF_PROVIDER: PROVIDER_NDW_DOT_NL},
+    )
+    entry.add_to_hass(hass)
+
+    assert await curbcharge.async_migrate_entry(hass, entry)
+
+    assert entry.version == 2
+    assert entry.options[CONF_FAVOURITES] == []
+
+
+@pytest.mark.asyncio
+async def test_invalid_favorite_migration_fails_without_discarding_options(
+    hass, caplog
+):
+    legacy_favorite = {
+        "provider": PROVIDER_NDW_DOT_NL,
+        "provider_id": "station-1",
+        "name": "Private station address",
+        "latitude": "invalid",
+        "longitude": 5.0,
+    }
+    options = {CONF_FAVOURITES: [legacy_favorite], CONF_SCAN_INTERVAL: 5}
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="invalid-favorite-migration",
+        version=1,
+        data={CONF_PROVIDER: PROVIDER_NDW_DOT_NL},
+        options=options,
+    )
+    entry.add_to_hass(hass)
+
+    with caplog.at_level(logging.ERROR):
+        assert not await curbcharge.async_migrate_entry(hass, entry)
+
+    assert entry.version == 1
+    assert entry.options == options
+    assert "Private station address" not in caplog.text
+    assert "invalid saved data" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -1595,7 +1678,7 @@ async def test_options_update_applies_favourites_to_live_coordinator(
     favourite = {
         "provider": station.provider,
         "provider_id": station.provider_id,
-        "name": station.address or station.name,
+        "name": station.provider_id,
         "latitude": station.latitude,
         "longitude": station.longitude,
     }
@@ -1622,7 +1705,7 @@ async def test_options_update_applies_favourites_to_live_coordinator(
         FavouriteStationReference(
             station.provider,
             station.provider_id,
-            station.address or station.name,
+            station.provider_id,
             station.latitude,
             station.longitude,
         ),

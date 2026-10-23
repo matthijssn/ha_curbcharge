@@ -198,21 +198,32 @@ def test_parse_favourite_references_defaults_empty_and_validates_values():
         "name": "Example address",
         "latitude": 52.0,
         "longitude": 5.0,
+        "location_id": "site-1",
+        "location_name": "Mutable site name",
+        "location_operator": "Mutable operator",
     }
 
     assert parse_favourite_references(None, "ndw_dot_nl") == ()
     assert parse_favourite_references([favourite], "ndw_dot_nl") == (
         FavouriteStationReference(
-            "ndw_dot_nl", "station-1", "Example address", 52.0, 5.0
+            "ndw_dot_nl", "station-1", "station-1", 52.0, 5.0, "site-1"
         ),
     )
+    assert parse_favourite_references([favourite], "ndw_dot_nl")[0].as_config() == {
+        "provider": "ndw_dot_nl",
+        "provider_id": "station-1",
+        "name": "station-1",
+        "latitude": 52.0,
+        "longitude": 5.0,
+        "location_id": "site-1",
+    }
 
     for invalid in (
         "not a list",
         [None],
         [{**favourite, "provider": "eco_movement_be"}],
         [{**favourite, "provider_id": ""}],
-        [{**favourite, "name": " "}],
+        [{**favourite, "provider_id": " "}],
         [{**favourite, "latitude": True}],
         [{**favourite, "latitude": float("nan")}],
         [{**favourite, "longitude": 181}],
@@ -220,6 +231,35 @@ def test_parse_favourite_references_defaults_empty_and_validates_values():
     ):
         with pytest.raises(ValueError):
             parse_favourite_references(invalid, "ndw_dot_nl")
+
+
+def test_favourite_identity_is_provider_aware():
+    ndw = parse_favourite_references(
+        [
+            {
+                "provider": "ndw_dot_nl",
+                "provider_id": "same-id",
+                "latitude": 52.0,
+                "longitude": 5.0,
+            }
+        ],
+        "ndw_dot_nl",
+    )[0]
+    belgium = parse_favourite_references(
+        [
+            {
+                "provider": "eco_movement_be",
+                "provider_id": "same-id",
+                "latitude": 50.8,
+                "longitude": 4.3,
+            }
+        ],
+        "eco_movement_be",
+    )[0]
+
+    assert (ndw.provider, ndw.provider_id) != (belgium.provider, belgium.provider_id)
+    assert ndw.name == ndw.provider_id
+    assert belgium.name == belgium.provider_id
 
 
 def test_evse_availability_does_not_invent_connector_counts(sample_stations):

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Mapping
-from dataclasses import asdict
 from importlib import import_module
 from typing import TYPE_CHECKING, Any
 
@@ -36,6 +35,7 @@ from .const import (
     CONF_REQUIRE_AVAILABLE,
     CONF_SCAN_INTERVAL,
     CONF_SEARCH_RADIUS,
+    CONFIG_ENTRY_VERSION,
     DEFAULT_INCLUDE_UNKNOWN,
     DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
     DEFAULT_MAX_STATIONS,
@@ -368,7 +368,7 @@ def _show_form(
 class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Set up a CurbCharge location and validate the provider connection."""
 
-    VERSION = 1
+    VERSION = CONFIG_ENTRY_VERSION
 
     def __init__(self) -> None:
         """Initialize flow state."""
@@ -918,7 +918,7 @@ class CurbChargeOptionsFlow(config_entries.OptionsFlow):
                 CONF_MAX_STATIONS: int(user_input[CONF_MAX_STATIONS]),
                 CONF_PROVIDER: user_input[CONF_PROVIDER],
                 CONF_INCLUDE_UNKNOWN: user_input[CONF_INCLUDE_UNKNOWN],
-                CONF_FAVOURITES: [asdict(favourite) for favourite in favourites],
+                CONF_FAVOURITES: [favourite.as_config() for favourite in favourites],
             }
             if discovery_filters is not None:
                 data.update(discovery_filters.as_config())
@@ -947,7 +947,9 @@ def _favourite_selector_options(
 ) -> tuple[list[selector.SelectOptionDict], dict[str, FavouriteStationReference]]:
     """Build human-readable options while retaining saved out-of-radius entries."""
     references = {favourite.provider_id: favourite for favourite in saved_favourites}
-    labels = {favourite.provider_id: favourite.name for favourite in saved_favourites}
+    labels = {
+        favourite.provider_id: favourite.provider_id for favourite in saved_favourites
+    }
     if coordinator is not None:
         for station in (coordinator.data or {}).values():
             if station.is_stale:
@@ -972,26 +974,22 @@ def _favourite_selector_options(
 
 def _favourite_reference(station: ChargingStation) -> FavouriteStationReference:
     location = station.location
-    location_id = None
-    location_name = None
-    location_operator = None
-    if (
-        location is not None
-        and location.provider == station.provider
-        and location.provider_id != station.provider_id
-    ):
-        location_id = location.provider_id
-        location_name = location.name
-        location_operator = location.operator
+    location_id = (
+        location.provider_id
+        if (
+            location is not None
+            and location.provider == station.provider
+            and location.provider_id != station.provider_id
+        )
+        else None
+    )
     return FavouriteStationReference(
         provider=station.provider,
         provider_id=station.provider_id,
-        name=station.address or station.name,
+        name=station.provider_id,
         latitude=station.latitude,
         longitude=station.longitude,
         location_id=location_id,
-        location_name=location_name,
-        location_operator=location_operator,
     )
 
 

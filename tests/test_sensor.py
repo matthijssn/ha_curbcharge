@@ -116,7 +116,7 @@ def _favourite_reference(station):
     return FavouriteStationReference(
         provider=station.provider,
         provider_id=station.provider_id,
-        name=station.name,
+        name=station.provider_id,
         latitude=station.latitude,
         longitude=station.longitude,
     )

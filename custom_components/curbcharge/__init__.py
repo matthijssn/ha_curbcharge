@@ -1,5 +1,6 @@
 """CurbCharge Home Assistant integration."""
 
+import logging
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,7 @@ from .const import (
     CONF_PROVIDER,
     CONF_SCAN_INTERVAL,
     CONF_SEARCH_RADIUS,
+    CONFIG_ENTRY_VERSION,
     DEFAULT_INCLUDE_UNKNOWN,
     DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
     DEFAULT_MAX_STATIONS,
@@ -46,6 +48,8 @@ from .location import resolve_location
 from .models import DiscoveryFilterSettings, parse_favourite_references
 from .provider import ChargingProviderError
 
+_LOGGER = logging.getLogger(__name__)
+
 type CurbChargeConfigEntry = ConfigEntry[CurbChargeCoordinator]
 
 
@@ -60,6 +64,44 @@ async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
                 cache_headers=False,
             )
         ]
+    )
+    return True
+
+
+async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry[Any]) -> bool:
+    """Normalize saved favorites while migrating config-entry options."""
+    if entry.version == CONFIG_ENTRY_VERSION:
+        return True
+    if entry.version != 1:
+        _LOGGER.error(
+            "Cannot migrate CurbCharge config entry from version %s", entry.version
+        )
+        return False
+
+    provider_id = entry.options.get(
+        CONF_PROVIDER, entry.data.get(CONF_PROVIDER, PROVIDER_NDW_DOT_NL)
+    )
+    if not isinstance(provider_id, str):
+        _LOGGER.error("Cannot migrate CurbCharge favorite references: invalid provider")
+        return False
+    try:
+        favourites = parse_favourite_references(
+            entry.options.get(CONF_FAVOURITES, []), provider_id
+        )
+    except ValueError:
+        _LOGGER.error(
+            "Cannot migrate CurbCharge favorite references: invalid saved data"
+        )
+        return False
+
+    options = {
+        **entry.options,
+        CONF_FAVOURITES: [favourite.as_config() for favourite in favourites],
+    }
+    hass.config_entries.async_update_entry(
+        entry,
+        options=options,
+        version=CONFIG_ENTRY_VERSION,
     )
     return True
 

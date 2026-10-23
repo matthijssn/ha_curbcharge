@@ -406,7 +406,7 @@ class ChargingStation:
 
 @dataclass(frozen=True, slots=True)
 class FavouriteStationReference:
-    """Minimal persisted identity and location for one user-selected station."""
+    """Provider identity and last-known lookup coordinates for one favorite."""
 
     provider: str
     provider_id: str
@@ -414,8 +414,17 @@ class FavouriteStationReference:
     latitude: float
     longitude: float
     location_id: str | None = None
-    location_name: str | None = None
-    location_operator: str | None = None
+
+    def as_config(self) -> dict[str, object]:
+        """Return stable identity and lookup hints, never mutable display data."""
+        return {
+            "provider": self.provider,
+            "provider_id": self.provider_id,
+            "name": self.provider_id,
+            "latitude": self.latitude,
+            "longitude": self.longitude,
+            "location_id": self.location_id,
+        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -429,7 +438,7 @@ class StationDiscoveryResult:
 def parse_favourite_references(
     value: object, provider: str
 ) -> tuple[FavouriteStationReference, ...]:
-    """Validate persisted favourite metadata without accepting opaque user input."""
+    """Validate favorite identity and lookup hints, ignoring legacy display data."""
     if value is None:
         return ()
     if not isinstance(value, list):
@@ -443,19 +452,14 @@ def parse_favourite_references(
         item = cast(Mapping[str, object], item_value)
         item_provider = item.get("provider")
         provider_id = item.get("provider_id")
-        name = item.get("name")
         latitude = item.get("latitude")
         longitude = item.get("longitude")
         location_id = item.get("location_id")
-        location_name = item.get("location_name")
-        location_operator = item.get("location_operator")
         if (
             item_provider != provider
             or not isinstance(provider_id, str)
-            or not provider_id
+            or not provider_id.strip()
             or provider_id in seen_ids
-            or not isinstance(name, str)
-            or not name.strip()
             or not isinstance(latitude, (int, float))
             or isinstance(latitude, bool)
             or not isinstance(longitude, (int, float))
@@ -463,19 +467,6 @@ def parse_favourite_references(
             or (
                 location_id is not None
                 and (not isinstance(location_id, str) or not location_id)
-            )
-            or (
-                location_name is not None
-                and (not isinstance(location_name, str) or not location_name.strip())
-            )
-            or (
-                location_operator is not None and not isinstance(location_operator, str)
-            )
-            or (
-                location_id is None
-                and any(
-                    value is not None for value in (location_name, location_operator)
-                )
             )
         ):
             raise ValueError("Favourite reference is invalid")
@@ -494,14 +485,10 @@ def parse_favourite_references(
             FavouriteStationReference(
                 provider=provider,
                 provider_id=provider_id,
-                name=name.strip(),
+                name=provider_id,
                 latitude=latitude,
                 longitude=longitude,
                 location_id=location_id,
-                location_name=(
-                    location_name.strip() if isinstance(location_name, str) else None
-                ),
-                location_operator=location_operator,
             )
         )
         seen_ids.add(provider_id)

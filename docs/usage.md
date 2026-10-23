@@ -395,8 +395,11 @@ manual coordinates, Entity source IDs, and saved favourite references from
 entry data, and round distances to the nearest kilometre. In Entity mode, the
 selected entity ID is stored locally in the config entry and redacted from
 diagnostics; its changing coordinates are not persisted or included in
-diagnostics. Favourite IDs, names, and coordinates are not included in the
-diagnostic station list. CurbCharge does not log entity IDs, coordinates,
+diagnostics. Favourite membership is stored by provider and station ID; current
+display names and addresses are not persisted. Saved coordinates are only
+lookup hints for NDW's spatial API and are redacted from diagnostics. Favourite
+IDs and lookup hints are not included in the diagnostic station list.
+CurbCharge does not log entity IDs, coordinates,
 credentials, or raw provider responses. The integration does not request
 credentials from NDW. History and statistics are Home Assistant Recorder data
 and follow its database, retention, and exclusion settings; CurbCharge does
