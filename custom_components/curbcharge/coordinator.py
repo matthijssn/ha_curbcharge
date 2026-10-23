@@ -168,6 +168,27 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
 
         missing_refreshes: dict[str, int] = {}
         removed: set[str] = set()
+        for favourite in self.favourites:
+            station_id = favourite.provider_id
+            if station_id in current:
+                continue
+            missing_refreshes[station_id] = (
+                self._missing_refreshes.get(station_id, 0) + 1
+            )
+            previous = (self.data or {}).get(station_id)
+            current[station_id] = (
+                replace(previous, is_stale=True)
+                if previous is not None
+                else _favourite_placeholder(
+                    favourite,
+                    self.provider_id,
+                    self.provider_name,
+                    self.country_code,
+                    self.latitude,
+                    self.longitude,
+                )
+            )
+
         for station_id, previous in (self.data or {}).items():
             if station_id in current:
                 continue
@@ -182,6 +203,10 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         self.removed_station_ids = removed
         self.last_successful_update = datetime.now(UTC)
         return current
+
+    def missing_refresh_count(self, station_id: str) -> int:
+        """Return successful refreshes since a station last appeared."""
+        return self._missing_refreshes.get(station_id, 0)
 
     def _update_search_location(self) -> None:
         """Resolve and accept a tracked location before each provider refresh."""

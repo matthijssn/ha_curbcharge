@@ -1,5 +1,6 @@
 """Sanitized diagnostics for CurbCharge."""
 
+import hashlib
 from typing import Any
 
 from homeassistant.components.diagnostics import async_redact_data
@@ -16,6 +17,7 @@ from .const import (
     CONF_LOCATION_SOURCE,
     CONF_PROVIDER,
     CONF_SEARCH_RADIUS,
+    MISSING_STATION_REFRESHES,
 )
 from .coordinator import CurbChargeCoordinator
 
@@ -26,6 +28,19 @@ TO_REDACT = [
     CONF_API_TOKEN,
     CONF_FAVOURITES,
 ]
+
+
+def _favourite_presence(coordinator: CurbChargeCoordinator, station_id: str) -> str:
+    if not coordinator.last_update_success:
+        return "refresh_failed"
+    station = (coordinator.data or {}).get(station_id)
+    if station is None:
+        return "not_discovered"
+    if not station.is_stale:
+        return "present"
+    if coordinator.missing_refresh_count(station_id) >= MISSING_STATION_REFRESHES:
+        return "missing"
+    return "stale"
 
 
 async def async_get_config_entry_diagnostics(
@@ -60,6 +75,20 @@ async def async_get_config_entry_diagnostics(
             CONF_INCLUDE_UNKNOWN, coordinator.include_unknown
         ),
         "favourite_count": len(coordinator.favourite_ids),
+        "coordinator_update_success": coordinator.last_update_success,
+        "favourite_references": [
+            {
+                "provider": favourite.provider,
+                "station_id_hash": hashlib.sha256(
+                    f"{entry.entry_id}:{favourite.provider}:{favourite.provider_id}".encode()
+                ).hexdigest()[:16],
+                "presence": _favourite_presence(coordinator, favourite.provider_id),
+                "missing_refresh_count": coordinator.missing_refresh_count(
+                    favourite.provider_id
+                ),
+            }
+            for favourite in coordinator.favourites
+        ],
         "discovered_stations": fresh_station_count,
         "retained_stations": len(coordinator.data or {}) - fresh_station_count,
         "last_successful_update": (
