@@ -1284,9 +1284,8 @@ async def test_favorite_status_setup_requires_an_active_platform(
 @pytest.mark.asyncio
 async def test_favorite_status_distinguishes_provider_failure(hass, sample_stations):
     station = sample_stations[0]
-    provider = FakeProvider(
-        [(station,), ChargingProviderError("offline"), (station,)]
-    )
+    snapshots = [(station,), ChargingProviderError("offline"), (station,)]
+    provider = FakeProvider(snapshots)
     coordinator = _coordinator(
         hass, station, provider=provider, favourites=(_favourite_reference(station),)
     )
