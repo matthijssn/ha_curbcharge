@@ -379,11 +379,17 @@ async def test_belgium_favourite_placeholder_keeps_parent_device(
     assert _has_device(device_registry, entry.entry_id, parent_identifier)
 
     provider.snapshots.extend([(), (), ()])
+    provider_call_count = len(provider.station_calls)
     hass.config_entries.async_update_entry(entry, options={})
     await hass.async_block_till_done()
-    for _ in range(2):
+    assert len(provider.station_calls) == provider_call_count
+    assert entry.runtime_data.data[station.provider_id].is_stale is False
+    for refresh in range(3):
         await entry.runtime_data.async_refresh()
         await hass.async_block_till_done()
+        if refresh < 2:
+            assert _has_device(device_registry, entry.entry_id, station_identifier)
+            assert _has_device(device_registry, entry.entry_id, parent_identifier)
 
     assert not _has_device(device_registry, entry.entry_id, station_identifier)
     assert not _has_device(device_registry, entry.entry_id, parent_identifier)
@@ -421,14 +427,14 @@ async def test_unfavouriting_uses_existing_device_removal_grace(
     hass.config_entries.async_update_entry(entry, options={})
     await hass.async_block_till_done()
     assert entry.runtime_data is coordinator
-    assert entry.runtime_data.data[station.provider_id].is_stale
+    assert len(provider.station_calls) == 1
+    assert not entry.runtime_data.data[station.provider_id].is_stale
 
-    await coordinator.async_refresh()
-    await hass.async_block_till_done()
-    assert _has_device(device_registry, entry.entry_id, identifier)
-
-    await coordinator.async_refresh()
-    await hass.async_block_till_done()
+    for refresh in range(3):
+        await coordinator.async_refresh()
+        await hass.async_block_till_done()
+        if refresh < 2:
+            assert _has_device(device_registry, entry.entry_id, identifier)
     assert not _has_device(device_registry, entry.entry_id, identifier)
 
 

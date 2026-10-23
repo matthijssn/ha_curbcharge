@@ -415,6 +415,27 @@ class FavouriteStationReference:
     longitude: float
     location_id: str | None = None
 
+    @classmethod
+    def from_station(cls, station: ChargingStation) -> FavouriteStationReference:
+        """Create a stable favorite reference from a discovered station."""
+        location = station.location
+        return cls(
+            provider=station.provider,
+            provider_id=station.provider_id,
+            name=station.provider_id,
+            latitude=station.latitude,
+            longitude=station.longitude,
+            location_id=(
+                location.provider_id
+                if (
+                    location is not None
+                    and location.provider == station.provider
+                    and location.provider_id != station.provider_id
+                )
+                else None
+            ),
+        )
+
     def as_config(self) -> dict[str, object]:
         """Return stable identity and lookup hints, never mutable display data."""
         return {

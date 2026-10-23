@@ -354,9 +354,16 @@ updates resume when valid coordinates return.
 
 ## Services
 
-CurbCharge is read-only and registers no custom services, device triggers, or
-conditions. The Blueprint uses the existing Status summary state and a
-notification action selected by the user.
+`curbcharge.add_favorite` saves a freshly discovered station, and
+`curbcharge.remove_favorite` removes a saved favorite. Both actions require an
+administrator and a loaded CurbCharge configuration entry. Add requires a
+station ID from its latest successful nearby search; duplicate adds do nothing.
+Remove also works when the saved station is stale or missing from the provider.
+Favorite-only changes update entities without an immediate provider request;
+the regular polling schedule handles future data. These actions do not send
+notifications. CurbCharge does not provide device triggers or conditions. The
+Blueprint uses the existing Status summary state and a notification action
+selected by the user.
 
 ## Troubleshooting
 

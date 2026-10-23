@@ -10,7 +10,7 @@ from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import config_validation as cv
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.curbcharge import config_flow
+from custom_components.curbcharge import config_flow, schema
 from custom_components.curbcharge.const import (
     CONF_API_TOKEN,
     CONF_CONNECTOR_TYPES,
@@ -65,9 +65,9 @@ def test_flow_schema_module_falls_back_to_voluptuous(monkeypatch):
             raise ModuleNotFoundError("No module named 'probatio'", name="probatio")
         return voluptuous
 
-    monkeypatch.setattr(config_flow, "import_module", import_schema_module)
+    monkeypatch.setattr(schema, "import_module", import_schema_module)
 
-    assert config_flow._load_flow_schema_module() is voluptuous
+    assert schema.load_schema_module() is voluptuous
     assert imports == ["probatio", "voluptuous"]
 
 
@@ -78,10 +78,10 @@ def test_flow_schema_module_propagates_unrelated_import_errors(monkeypatch):
             "No module named 'broken_dependency'", name="broken_dependency"
         )
 
-    monkeypatch.setattr(config_flow, "import_module", fail_import)
+    monkeypatch.setattr(schema, "import_module", fail_import)
 
     with pytest.raises(ModuleNotFoundError, match="broken_dependency"):
-        config_flow._load_flow_schema_module()
+        schema.load_schema_module()
 
 
 def test_discovery_filter_schema_serializes_with_probatio():

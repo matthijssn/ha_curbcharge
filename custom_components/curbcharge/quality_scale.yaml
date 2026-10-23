@@ -1,7 +1,6 @@
 rules:
   action_setup:
-    status: exempt
-    comment: CurbCharge is read-only and registers no service actions.
+    status: done
   appropriate_polling: done
   brands: done
   common_modules: done
@@ -9,8 +8,7 @@ rules:
   config_flow_test_coverage: done
   dependency_transparency: done
   docs_actions:
-    status: exempt
-    comment: CurbCharge does not provide service actions.
+    status: done
   docs_conditions:
     status: exempt
     comment: CurbCharge does not provide conditions.
@@ -28,8 +26,7 @@ rules:
   test_before_setup: done
   unique_config_entry: done
   action_exceptions:
-    status: exempt
-    comment: CurbCharge does not register service actions.
+    status: done
   config_entry_unloading: done
   docs_configuration_parameters: done
   docs_installation_parameters: done

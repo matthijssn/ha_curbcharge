@@ -1,0 +1,22 @@
+add_favorite:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: curbcharge
+    station_id:
+      required: true
+      selector:
+        text:
+remove_favorite:
+  fields:
+    config_entry_id:
+      required: true
+      selector:
+        config_entry:
+          integration: curbcharge
+    station_id:
+      required: true
+      selector:
+        text:
