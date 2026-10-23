@@ -1082,7 +1082,7 @@ async def test_options_flow_saves_entity_movement_threshold(hass):
 
 
 @pytest.mark.asyncio
-async def test_options_flow_saves_favourites_by_station_name(hass, sample_stations):
+async def test_options_flow_saves_stable_favourite_identity(hass, sample_stations):
     station = sample_stations[0]
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -1121,14 +1121,13 @@ async def test_options_flow_saves_favourites_by_station_name(hass, sample_statio
         {
             "provider": station.provider,
             "provider_id": station.provider_id,
-            "name": station.address or station.name,
+            "name": station.provider_id,
             "latitude": station.latitude,
             "longitude": station.longitude,
             "location_id": None,
-            "location_name": None,
-            "location_operator": None,
         }
     ]
+    assert station.address not in str(entry.options[CONF_FAVOURITES])
 
 
 def test_favourite_options_use_readable_disambiguated_labels_and_skip_stale(
@@ -1176,8 +1175,9 @@ def test_favourite_reference_keeps_belgium_parent_identity(sample_stations):
     favourite = config_flow._favourite_reference(replace(station, location=site))
 
     assert favourite.location_id == "site-1"
-    assert favourite.location_name == "Charging site"
-    assert favourite.location_operator == "Site operator"
+    assert favourite.name == favourite.provider_id
+    assert "location_name" not in favourite.as_config()
+    assert "location_operator" not in favourite.as_config()
     assert config_flow._favourite_reference(station).location_id is None
 
 
@@ -1309,7 +1309,7 @@ def test_stale_favourite_remains_selectable_for_removal(hass):
     favourite = FavouriteStationReference(
         provider=PROVIDER_NDW_DOT_NL,
         provider_id="remote-station",
-        name="Saved charging point",
+        name="remote-station",
         latitude=52.2,
         longitude=5.2,
     )
@@ -1321,7 +1321,7 @@ def test_stale_favourite_remains_selectable_for_removal(hass):
         coordinator, (favourite,)
     )
 
-    assert options == [{"value": "remote-station", "label": "Saved charging point"}]
+    assert options == [{"value": "remote-station", "label": "remote-station"}]
     assert (
         config_flow._selected_favourites([], references, (favourite,), coordinator)
         == ()

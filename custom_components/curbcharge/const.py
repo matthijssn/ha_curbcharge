@@ -5,6 +5,7 @@ from datetime import timedelta
 from homeassistant.const import Platform
 
 DOMAIN = "curbcharge"
+CONFIG_ENTRY_VERSION = 2
 PLATFORMS = (Platform.BINARY_SENSOR, Platform.SENSOR)
 
 CONF_LOCATION_SOURCE = "location_source"

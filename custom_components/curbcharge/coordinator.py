@@ -279,11 +279,11 @@ def _favourite_placeholder(
             provider=provider,
             provider_name=provider_name,
             country_code=country_code,
-            name=favourite.location_name or favourite.name,
+            name=favourite.location_id,
             latitude=favourite.latitude,
             longitude=favourite.longitude,
-            address=favourite.location_name,
-            operator=favourite.location_operator,
+            address=None,
+            operator=None,
             last_updated=None,
         )
         if favourite.location_id is not None
@@ -291,11 +291,11 @@ def _favourite_placeholder(
     )
     return ChargingStation(
         provider_id=favourite.provider_id,
-        name=favourite.name,
+        name=favourite.provider_id,
         latitude=favourite.latitude,
         longitude=favourite.longitude,
-        address=favourite.name,
-        operator=favourite.location_operator,
+        address=None,
+        operator=None,
         distance_m=distance_m(
             latitude, longitude, favourite.latitude, favourite.longitude
         ),
