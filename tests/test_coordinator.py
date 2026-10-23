@@ -362,7 +362,11 @@ async def test_missing_saved_favourite_is_placeholder_then_recovers(
     assert placeholder.is_stale
     assert placeholder.name == favourite.provider_id
     assert placeholder.latitude == favourite.latitude
-    assert coordinator.missing_refresh_count(favourite.provider_id) == 1
+    assert coordinator.missing_refresh_count(favourite.provider_id) == 1, (
+        f"missing={coordinator._missing_refreshes!r}, "
+        f"favorites={coordinator.favourite_ids!r}, "
+        f"provider_calls={len(provider.station_calls)}"
+    )
     assert favourite.provider_id not in coordinator.removed_station_ids
 
     await coordinator.async_refresh()
