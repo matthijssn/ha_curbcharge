@@ -362,12 +362,14 @@ async def test_missing_saved_favourite_is_placeholder_then_recovers(
     assert placeholder.is_stale
     assert placeholder.name == favourite.provider_id
     assert placeholder.latitude == favourite.latitude
+    assert coordinator.missing_refresh_count(favourite.provider_id) == 1
     assert favourite.provider_id not in coordinator.removed_station_ids
 
     await coordinator.async_refresh()
 
     recovered = coordinator.data[favourite.provider_id]
     assert not recovered.is_stale
+    assert coordinator.missing_refresh_count(favourite.provider_id) == 0
     assert recovered.available_connectors == favourite.available_connectors
 
 
@@ -380,9 +382,10 @@ async def test_favourites_are_retained_but_unfavourited_stations_use_three_misse
     coordinator = _coordinator(hass, provider, favourites=(_favourite(favourite),))
     await coordinator.async_refresh()
 
-    for _ in range(2):
+    for missing_count in (1, 2):
         await coordinator.async_refresh()
         assert coordinator.data[favourite.provider_id].is_stale
+        assert coordinator.missing_refresh_count(favourite.provider_id) == missing_count
         assert coordinator.data[ordinary.provider_id].is_stale
         assert ordinary.provider_id not in coordinator.removed_station_ids
 
@@ -390,8 +393,34 @@ async def test_favourites_are_retained_but_unfavourited_stations_use_three_misse
 
     assert favourite.provider_id in coordinator.data
     assert coordinator.data[favourite.provider_id].is_stale
+    assert coordinator.missing_refresh_count(favourite.provider_id) == 3
     assert ordinary.provider_id not in coordinator.data
     assert coordinator.removed_station_ids == {ordinary.provider_id}
+
+
+@pytest.mark.asyncio
+async def test_favourite_missing_count_survives_failure_and_resets_on_recovery(
+    hass, sample_stations
+):
+    favourite = sample_stations[0]
+    provider = FakeProvider(
+        [(favourite,), (), ProviderConnectionError("offline"), (favourite,)]
+    )
+    coordinator = _coordinator(hass, provider, favourites=(_favourite(favourite),))
+
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+    assert coordinator.missing_refresh_count(favourite.provider_id) == 1
+
+    await coordinator.async_refresh()
+    assert not coordinator.last_update_success
+    assert coordinator.missing_refresh_count(favourite.provider_id) == 1
+    assert coordinator.data[favourite.provider_id].is_stale
+
+    await coordinator.async_refresh()
+    assert coordinator.last_update_success
+    assert coordinator.missing_refresh_count(favourite.provider_id) == 0
+    assert not coordinator.data[favourite.provider_id].is_stale
 
 
 @pytest.mark.asyncio

@@ -1,5 +1,6 @@
 """Tests for diagnostics privacy."""
 
+import hashlib
 import json
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -37,6 +38,7 @@ from custom_components.curbcharge.models import (
     FavouriteStationReference,
     ProviderTimestampSource,
 )
+from custom_components.curbcharge.provider import ProviderConnectionError
 from tests.conftest import FakeProvider
 from tests.test_belgium import (
     FakeResponse,
@@ -214,17 +216,7 @@ async def test_diagnostics_redact_favourite_references_and_station_details(
             CONF_SEARCH_RADIUS: 500,
             CONF_MAX_STATIONS: 10,
         },
-        options={
-            CONF_FAVOURITES: [
-                {
-                    "provider": favourite.provider,
-                    "provider_id": favourite.provider_id,
-                    "name": favourite.name,
-                    "latitude": favourite.latitude,
-                    "longitude": favourite.longitude,
-                }
-            ]
-        },
+        options={CONF_FAVOURITES: [favourite.as_config()]},
     )
     entry.runtime_data = coordinator
 
@@ -239,6 +231,82 @@ async def test_diagnostics_redact_favourite_references_and_station_details(
     assert diagnostics["discovered_stations"] == 1
     assert diagnostics["favourite_count"] == 1
     assert diagnostics["stations"] == []
+    assert diagnostics["coordinator_update_success"]
+    assert diagnostics["favourite_references"] == [
+        {
+            "provider": favourite.provider,
+            "station_id_hash": hashlib.sha256(
+                f"{entry.entry_id}:{favourite.provider}:{favourite.provider_id}".encode()
+            ).hexdigest()[:16],
+            "presence": "present",
+            "missing_refresh_count": 0,
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_favourite_diagnostics_distinguish_stale_missing_and_refresh_failure(
+    hass, sample_stations
+):
+    favourite = sample_stations[0]
+    provider = FakeProvider(
+        [
+            (favourite,),
+            (),
+            (),
+            (),
+            ProviderConnectionError("offline"),
+        ]
+    )
+    coordinator = CurbChargeCoordinator(
+        hass,
+        provider,
+        52.0,
+        5.0,
+        500,
+        10,
+        5,
+        True,
+        (
+            FavouriteStationReference(
+                provider=favourite.provider,
+                provider_id=favourite.provider_id,
+                name=favourite.provider_id,
+                latitude=favourite.latitude,
+                longitude=favourite.longitude,
+            ),
+        ),
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="favorite-freshness",
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_MANUAL,
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+        },
+    )
+    entry.runtime_data = coordinator
+
+    await coordinator.async_refresh()
+    present = await async_get_config_entry_diagnostics(hass, entry)
+    assert present["favourite_references"][0]["presence"] == "present"
+
+    await coordinator.async_refresh()
+    stale = await async_get_config_entry_diagnostics(hass, entry)
+    assert stale["favourite_references"][0]["presence"] == "stale"
+    assert stale["favourite_references"][0]["missing_refresh_count"] == 1
+
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+    missing = await async_get_config_entry_diagnostics(hass, entry)
+    assert missing["favourite_references"][0]["presence"] == "missing"
+    assert missing["favourite_references"][0]["missing_refresh_count"] == 3
+
+    await coordinator.async_refresh()
+    failed = await async_get_config_entry_diagnostics(hass, entry)
+    assert not failed["coordinator_update_success"]
+    assert failed["favourite_references"][0]["presence"] == "refresh_failed"
+    assert failed["favourite_references"][0]["missing_refresh_count"] == 3
 
 
 @pytest.mark.asyncio
