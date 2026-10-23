@@ -255,6 +255,17 @@
           "unknown": "Onbekend"
         }
       },
+      "favorite_status": {
+        "name": "Favorietstatus",
+        "state": {
+          "available": "Beschikbaar",
+          "none_available": "Geen beschikbaar",
+          "unknown": "Onbekend"
+        }
+      },
+      "favorite_summary": {
+        "name": "Favorietenoverzicht"
+      },
       "best_nearby_charger": {
         "name": "Beste laadpunt in de buurt"
       },

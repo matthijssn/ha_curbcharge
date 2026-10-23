@@ -1,5 +1,6 @@
 """Sensors for CurbCharge stations and recommendations."""
 
+import asyncio
 from collections.abc import Callable, Iterable
 from datetime import datetime
 from decimal import Decimal
@@ -12,19 +13,29 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfLength, UnitOfPower
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.entity_platform import (
+    AddEntitiesCallback,
+    EntityPlatform,
+    async_get_current_platform,
+)
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
-from .const import COUNTRY_BE, COUNTRY_NL
+from .const import COUNTRY_BE, COUNTRY_NL, MISSING_STATION_REFRESHES
 from .coordinator import (
     CurbChargeCoordinator,
     select_cheapest_station,
     select_fastest_station,
     select_nearest_station,
 )
-from .entity import CurbChargeStationEntity, setup_dynamic_station_entities
+from .entity import (
+    CurbChargeStationEntity,
+    get_or_create_location_device,
+    setup_dynamic_station_entities,
+)
 from .models import ChargingConnector, ChargingStation, ChargingTariff, TariffStatus
 
 PARALLEL_UPDATES = 0
@@ -44,6 +55,9 @@ async def async_setup_entry(
         async_add_entities,
         lambda station: create_station_sensors(coordinator, station),
     )
+    await async_setup_dynamic_favorite_status_sensors(
+        hass, entry, coordinator, async_add_entities
+    )
     async_add_entities(
         [
             BestNearbyChargerSensor(coordinator, entry),
@@ -53,6 +67,7 @@ async def async_setup_entry(
             NearbyChargingUnitsSensor(coordinator, entry),
             NearbyAvailableConnectorsSensor(coordinator, entry),
             NearbyAvailabilityPercentageSensor(coordinator, entry),
+            FavoriteSummarySensor(coordinator, entry),
         ]
     )
 
@@ -309,6 +324,81 @@ class StatusSummarySensor(CurbChargeStationEntity, SensorEntity):
         return attributes
 
 
+class FavoriteStatusSensor(CurbChargeStationEntity, SensorEntity):
+    """Expose one configured favorite's current, entry-scoped status."""
+
+    _attr_translation_key = "favorite_status"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["available", "none_available", "unknown"]
+
+    def __init__(
+        self,
+        coordinator: CurbChargeCoordinator,
+        station: ChargingStation,
+        entry: ConfigEntry[Any],
+    ) -> None:
+        super().__init__(
+            coordinator, station, unique_id_suffix=f"{entry.entry_id}_favorite_status"
+        )
+
+    @property
+    def native_value(self) -> str:
+        station = self.station
+        if station is None or station.available_connectors is None:
+            return "unknown"
+        return "available" if station.available_connectors > 0 else "none_available"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        station = self.station
+        attributes: dict[str, Any] = {
+            "is_favorite": self._station_id in self.coordinator.favourite_ids,
+            "provider_station_id": self._station_id,
+            "provider_update_success": self.coordinator.last_update_success,
+            "last_successful_update": _isoformat(
+                self.coordinator.last_successful_update
+            ),
+            "missing_refresh_count": self.coordinator.missing_refresh_count(
+                self._station_id
+            ),
+        }
+        if station is None:
+            attributes.update(
+                {
+                    "available_connectors": None,
+                    "total_connectors": None,
+                    "max_power_kw": None,
+                    "price_per_kwh": None,
+                    "currency": None,
+                    "is_stale": None,
+                    "provider_data_age_seconds": None,
+                    "provider_timestamp_source": None,
+                }
+            )
+            return attributes
+
+        tariff_attributes = _tariff_attributes(station)
+        attributes.update(
+            {
+                "available_connectors": station.available_connectors,
+                "total_connectors": station.total_connectors,
+                "max_power_kw": station.max_power_kw,
+                "price_per_kwh": tariff_attributes["price_per_kwh"],
+                "currency": tariff_attributes["currency"],
+                "is_stale": station.is_stale,
+                "provider_data_age_seconds": station.provider_data_age_seconds(
+                    dt_util.utcnow()
+                ),
+                "provider_timestamp_source": (
+                    station.last_updated_source.value
+                    if station.last_updated_source is not None
+                    else None
+                ),
+            }
+        )
+        return attributes
+
+
 def _tariff_attributes(station: ChargingStation) -> dict[str, Any]:
     """Return the station-level CPO tariff in a stable sensor attribute shape."""
     tariff = station.tariff
@@ -548,6 +638,103 @@ def _nearby_aggregate_attributes(
         "results_may_be_truncated": results_may_be_truncated,
         "last_successful_update": _isoformat(coordinator.last_successful_update),
     }
+
+
+def _favorite_summary_attributes(
+    coordinator: CurbChargeCoordinator,
+) -> dict[str, Any]:
+    """Summarize configured favorite freshness and comparable recommendations."""
+    configured_favorites = coordinator.favourites
+    station_data = coordinator.data
+    attributes: dict[str, Any] = {
+        "configured_count": len(configured_favorites),
+        "provider_update_success": coordinator.last_update_success,
+        "last_successful_update": _isoformat(coordinator.last_successful_update),
+    }
+
+    if coordinator.last_update_success and station_data is not None:
+        favorite_records = tuple(
+            station_data.get(favourite.provider_id)
+            for favourite in configured_favorites
+        )
+        favorite_stations = tuple(
+            station
+            for station in favorite_records
+            if station is not None and not station.is_stale
+        )
+        attributes.update(
+            {
+                "discovered_count": len(favorite_stations),
+                "known_count": sum(
+                    station.available_connectors is not None
+                    for station in favorite_stations
+                ),
+                "available_count": sum(
+                    station.available_connectors is not None
+                    and station.available_connectors > 0
+                    for station in favorite_stations
+                ),
+                "unknown_count": sum(
+                    station.available_connectors is None
+                    for station in favorite_stations
+                ),
+                "stale_count": sum(
+                    station is None or station.is_stale for station in favorite_records
+                ),
+                "missing_count": sum(
+                    coordinator.missing_refresh_count(favourite.provider_id)
+                    >= MISSING_STATION_REFRESHES
+                    for favourite in configured_favorites
+                ),
+            }
+        )
+    else:
+        favorite_stations = ()
+        attributes.update(
+            {
+                "discovered_count": None,
+                "known_count": None,
+                "available_count": None,
+                "unknown_count": None,
+                "stale_count": None,
+                "missing_count": None,
+            }
+        )
+
+    for key, selector in (
+        ("cheapest_available_favorite", select_cheapest_station),
+        ("nearest_available_favorite", select_nearest_station),
+        ("highest_power_available_favorite", select_fastest_station),
+    ):
+        station, reason = (
+            selector(favorite_stations)
+            if coordinator.last_update_success and station_data is not None
+            else (None, "unavailable")
+        )
+        attributes[key] = _station_selection_attributes(coordinator, station, reason)
+    return attributes
+
+
+class FavoriteSummarySensor(CoordinatorEntity[CurbChargeCoordinator], SensorEntity):
+    """Summarize favorite discovery, availability, freshness, and recommendations."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "favorite_summary"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self, coordinator: CurbChargeCoordinator, entry: ConfigEntry[Any]
+    ) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_favorite_summary"
+
+    @property
+    def native_value(self) -> int:
+        return len(self.coordinator.favourites)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return _favorite_summary_attributes(self.coordinator)
 
 
 class NearbyChargingUnitsSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEntity):
@@ -919,6 +1106,56 @@ def create_station_sensors(
             for connector in station.connectors
         ),
     ]
+
+
+async def async_setup_dynamic_favorite_status_sensors(
+    hass: HomeAssistant,
+    entry: ConfigEntry[Any],
+    coordinator: CurbChargeCoordinator,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Add or remove per-favorite entities from coordinator state only."""
+    platform = async_get_current_platform()
+    if not isinstance(platform, EntityPlatform):
+        raise RuntimeError("CurbCharge favorite sensors require an active platform")
+
+    device_registry = dr.async_get(hass)
+    entity_registry = er.async_get(hass)
+    entities_by_favorite: dict[str, FavoriteStatusSensor] = {}
+    sync_lock = asyncio.Lock()
+
+    async def sync_entities() -> None:
+        async with sync_lock:
+            stations = coordinator.data or {}
+            desired_ids = coordinator.favourite_ids & stations.keys()
+            new_entities: list[FavoriteStatusSensor] = []
+            for station_id in sorted(desired_ids - entities_by_favorite.keys()):
+                station = stations[station_id]
+                entity = FavoriteStatusSensor(coordinator, station, entry)
+                parent_device_info = get_or_create_location_device(
+                    device_registry, entry, station
+                )
+                if parent_device_info is not None:
+                    entity.attach_to_location_device(station, *parent_device_info)
+                entities_by_favorite[station_id] = entity
+                new_entities.append(entity)
+            if new_entities:
+                async_add_entities(new_entities)
+
+            for station_id in sorted(set(entities_by_favorite) - desired_ids):
+                entity = entities_by_favorite.pop(station_id)
+                entity_id = entity.entity_id
+                if entity_id is not None and entity_id in platform.entities:
+                    await platform.async_remove_entity(entity_id)
+                if entity_id is not None and entity_id in entity_registry.entities:
+                    entity_registry.async_remove(entity_id)
+
+    @callback
+    def handle_coordinator_update() -> None:
+        hass.async_create_task(sync_entities())
+
+    entry.async_on_unload(coordinator.async_add_listener(handle_coordinator_update))
+    await sync_entities()
 
 
 def _isoformat(value: datetime | None) -> str | None:

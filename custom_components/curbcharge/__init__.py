@@ -276,6 +276,7 @@ async def _async_options_updated(
         await hass.config_entries.async_reload(entry.entry_id)
         return
 
+    favourites_changed = favourites != coordinator.favourites
     coordinator.update_options(
         radius_m=radius_m,
         max_stations=max_stations,
@@ -285,6 +286,8 @@ async def _async_options_updated(
         location_movement_threshold_m=location_movement_threshold_m,
         discovery_filters=discovery_filters,
     )
+    if favourites_changed:
+        coordinator.async_update_listeners()
     await coordinator.async_request_refresh()
 
 
