@@ -291,6 +291,10 @@ async def test_favourite_diagnostics_distinguish_stale_missing_and_refresh_failu
     present = await async_get_config_entry_diagnostics(hass, entry)
     assert present["favourite_references"][0]["presence"] == "present"
 
+    coordinator.async_set_updated_data({})
+    not_discovered = await async_get_config_entry_diagnostics(hass, entry)
+    assert not_discovered["favourite_references"][0]["presence"] == "not_discovered"
+
     await coordinator.async_refresh()
     stale = await async_get_config_entry_diagnostics(hass, entry)
     assert stale["favourite_references"][0]["presence"] == "stale"
