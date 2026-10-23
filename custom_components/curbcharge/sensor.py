@@ -948,6 +948,7 @@ class BestNearbyChargerSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEn
             return attributes
         tariff = station.tariff
         attributes.update(_selection_station_data_attributes(station))
+        attributes["is_favorite"] = station.provider_id in coordinator.favourite_ids
         attributes["provider_data_age_seconds"] = station.provider_data_age_seconds(
             dt_util.utcnow()
         )
@@ -1044,6 +1045,7 @@ def _station_selection_attributes(
         return attributes
 
     attributes.update(_selection_station_data_attributes(station))
+    attributes["is_favorite"] = station.provider_id in coordinator.favourite_ids
     return attributes
 
 

@@ -25,6 +25,7 @@ const EDITOR_LABELS = {
 const TEXT = {
   en: {
     available: "Available",
+    favorite: "Favorite",
     selected: "Selected",
     noneAvailable: "None available",
     noCurrentStations: "No current stations",
@@ -65,6 +66,7 @@ const TEXT = {
   },
   nl: {
     available: "Beschikbaar",
+    favorite: "Favoriet",
     selected: "Geselecteerd",
     noneAvailable: "Geen beschikbaar",
     noCurrentStations: "Geen actuele stations",
@@ -105,6 +107,7 @@ const TEXT = {
   },
   fr: {
     available: "Disponible",
+    favorite: "Favori",
     selected: "Sélectionnée",
     noneAvailable: "Aucun disponible",
     noCurrentStations: "Aucune station actuelle",
@@ -145,6 +148,7 @@ const TEXT = {
   },
   de: {
     available: "Verfügbar",
+    favorite: "Favorit",
     selected: "Ausgewählt",
     noneAvailable: "Keine verfügbar",
     noCurrentStations: "Keine aktuellen Stationen",
@@ -335,6 +339,7 @@ export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
           ? "selected"
           : "unknown";
   const status = statusLabels[statusKey];
+  const isFavorite = attributes.is_favorite === true;
   const openStatus =
     typeof values.is_open === "boolean"
       ? values.is_open
@@ -431,6 +436,8 @@ export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
       attributes.friendly_name ||
       entity.entity_id ||
       "CurbCharge",
+    isFavorite,
+    favoriteLabel: text.favorite,
     status,
     statusKey,
     layout: options.layout,
@@ -530,6 +537,17 @@ class CurbChargeCard extends HTMLElement {
         gap: 12px;
       }
       h2 { font-size: 1.2em; line-height: 1.3; margin: 0; }
+      .favorite-indicator {
+        border: 1px solid var(--primary-color);
+        border-radius: 999px;
+        color: var(--primary-color);
+        display: inline-block;
+        font-size: 0.7em;
+        font-weight: 600;
+        margin-inline-start: 8px;
+        padding: 2px 8px;
+        vertical-align: middle;
+      }
       .status-badge {
         flex: none;
         border: 1px solid var(--divider-color);
@@ -593,6 +611,12 @@ class CurbChargeCard extends HTMLElement {
     header.className = "header";
     const title = document.createElement("h2");
     title.textContent = data.title;
+    if (data.isFavorite) {
+      const favorite = document.createElement("span");
+      favorite.className = "favorite-indicator";
+      favorite.textContent = data.favoriteLabel;
+      title.append(favorite);
+    }
     const status = document.createElement("span");
     status.className = `status-badge status-${data.statusKey}`;
     status.setAttribute("role", "status");

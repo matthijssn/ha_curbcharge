@@ -805,6 +805,71 @@ test("renders keyboard-accessible details collapsed by default", () => {
   assert.equal(haCard.children[0].children[1].attributes.get("role"), "status");
 });
 
+test("renders a localized text favorite indicator only for explicit favorites", () => {
+  const labels = {
+    en: "Favorite",
+    nl: "Favoriet",
+    fr: "Favori",
+    de: "Favorit",
+  };
+  const sources = [
+    {
+      entity_id: "sensor.station_status_summary",
+      state: "unknown",
+      attributes: { provider_station_id: "station-1", is_favorite: true },
+    },
+    {
+      entity_id: "sensor.best_nearby_charger",
+      state: "Station One",
+      attributes: {
+        result_status: "selected",
+        provider_station_id: "station-1",
+        is_favorite: true,
+      },
+    },
+    {
+      entity_id: "sensor.station_favorite_status",
+      state: "unknown",
+      attributes: { provider_station_id: "station-1", is_favorite: true },
+    },
+  ];
+
+  for (const source of sources) {
+    assert.equal(cardModule.buildCardData(source, { language: "en" }).isFavorite, true);
+  }
+
+  for (const favoriteState of [false, null, "true", undefined]) {
+    const attributes = { provider_station_id: "station-1" };
+    if (favoriteState !== undefined) {
+      attributes.is_favorite = favoriteState;
+    }
+    assert.equal(
+      cardModule.buildCardData(
+        {
+          entity_id: "sensor.station_status_summary",
+          state: "available",
+          attributes,
+        },
+        { language: "en" },
+      ).isFavorite,
+      false,
+    );
+  }
+
+  const Card = elements.get("curbcharge-card");
+  for (const [language, label] of Object.entries(labels)) {
+    const entity = sources[2];
+    const card = new Card();
+    card.setConfig({ entity: entity.entity_id });
+    card.hass = { language, states: { [entity.entity_id]: entity } };
+
+    const header = card.shadowRoot.children[1].children[0];
+    const title = header.children[0];
+    assert.ok(visibleText(title).includes(label));
+    assert.equal(header.children[1].attributes.get("role"), "status");
+  }
+});
+
 test("keeps availability separate and localizes status labels", () => {
   const state = {
     entity_id: "sensor.station_status_summary",
@@ -888,12 +953,14 @@ test("shows unavailable station state without reusing stale measurements", () =>
         available_connectors: 3,
         price_per_kwh: 0.4,
         currency: "EUR",
+        is_favorite: true,
       },
     },
     { language: "en" },
   );
 
   assert.equal(data.status, "Unavailable");
+  assert.equal(data.isFavorite, true);
   assert.deepEqual(
     [...data.primaryRows, ...data.detailsRows].map(([, value]) => value),
     Array(11).fill("Unknown"),

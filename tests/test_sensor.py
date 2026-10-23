@@ -753,13 +753,16 @@ def test_best_nearby_sensor_exposes_selection_reason(hass, sample_stations, capl
         sample_stations[0],
         tariff=ChargingTariff("EUR", Decimal("0.42"), None, None, None, "test"),
     )
-    coordinator = _coordinator(hass, station)
+    coordinator = _coordinator(
+        hass, station, favourites=(_favourite_reference(station),)
+    )
     coordinator.last_successful_update = datetime(2025, 1, 2, 3, 4, 5, tzinfo=UTC)
     entry = MockConfigEntry(domain=DOMAIN, unique_id="hashed-area")
     sensor = BestNearbyChargerSensor(coordinator, entry)
     attributes = sensor.extra_state_attributes
 
     assert sensor.native_value == station.name
+    assert attributes["is_favorite"] is True
     assert attributes["result_status"] == "selected"
     assert attributes["station_id"] == station.provider_id
     assert attributes["provider_station_id"] == station.provider_id
@@ -1021,6 +1024,7 @@ def test_selection_sensors_report_station_details_and_reasons(hass, sample_stati
             "reason": reason,
             "last_updated": "2025-01-02T03:04:05+00:00",
             "last_successful_update": "2025-01-02T03:04:05+00:00",
+            "is_favorite": station.provider_id in coordinator.favourite_ids,
             "station_id": station.provider_id,
             "provider_station_id": station.provider_id,
             "provider": station.provider,
