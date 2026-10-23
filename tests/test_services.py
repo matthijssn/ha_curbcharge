@@ -170,6 +170,10 @@ async def test_favorite_services_validate_station_ids(
     assert err.value.translation_key == "invalid_station_id"
 
     with pytest.raises(ServiceValidationError) as err:
+        await _call_service(hass, SERVICE_REMOVE_FAVORITE, entry.entry_id, "  ")
+    assert err.value.translation_key == "invalid_station_id"
+
+    with pytest.raises(ServiceValidationError) as err:
         await _call_service(
             hass, SERVICE_REMOVE_FAVORITE, entry.entry_id, station.provider_id
         )
