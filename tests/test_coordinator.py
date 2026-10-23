@@ -360,7 +360,7 @@ async def test_missing_saved_favourite_is_placeholder_then_recovers(
 
     placeholder = coordinator.data[favourite.provider_id]
     assert placeholder.is_stale
-    assert placeholder.name == favourite.name
+    assert placeholder.name == favourite.provider_id
     assert placeholder.latitude == favourite.latitude
     assert favourite.provider_id not in coordinator.removed_station_ids
 
