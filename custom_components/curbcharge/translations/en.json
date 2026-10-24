@@ -378,6 +378,9 @@
       "fastest_available_charger": {
         "name": "Fastest available charger"
       },
+      "top_nearby_chargers": {
+        "name": "Top nearby chargers"
+      },
       "nearby_charging_units": {
         "name": "Nearby charging units"
       },

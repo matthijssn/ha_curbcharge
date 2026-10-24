@@ -38,6 +38,7 @@ from .entity import (
 from .models import ChargingConnector, ChargingStation, ChargingTariff, TariffStatus
 
 PARALLEL_UPDATES = 0
+_TOP_NEARBY_LIMIT = 5
 
 
 async def async_setup_entry(
@@ -60,6 +61,7 @@ async def async_setup_entry(
     async_add_entities(
         [
             BestNearbyChargerSensor(coordinator, entry),
+            TopNearbyChargersSensor(coordinator, entry),
             NearestAvailableChargerSensor(coordinator, entry),
             CheapestAvailableChargerSensor(coordinator, entry),
             FastestAvailableChargerSensor(coordinator, entry),
@@ -516,6 +518,31 @@ def _best_nearby_result_status(
     return "none_available"
 
 
+def _selection_result_status(
+    coordinator: CurbChargeCoordinator,
+    recommendation: RecommendationResult,
+) -> str:
+    """Describe why an alternative charger selection has or lacks a result."""
+    if not coordinator.last_update_success or recommendation.reason == "unavailable":
+        return "unavailable"
+    if recommendation.station is not None:
+        return "selected"
+    if recommendation.reason in ("no_known_price", "mixed_currencies"):
+        return "no_comparable_price"
+    if recommendation.reason in ("no_positive_power", "no_known_distance"):
+        return recommendation.reason
+
+    current_stations = _current_stations(coordinator)
+    if not current_stations:
+        return "no_current_stations"
+    if any(
+        station.has_available_connectors is None or station.available_connectors is None
+        for station in current_stations
+    ):
+        return "unknown_availability"
+    return "none_available"
+
+
 class _AvailabilityPercentageSummary(NamedTuple):
     available_connectors: int | None
     total_connectors: int | None
@@ -961,6 +988,56 @@ class BestNearbyChargerSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEn
         return attributes
 
 
+class TopNearbyChargersSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEntity):
+    """Count and list the five highest-ranked currently available stations."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "top_nearby_chargers"
+
+    def __init__(
+        self, coordinator: CurbChargeCoordinator, entry: ConfigEntry[Any]
+    ) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = (
+            f"{entry.unique_id or entry.entry_id}_top_nearby_chargers"
+        )
+
+    @property
+    def native_value(self) -> int | None:
+        recommendations = _top_nearby_recommendations(self.coordinator)
+        return None if recommendations is None else len(recommendations)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        coordinator = self.coordinator
+        results = (
+            coordinator.recommendation_results
+            if coordinator.last_update_success
+            else None
+        )
+        best = results.best_nearby if results is not None else None
+        last_successful_update = _isoformat(coordinator.last_successful_update)
+        reason = (
+            best.reason
+            if best is not None and best.reason is not None
+            else "no_available_station"
+            if coordinator.last_update_success
+            else "unavailable"
+        )
+        return {
+            "result_status": _best_nearby_result_status(
+                coordinator, best.station if best is not None else None
+            ),
+            "reason": reason,
+            "last_updated": last_successful_update,
+            "last_successful_update": last_successful_update,
+            "best_nearby_candidate_count": (
+                best.best_nearby_candidate_count if best is not None else None
+            ),
+            "recommendations": _top_nearby_recommendations(coordinator),
+        }
+
+
 class _SelectedChargerSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEntity):
     """Base for deterministic integration-level charger selections."""
 
@@ -993,7 +1070,11 @@ class _SelectedChargerSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEnt
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return _station_selection_attributes(self.coordinator, self._selection())
+        recommendation = self._selection()
+        return {
+            **_station_selection_attributes(self.coordinator, recommendation),
+            "result_status": _selection_result_status(self.coordinator, recommendation),
+        }
 
 
 class NearestAvailableChargerSensor(_SelectedChargerSensor):
@@ -1046,6 +1127,52 @@ def _station_selection_attributes(
     attributes.update(_selection_station_data_attributes(station))
     attributes["is_favorite"] = station.provider_id in coordinator.favourite_ids
     return attributes
+
+
+def _top_nearby_recommendations(
+    coordinator: CurbChargeCoordinator,
+) -> list[dict[str, Any]] | None:
+    """Build a bounded list from the coordinator's cached Best nearby ranks."""
+    results = (
+        coordinator.recommendation_results if coordinator.last_update_success else None
+    )
+    if results is None:
+        return None
+
+    ranked: list[tuple[int, float, int, ChargingStation]] = []
+    for station in _current_stations(coordinator) or ():
+        rank, score, candidate_count = coordinator.best_nearby_rank_for(station)
+        if rank is not None and score is not None and candidate_count is not None:
+            ranked.append((rank, score, candidate_count, station))
+    ranked.sort(key=lambda recommendation: recommendation[0])
+
+    recommendations: list[dict[str, Any]] = []
+    for rank, score, candidate_count, station in ranked[:_TOP_NEARBY_LIMIT]:
+        payload = _station_selection_attributes(
+            coordinator,
+            RecommendationResult(
+                station, "best_nearby_rank", rank, score, candidate_count
+            ),
+        )
+        payload.update(
+            {
+                "rank": rank,
+                "score": score,
+                "score_components": {
+                    key: payload[key]
+                    for key in (
+                        "price_per_kwh",
+                        "currency",
+                        "distance_m",
+                        "available_connectors",
+                        "max_power_kw",
+                    )
+                },
+                "ranking_reason": results.best_nearby.reason,
+            }
+        )
+        recommendations.append(payload)
+    return recommendations
 
 
 def _best_nearby_rank_attributes(

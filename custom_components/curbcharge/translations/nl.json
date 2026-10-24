@@ -378,6 +378,9 @@
       "fastest_available_charger": {
         "name": "Snelste beschikbare laadpunt"
       },
+      "top_nearby_chargers": {
+        "name": "Top laadpunten in de buurt"
+      },
       "nearby_charging_units": {
         "name": "Laadpunten in de buurt"
       },

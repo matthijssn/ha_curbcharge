@@ -16,6 +16,9 @@
       "best_nearby_charger": {
         "default": "mdi:ev-station"
       },
+      "top_nearby_chargers": {
+        "default": "mdi:format-list-numbered"
+      },
       "status_summary": {
         "default": "mdi:ev-station-outline",
         "state": {

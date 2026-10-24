@@ -216,9 +216,10 @@ Each charging point is one Home Assistant device. CurbCharge creates:
   update, and nearest, cheapest, and highest-power available-favourite
   recommendations. Each recommendation uses the shared station payload; the
   cheapest result is empty when prices span multiple currencies.
-- Integration-level **Best nearby charger**, **Nearest available charger**,
-  **Cheapest available charger**, **Fastest available charger**, **Nearby
-  charging units**, and **Nearby available connectors** sensors. The
+- Integration-level **Best nearby charger**, **Top nearby chargers**,
+  **Nearest available charger**, **Cheapest available charger**,
+  **Fastest available charger**, **Nearby charging units**, and **Nearby
+  available connectors** sensors. The
   charging-unit count covers
   current, non-stale records in that entry's configured search area (NDW
   charge-point records in the Netherlands and EVSEs in Belgium), not physical
@@ -306,6 +307,18 @@ score, and candidate count are unknown. Existing station attributes such as
 inputs; unknown inputs stay null, not zero. Provider data age is not a scoring
 input. These sensors use cached coordinator results and make no extra provider
 requests.
+
+The **Top nearby chargers** sensor uses that same backend ranking and returns
+at most five stations, independent of the nearby-station limit. Its state is
+the number of returned items; its `recommendations` attribute is `[]` after a
+successful empty update and `null` after a failed update. Each item includes
+the selected-station payload, one-based rank, candidate-relative score,
+comparison components, and a stable ranking reason. No per-rank entities or
+provider requests are created. Best and alternative selection sensors expose
+`result_status` values such as `selected`, `unavailable`,
+`no_current_stations`, `unknown_availability`, and `none_available`;
+Cheapest can also report `no_comparable_price`, Fastest
+`no_positive_power`, and Nearest `no_known_distance`.
 
 When a tracked search center moves, newly matching stations are added on the
 next successful refresh. A non-favourite station absent from three consecutive
