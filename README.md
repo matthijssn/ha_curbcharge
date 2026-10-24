@@ -5,6 +5,9 @@ manually configured location, or a tracked Home Assistant entity. It creates
 one device per charging point and reports provider-supplied availability,
 connector counts, power, distance, operator, tariff data when unambiguous, and
 a best-nearby recommendation.
+Favorites are scoped to a config entry and can be managed with admin-only
+actions, monitored with favorite sensors, and shown in the bundled card. See
+the [favorite services and automation guide](docs/dashboards-and-automations.md#favorite-services-and-automations).
 
 ## Requirements
 

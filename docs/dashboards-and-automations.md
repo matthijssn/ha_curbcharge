@@ -190,7 +190,7 @@ condition:
       {{ trigger.to_state is not none
          and trigger.to_state.state not in ['unknown', 'unavailable'] }}
 action:
-  - service: persistent_notification.create
+  - service: notify.notify
     data:
       title: Cheapest available charger
       message: >
@@ -203,6 +203,193 @@ mode: single
 
 The values are recalculated with the regular coordinator refresh, so an
 automation responds to poll updates rather than every provider or GPS event.
+
+### Favorite services and automations
+
+Favorites belong to one CurbCharge config entry. The administrator-only
+`curbcharge.add_favorite` and `curbcharge.remove_favorite` actions require
+`config_entry_id` for a loaded CurbCharge entry and a provider-local
+`station_id`; do not pass a Home Assistant entity ID as the station ID. In the
+action UI, select the config entry and enter the provider station ID. In YAML,
+replace the placeholders:
+
+```yaml
+sequence:
+  - service: curbcharge.add_favorite
+    data:
+      config_entry_id: "YOUR_CONFIG_ENTRY_ID"
+      station_id: "PROVIDER_LOCAL_STATION_ID"
+```
+
+Add accepts a station only when it was freshly discovered in that entry's last
+successful nearby search; a duplicate add is a no-op. An invalid/unloaded entry
+or a station that is not freshly discovered returns a visible validation
+error. Remove also accepts a saved favorite that has become stale or is
+confirmed missing:
+
+```yaml
+sequence:
+  - service: curbcharge.remove_favorite
+    data:
+      config_entry_id: "YOUR_CONFIG_ENTRY_ID"
+      station_id: "PROVIDER_LOCAL_STATION_ID"
+```
+
+A membership-only change updates the favorite sensors without an immediate
+provider request; the next regular coordinator poll refreshes provider data.
+The services do not call providers or notification actions.
+
+Each saved favorite has a config-entry-scoped **Favorite status** sensor on
+its station device. Its state is `available` only when a positive connector
+count is known, `none_available` when the known count is zero, and `unknown`
+when availability is not known. Stale provider data or a failed refresh makes
+the entity `unavailable`; `is_stale`, `provider_update_success`, and
+`missing_refresh_count` distinguish these cases. Numeric attributes include
+`available_connectors`, `total_connectors`, `max_power_kw`, `price_per_kwh`,
+`currency`, and `provider_data_age_seconds`.
+
+The entry-level **Favorite summary** sensor has the configured favorite count
+as its state. Its attributes report configured, discovered, known,
+available, unknown, stale, and confirmed-missing favorite counts, plus
+`last_successful_update`. `discovered_count` counts fresh provider results;
+`known_count`, `available_count`, and `unknown_count` count favorite stations,
+not connector units. A favorite becomes confirmed missing after three
+consecutive successful omissions; failed refreshes do not increment that
+count. The `nearest_available_favorite`, `cheapest_available_favorite`, and
+`highest_power_available_favorite` attributes use the same station payload as
+the other selection sensors. The cheapest result is empty when the available
+favorites have mixed currencies; stale and unknown values are not treated as
+zero.
+
+Availability thresholds live in automations, not CurbCharge configuration.
+For example, respond to either a known zero or unknown count becoming
+positively available, while deliberately excluding recovery from an
+unavailable provider:
+
+```yaml
+alias: Notify when a favorite becomes available
+trigger:
+  - platform: state
+    entity_id: sensor.your_favorite_status
+    from: "none_available"
+    to: "available"
+    id: known_zero
+  - platform: state
+    entity_id: sensor.your_favorite_status
+    from: "unknown"
+    to: "available"
+    id: unknown_to_positive
+action:
+  - service: notify.notify
+    data:
+      message: >
+        Favorite {{ state_attr(trigger.entity_id, 'provider_station_id') }}
+        now reports
+        {{ state_attr(trigger.entity_id, 'available_connectors') }}
+        available connectors.
+mode: single
+```
+
+Use numeric-state triggers on `available_connectors` for connector thresholds.
+The conditions below ensure the reading is current and known:
+
+```yaml
+alias: Notify when a favorite has more than two connectors
+trigger:
+  - platform: numeric_state
+    entity_id: sensor.your_favorite_status
+    attribute: available_connectors
+    above: 2
+condition:
+  - condition: template
+    value_template: >
+      {{ is_state('sensor.your_favorite_status', 'available')
+         and state_attr('sensor.your_favorite_status', 'provider_update_success') is true
+         and state_attr('sensor.your_favorite_status', 'is_stale') is false }}
+action:
+  - service: notify.notify
+    data:
+      message: "A favorite now reports more than two available connectors."
+mode: single
+```
+
+For two or fewer connectors, use `below: 3`; this includes a known zero but
+does not confuse unknown data with zero:
+
+```yaml
+alias: Notify when a favorite has two or fewer connectors
+trigger:
+  - platform: numeric_state
+    entity_id: sensor.your_favorite_status
+    attribute: available_connectors
+    below: 3
+condition:
+  - condition: template
+    value_template: >
+      {{ states('sensor.your_favorite_status') in ['available', 'none_available']
+         and state_attr('sensor.your_favorite_status', 'provider_update_success') is true
+         and state_attr('sensor.your_favorite_status', 'is_stale') is false }}
+action:
+  - service: notify.notify
+    data:
+      message: "A favorite now reports two or fewer available connectors."
+mode: single
+```
+
+Price automations should check the expected currency as well as the threshold.
+For a EUR price below `0.30` per kWh:
+
+```yaml
+alias: Notify when a favorite drops below 0.30 EUR per kWh
+trigger:
+  - platform: numeric_state
+    entity_id: sensor.your_favorite_status
+    attribute: price_per_kwh
+    below: 0.30
+condition:
+  - condition: template
+    value_template: >
+      {{ is_state('sensor.your_favorite_status', 'available')
+         and state_attr('sensor.your_favorite_status', 'currency') == 'EUR'
+         and state_attr('sensor.your_favorite_status', 'provider_update_success') is true
+         and state_attr('sensor.your_favorite_status', 'is_stale') is false }}
+action:
+  - service: notify.notify
+    data:
+      message: >
+        Favorite price is
+        {{ state_attr('sensor.your_favorite_status', 'price_per_kwh') }} EUR/kWh.
+mode: single
+```
+
+To report a confirmed missing favorite without treating a provider outage as
+a miss, wait for the third successful omission and require both freshness
+flags:
+
+```yaml
+alias: Notify when a favorite is confirmed missing
+trigger:
+  - platform: template
+    value_template: >
+      {{ is_state('sensor.your_favorite_status', 'unavailable')
+         and state_attr('sensor.your_favorite_status', 'provider_update_success') is true
+         and state_attr('sensor.your_favorite_status', 'is_stale') is true
+         and state_attr('sensor.your_favorite_status', 'missing_refresh_count') == 3 }}
+action:
+  - service: notify.notify
+    data:
+      message: >
+        Favorite
+        {{ state_attr('sensor.your_favorite_status', 'provider_station_id') }}
+        was missing in three successful refreshes.
+mode: single
+```
+
+These snippets use `notify.notify` only as an example of a user-owned action;
+replace it with a notification target configured in your Home Assistant.
+CurbCharge never calls notification services. Favorites are uncapped; many
+remote NDW favorites can add rate-limited lookups and lengthen a refresh. See
+[Data updates](usage.md#data-updates) for provider timing details.
 
 ### Availability notifications
 
@@ -239,7 +426,7 @@ trigger:
     from: "none_available"
     to: "available"
 action:
-  - service: persistent_notification.create
+  - service: notify.notify
     data:
       title: Charging station available
       message: "{{ trigger.to_state.attributes.station_name }} now reports an available connector."
@@ -297,7 +484,7 @@ condition:
          and trigger.to_state.state in ['on', 'off']
          and trigger.from_state.state != trigger.to_state.state }}
 action:
-  - service: persistent_notification.create
+  - service: notify.notify
     data:
       title: Station availability changed
       message: >

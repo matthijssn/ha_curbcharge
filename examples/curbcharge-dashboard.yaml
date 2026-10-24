@@ -20,6 +20,10 @@ views:
             name: Recommendation status
           - type: attribute
             entity: sensor.your_best_nearby_charger
+            attribute: is_favorite
+            name: Favorite
+          - type: attribute
+            entity: sensor.your_best_nearby_charger
             attribute: address
             name: Address
           - type: attribute
@@ -61,3 +65,51 @@ views:
           - entity: sensor.your_nearby_charging_units
           - entity: sensor.your_nearby_available_connectors
           - entity: sensor.your_nearby_availability_percentage
+      - type: entities
+        title: Favorites
+        show_header_toggle: false
+        entities:
+          - entity: sensor.your_favorite_summary
+            name: Favorite summary
+          - type: attribute
+            entity: sensor.your_favorite_summary
+            attribute: configured_count
+            name: Configured favorites
+          - type: attribute
+            entity: sensor.your_favorite_summary
+            attribute: discovered_count
+            name: Freshly discovered favorites
+          - type: attribute
+            entity: sensor.your_favorite_summary
+            attribute: available_count
+            name: Favorites with available connectors
+          - type: attribute
+            entity: sensor.your_favorite_summary
+            attribute: unknown_count
+            name: Favorites with unknown availability
+          - type: attribute
+            entity: sensor.your_favorite_summary
+            attribute: stale_count
+            name: Stale or undiscovered favorites
+          - type: attribute
+            entity: sensor.your_favorite_summary
+            attribute: missing_count
+            name: Confirmed missing favorites
+          - entity: sensor.your_favorite_status
+            name: Selected favorite status
+          - type: attribute
+            entity: sensor.your_favorite_status
+            attribute: available_connectors
+            name: Favorite available connectors
+          - type: attribute
+            entity: sensor.your_favorite_status
+            attribute: price_per_kwh
+            name: Favorite price per kWh
+          - type: attribute
+            entity: sensor.your_favorite_status
+            attribute: currency
+            name: Favorite currency
+          - type: attribute
+            entity: sensor.your_favorite_status
+            attribute: is_stale
+            name: Favorite data is stale
