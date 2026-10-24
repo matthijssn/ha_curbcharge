@@ -102,6 +102,114 @@ def test_mixed_currencies_are_not_compared(sample_stations):
     assert reason == "shortest_distance_mixed_currencies"
 
 
+def test_best_nearby_reports_known_price_when_another_price_is_missing(
+    sample_stations,
+):
+    priced = _candidate(
+        sample_stations[0],
+        provider_id="NL-PRICED",
+        distance=100,
+        power=50,
+        price="0.20",
+    )
+    unpriced = _candidate(
+        sample_stations[1],
+        provider_id="NL-UNPRICED",
+        distance=10,
+        power=50,
+        price=None,
+    )
+
+    station, reason = recommend_station((unpriced, priced))
+
+    assert station == priced
+    assert reason == "known_price_per_kwh"
+
+
+def test_best_nearby_reports_equal_price_distance_tiebreak(sample_stations):
+    farther = _candidate(
+        sample_stations[0],
+        provider_id="NL-FARTHER",
+        distance=20,
+        power=50,
+        price="0.20",
+    )
+    closer = _candidate(
+        sample_stations[1],
+        provider_id="NL-CLOSER",
+        distance=10,
+        power=50,
+        price="0.20",
+    )
+
+    station, reason = recommend_station((farther, closer))
+
+    assert station == closer
+    assert reason == "shortest_distance_equal_prices"
+
+
+def test_best_nearby_reports_power_tiebreak(sample_stations):
+    slower = _candidate(
+        sample_stations[0],
+        provider_id="NL-SLOWER",
+        distance=10,
+        power=50,
+        price="0.20",
+    )
+    faster = _candidate(
+        sample_stations[1],
+        provider_id="NL-FASTER",
+        distance=10,
+        power=150,
+        price="0.20",
+    )
+
+    station, reason = recommend_station((slower, faster))
+
+    assert station == faster
+    assert reason == "higher_maximum_power"
+
+
+def test_best_nearby_reports_stable_identity_tiebreaks(sample_stations):
+    euro = _candidate(
+        sample_stations[0],
+        provider_id="NL-A",
+        distance=10,
+        power=50,
+        price="0.20",
+        currency="EUR",
+    )
+    dollar = _candidate(
+        sample_stations[1],
+        provider_id="NL-Z",
+        distance=10,
+        power=50,
+        price="0.10",
+        currency="USD",
+    )
+    station, reason = recommend_station((dollar, euro))
+    assert station == euro
+    assert reason == "stable_station_id_mixed_currencies"
+
+    known_euro = _candidate(
+        sample_stations[0],
+        provider_id="NL-A",
+        distance=10,
+        power=50,
+        price="0.20",
+    )
+    equal_euro = _candidate(
+        sample_stations[1],
+        provider_id="NL-Z",
+        distance=10,
+        power=50,
+        price="0.20",
+    )
+    station, reason = recommend_station((equal_euro, known_euro))
+    assert station == known_euro
+    assert reason == "stable_station_id"
+
+
 def test_ordering_is_deterministic_when_all_other_values_tie(sample_stations):
     first = replace(
         _available_station(sample_stations[0], count=2, power=50),

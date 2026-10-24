@@ -120,6 +120,8 @@ async def test_recommendations_are_cached_once_and_cleared_after_failure(
     assert not coordinator.last_update_success
     assert coordinator.recommendation_results is None
     assert coordinator.best_station is None
+    assert coordinator.best_station_reason is None
+    assert coordinator.best_nearby_rank_for(station) == (None, None, None)
 
 
 @pytest.mark.asyncio
