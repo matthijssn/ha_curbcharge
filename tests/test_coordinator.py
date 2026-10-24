@@ -8,6 +8,7 @@ import pytest
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
+from custom_components.curbcharge import coordinator as coordinator_module
 from custom_components.curbcharge.const import (
     DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
     DOMAIN,
@@ -85,6 +86,40 @@ async def test_coordinator_updates_and_adds_new_stations(hass, sample_stations):
         sample_stations[1].provider_id,
     }
     assert coordinator.last_successful_update is not None
+
+
+@pytest.mark.asyncio
+async def test_recommendations_are_cached_once_and_cleared_after_failure(
+    hass, sample_stations, monkeypatch
+):
+    station = replace(sample_stations[0], distance_m=100)
+    provider = FakeProvider([(station,), ProviderConnectionError("offline")])
+    coordinator = _coordinator(hass, provider)
+    original_evaluator = coordinator_module.evaluate_recommendations
+    evaluation_count = 0
+
+    def count_evaluations(*args, **kwargs):
+        nonlocal evaluation_count
+        evaluation_count += 1
+        return original_evaluator(*args, **kwargs)
+
+    monkeypatch.setattr(
+        coordinator_module, "evaluate_recommendations", count_evaluations
+    )
+
+    await coordinator.async_refresh()
+
+    assert evaluation_count == 1
+    assert coordinator.best_station == station
+    assert coordinator.best_station_reason == "only_available_station"
+    assert coordinator.recommendation_results is not None
+
+    await coordinator.async_refresh()
+
+    assert evaluation_count == 1
+    assert not coordinator.last_update_success
+    assert coordinator.recommendation_results is None
+    assert coordinator.best_station is None
 
 
 @pytest.mark.asyncio

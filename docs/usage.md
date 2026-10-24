@@ -258,18 +258,32 @@ unknown availability, zero connectors, and stale records do not qualify.
 **Nearest available charger** requires a known distance and chooses the
 shortest. **Cheapest available charger** ignores unpriced stations, compares
 only unambiguous station-level prices in one currency, and returns no station
-if no price is known or known prices use multiple currencies. **Fastest
-available charger** chooses the highest positive station-level `max_power_kw`.
-This is the station's highest reported connector-group power, not a claim about
-the currently available physical plug.
+if no price is known or known prices use multiple currencies. Its tie-breaks
+are shorter distance, more available connectors, higher power, then stable
+provider/station identity. **Fastest available charger** chooses the highest
+positive station-level `max_power_kw`, then shorter distance and more
+available connectors. It uses a lower known price only when powered
+candidates' prices are comparable in one currency; missing prices sort after
+known prices, and mixed currencies skip this tie-break. Stable identity breaks
+any remaining tie. Fastest power is the highest reported connector-group
+power, not a claim about the currently available physical plug.
 
-Ties are deterministic: nearest uses provider and station ID after distance;
-cheapest uses known/shorter distance after price; fastest uses distance after
-power. Provider and station ID break any remaining tie. Each selector sensor's
-state is the selected station name, or `unknown` when there is no selection.
-Attributes include station details, a stable `reason` code, and the last
-successful update time. These sensors use the existing coordinator data and
-make no extra provider requests.
+The Best nearby and alternative selector sensors expose the selected station's
+`best_nearby_rank`, `best_nearby_rank_score`, and
+`best_nearby_candidate_count`. The Status summary sensor exposes the same
+attributes for each station in the Best nearby ranking. The eligible cohort is
+fresh, in-radius stations with known positive availability; a Belgium
+status-only station may qualify even when its connector count is unknown. For
+`N` candidates, the one-based rank score is `100 * (N - rank + 1) / N`.
+Scores are relative to the current cohort; rank one scores 100, and an empty
+cohort has no rank or score and a candidate count of zero. After a failed
+refresh, recommendation snapshots are not presented as current, and rank,
+score, and candidate count are unknown. Existing station attributes such as
+`price_per_kwh`, `currency`, `distance_m`, `available_connectors`,
+`max_power_kw`, `provider`, and `provider_station_id` show the comparison
+inputs; unknown inputs stay null, not zero. Provider data age is not a scoring
+input. These sensors use cached coordinator results and make no extra provider
+requests.
 
 When a tracked search center moves, newly matching stations are added on the
 next successful refresh. A non-favourite station absent from three consecutive

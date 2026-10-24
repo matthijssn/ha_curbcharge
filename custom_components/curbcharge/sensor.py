@@ -1,7 +1,7 @@
 """Sensors for CurbCharge stations and recommendations."""
 
 import asyncio
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, NamedTuple
@@ -27,9 +27,8 @@ from homeassistant.util import dt as dt_util
 from .const import COUNTRY_BE, COUNTRY_NL, MISSING_STATION_REFRESHES
 from .coordinator import (
     CurbChargeCoordinator,
-    select_cheapest_station,
-    select_fastest_station,
-    select_nearest_station,
+    RecommendationResult,
+    RecommendationResults,
 )
 from .entity import (
     CurbChargeStationEntity,
@@ -274,6 +273,7 @@ class StatusSummarySensor(CurbChargeStationEntity, SensorEntity):
                 "provider_station_id": self._station_id,
                 "provider_data_age_seconds": None,
                 "provider_timestamp_source": None,
+                **_best_nearby_rank_attributes(self.coordinator, None),
             }
         attributes = {
             "station_name": station.name,
@@ -313,6 +313,7 @@ class StatusSummarySensor(CurbChargeStationEntity, SensorEntity):
             "evse_status": (
                 station.evse_status.value if station.evse_status is not None else None
             ),
+            **_best_nearby_rank_attributes(self.coordinator, station),
         }
         if station.tariff is None and any(
             connector.tariff_ids for connector in station.connectors
@@ -515,23 +516,6 @@ def _best_nearby_result_status(
     return "none_available"
 
 
-def _current_selection_stations(
-    coordinator: CurbChargeCoordinator,
-) -> tuple[ChargingStation, ...] | None:
-    """Return fresh provider-selected nearby stations, excluding remote favourites."""
-    stations = coordinator.data
-    if stations is None:
-        return None
-    nearby_ids = coordinator.nearby_station_ids
-    if nearby_ids is None:
-        return _current_stations(coordinator)
-    return tuple(
-        station
-        for station in stations.values()
-        if not station.is_stale and station.provider_id in nearby_ids
-    )
-
-
 class _AvailabilityPercentageSummary(NamedTuple):
     available_connectors: int | None
     total_connectors: int | None
@@ -701,17 +685,25 @@ def _favorite_summary_attributes(
             }
         )
 
-    for key, selector in (
-        ("cheapest_available_favorite", select_cheapest_station),
-        ("nearest_available_favorite", select_nearest_station),
-        ("highest_power_available_favorite", select_fastest_station),
+    results = (
+        coordinator.recommendation_results if coordinator.last_update_success else None
+    )
+    unavailable = RecommendationResult(None, "unavailable", None, None, None)
+    favorite_recommendations = (
+        results.favorite_cheapest if results is not None else unavailable,
+        results.favorite_nearest if results is not None else unavailable,
+        results.favorite_fastest if results is not None else unavailable,
+    )
+    for key, recommendation in zip(
+        (
+            "cheapest_available_favorite",
+            "nearest_available_favorite",
+            "highest_power_available_favorite",
+        ),
+        favorite_recommendations,
+        strict=True,
     ):
-        station, reason = (
-            selector(favorite_stations)
-            if coordinator.last_update_success and station_data is not None
-            else (None, "unavailable")
-        )
-        attributes[key] = _station_selection_attributes(coordinator, station, reason)
+        attributes[key] = _station_selection_attributes(coordinator, recommendation)
     return attributes
 
 
@@ -943,6 +935,10 @@ class BestNearbyChargerSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEn
             "last_successful_update": last_successful_update,
             "provider_data_age_seconds": None,
             "provider_timestamp_source": None,
+            **_best_nearby_rank_attributes(
+                coordinator,
+                station,
+            ),
         }
         if station is None:
             return attributes
@@ -969,16 +965,14 @@ class _SelectedChargerSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEnt
     """Base for deterministic integration-level charger selections."""
 
     _attr_has_entity_name = True
-    _selector: Callable[[Iterable[ChargingStation]], tuple[ChargingStation | None, str]]
+    _selector: Callable[[RecommendationResults], RecommendationResult]
     _unique_id_suffix: str
 
     def __init__(
         self,
         coordinator: CurbChargeCoordinator,
         entry: ConfigEntry[Any],
-        selector: Callable[
-            [Iterable[ChargingStation]], tuple[ChargingStation | None, str]
-        ],
+        selector: Callable[[RecommendationResults], RecommendationResult],
     ) -> None:
         super().__init__(coordinator)
         self._selector = selector
@@ -986,18 +980,20 @@ class _SelectedChargerSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEnt
             f"{entry.unique_id or entry.entry_id}_{self._unique_id_suffix}"
         )
 
-    def _selection(self) -> tuple[ChargingStation | None, str]:
-        return self._selector(_current_selection_stations(self.coordinator) or ())
+    def _selection(self) -> RecommendationResult:
+        results = self.coordinator.recommendation_results
+        if not self.coordinator.last_update_success or results is None:
+            return RecommendationResult(None, "unavailable", None, None, None)
+        return self._selector(results)
 
     @property
     def native_value(self) -> str | None:
-        station, _reason = self._selection()
+        station = self._selection().station
         return None if station is None else station.name
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        station, reason = self._selection()
-        return _station_selection_attributes(self.coordinator, station, reason)
+        return _station_selection_attributes(self.coordinator, self._selection())
 
 
 class NearestAvailableChargerSensor(_SelectedChargerSensor):
@@ -1007,7 +1003,7 @@ class NearestAvailableChargerSensor(_SelectedChargerSensor):
     _unique_id_suffix = "nearest_available_charger"
 
     def __init__(self, coordinator: CurbChargeCoordinator, entry: ConfigEntry[Any]):
-        super().__init__(coordinator, entry, select_nearest_station)
+        super().__init__(coordinator, entry, lambda results: results.nearest_available)
 
 
 class CheapestAvailableChargerSensor(_SelectedChargerSensor):
@@ -1017,7 +1013,7 @@ class CheapestAvailableChargerSensor(_SelectedChargerSensor):
     _unique_id_suffix = "cheapest_available_charger"
 
     def __init__(self, coordinator: CurbChargeCoordinator, entry: ConfigEntry[Any]):
-        super().__init__(coordinator, entry, select_cheapest_station)
+        super().__init__(coordinator, entry, lambda results: results.cheapest_available)
 
 
 class FastestAvailableChargerSensor(_SelectedChargerSensor):
@@ -1027,19 +1023,22 @@ class FastestAvailableChargerSensor(_SelectedChargerSensor):
     _unique_id_suffix = "fastest_available_charger"
 
     def __init__(self, coordinator: CurbChargeCoordinator, entry: ConfigEntry[Any]):
-        super().__init__(coordinator, entry, select_fastest_station)
+        super().__init__(coordinator, entry, lambda results: results.fastest_available)
 
 
 def _station_selection_attributes(
     coordinator: CurbChargeCoordinator,
-    station: ChargingStation | None,
-    reason: str,
+    recommendation: RecommendationResult,
 ) -> dict[str, Any]:
     """Build the common result shape for deterministic selection sensors."""
+    station = recommendation.station
     attributes: dict[str, Any] = {
-        "reason": reason,
+        "reason": recommendation.reason or "no_available_station",
         "last_updated": _isoformat(coordinator.last_successful_update),
         "last_successful_update": _isoformat(coordinator.last_successful_update),
+        "best_nearby_rank": recommendation.best_nearby_rank,
+        "best_nearby_rank_score": recommendation.best_nearby_rank_score,
+        "best_nearby_candidate_count": (recommendation.best_nearby_candidate_count),
     }
     if station is None:
         return attributes
@@ -1047,6 +1046,31 @@ def _station_selection_attributes(
     attributes.update(_selection_station_data_attributes(station))
     attributes["is_favorite"] = station.provider_id in coordinator.favourite_ids
     return attributes
+
+
+def _best_nearby_rank_attributes(
+    coordinator: CurbChargeCoordinator, station: ChargingStation | None
+) -> dict[str, int | float | None]:
+    """Expose a station's rank and candidate-relative score without coercion."""
+    if station is None:
+        results = (
+            coordinator.recommendation_results
+            if coordinator.last_update_success
+            else None
+        )
+        rank, score = None, None
+        candidate_count = (
+            results.best_nearby.best_nearby_candidate_count
+            if results is not None
+            else None
+        )
+    else:
+        rank, score, candidate_count = coordinator.best_nearby_rank_for(station)
+    return {
+        "best_nearby_rank": rank,
+        "best_nearby_rank_score": score,
+        "best_nearby_candidate_count": candidate_count,
+    }
 
 
 def _selection_station_data_attributes(station: ChargingStation) -> dict[str, Any]:

@@ -4,6 +4,7 @@ from dataclasses import replace
 from decimal import Decimal
 
 from custom_components.curbcharge.coordinator import (
+    evaluate_recommendations,
     recommend_station,
     select_cheapest_station,
     select_fastest_station,
@@ -37,6 +38,25 @@ def _with_tariff(station, currency, price):
             description=None,
             source="NDW DOT-NL",
         ),
+    )
+
+
+def _candidate(
+    station,
+    *,
+    provider_id,
+    distance,
+    power,
+    price,
+    count=1,
+    currency="EUR",
+):
+    station = replace(station, provider_id=provider_id, distance_m=distance)
+    station = _available_station(station, count=count, power=power)
+    return (
+        replace(station, tariff=None)
+        if price is None
+        else _with_tariff(station, currency, price)
     )
 
 
@@ -171,6 +191,10 @@ def test_new_selectors_require_reported_positive_connectors_and_preserve_best_ne
         status_only,
         "only_available_station",
     )
+    status_only_results = evaluate_recommendations((status_only,), (status_only,))
+    assert status_only_results.best_nearby.best_nearby_rank == 1
+    assert status_only_results.best_nearby.best_nearby_rank_score == 100
+    assert status_only_results.best_nearby.best_nearby_candidate_count == 1
     zero_connectors = _available_station(sample_stations[1], count=0)
     stale = replace(_available_station(sample_stations[1]), is_stale=True)
     for selector in (
@@ -318,3 +342,210 @@ def test_fastest_selector_requires_positive_power_and_breaks_ties_stably(
         None,
         "no_positive_power",
     )
+
+
+def test_cheapest_selector_uses_connector_count_then_power_before_identity(
+    sample_stations,
+):
+    fewer_connectors = _candidate(
+        sample_stations[0],
+        provider_id="NL-A",
+        distance=0,
+        count=1,
+        power=50,
+        price="0.20",
+    )
+    more_connectors = _candidate(
+        sample_stations[1],
+        provider_id="NL-Z",
+        distance=0,
+        count=2,
+        power=50,
+        price="0.20",
+    )
+    station, _reason = select_cheapest_station((fewer_connectors, more_connectors))
+    assert station == more_connectors
+
+    lower_power = _candidate(
+        sample_stations[0],
+        provider_id="NL-A",
+        distance=0,
+        power=50,
+        price="0.20",
+    )
+    higher_power = _candidate(
+        sample_stations[1],
+        provider_id="NL-Z",
+        distance=0,
+        power=150,
+        price="0.20",
+    )
+    station, _reason = select_cheapest_station((lower_power, higher_power))
+    assert station == higher_power
+
+
+def test_cheapest_selector_treats_zero_price_and_distance_as_known(sample_stations):
+    zero_price = _candidate(
+        sample_stations[0],
+        provider_id="NL-Z",
+        distance=10,
+        power=50,
+        price="0",
+    )
+    positive_price = _candidate(
+        sample_stations[1],
+        provider_id="NL-A",
+        distance=0,
+        power=50,
+        price="0.01",
+    )
+    station, _reason = select_cheapest_station((positive_price, zero_price))
+    assert station == zero_price
+
+    zero_distance = _candidate(
+        sample_stations[0],
+        provider_id="NL-Z",
+        distance=0,
+        power=50,
+        price="0.20",
+    )
+    positive_distance = _candidate(
+        sample_stations[1],
+        provider_id="NL-A",
+        distance=1,
+        power=50,
+        price="0.20",
+    )
+    station, _reason = select_cheapest_station((positive_distance, zero_distance))
+    assert station == zero_distance
+
+
+def test_fastest_selector_uses_connectors_and_comparable_price_tiebreaks(
+    sample_stations,
+):
+    fewer_connectors = _candidate(
+        sample_stations[0],
+        provider_id="NL-A",
+        distance=10,
+        power=150,
+        price="0.10",
+    )
+    more_connectors = _candidate(
+        sample_stations[1],
+        provider_id="NL-Z",
+        distance=10,
+        count=2,
+        power=150,
+        price="0.90",
+    )
+    station, _reason = select_fastest_station((fewer_connectors, more_connectors))
+    assert station == more_connectors
+
+    cheaper = _candidate(
+        sample_stations[0],
+        provider_id="NL-Z",
+        distance=10,
+        power=150,
+        price="0",
+    )
+    costlier = _candidate(
+        sample_stations[1],
+        provider_id="NL-A",
+        distance=10,
+        power=150,
+        price="0.10",
+    )
+    station, _reason = select_fastest_station((costlier, cheaper))
+    assert station == cheaper
+
+
+def test_fastest_selector_skips_mixed_currency_and_keeps_unknown_price_null(
+    sample_stations,
+):
+    usd = _candidate(
+        sample_stations[0],
+        provider_id="NL-A",
+        distance=10,
+        power=150,
+        price="0.50",
+        currency="USD",
+    )
+    euro = _candidate(
+        sample_stations[1],
+        provider_id="NL-Z",
+        distance=10,
+        power=150,
+        price="0.01",
+    )
+    station, _reason = select_fastest_station((euro, usd))
+    assert station == usd
+
+    unknown_price = _candidate(
+        sample_stations[0],
+        provider_id="NL-A",
+        distance=10,
+        power=150,
+        price=None,
+    )
+    known_price = _candidate(
+        sample_stations[1],
+        provider_id="NL-Z",
+        distance=10,
+        power=150,
+        price="0.20",
+    )
+    station, _reason = select_fastest_station((unknown_price, known_price))
+    assert station == known_price
+
+
+def test_recommendation_scores_are_candidate_relative_and_expose_unknowns(
+    sample_stations,
+):
+    cheapest = _candidate(
+        sample_stations[0],
+        provider_id="NL-CHEAP",
+        distance=100,
+        power=50,
+        price="0.10",
+    )
+    middle = _candidate(
+        sample_stations[1],
+        provider_id="NL-MIDDLE",
+        distance=50,
+        power=50,
+        price="0.20",
+    )
+    unpriced = _candidate(
+        sample_stations[0],
+        provider_id="NL-UNPRICED",
+        distance=0,
+        power=50,
+        price=None,
+    )
+    stations = (cheapest, middle, unpriced)
+
+    results = evaluate_recommendations(stations, stations, stations)
+
+    assert results.best_nearby.station == cheapest
+    assert results.best_nearby.reason == "lowest_price_per_kwh"
+    assert results.best_nearby.best_nearby_candidate_count == 3
+    assert results.best_nearby.best_nearby_rank == 1
+    assert results.best_nearby.best_nearby_rank_score == 100
+    assert results.nearest_available.station == unpriced
+    assert results.nearest_available.best_nearby_rank == 3
+    assert results.nearest_available.best_nearby_rank_score == 100 / 3
+    middle_identity = (
+        middle.provider.casefold(),
+        middle.provider_id.casefold(),
+        middle.provider_id,
+    )
+    assert results.best_nearby_ranks[middle_identity] == (2, 200 / 3)
+    assert results.cheapest_available.station == cheapest
+    assert results.cheapest_available.best_nearby_rank == 1
+    assert results.fastest_available.best_nearby_candidate_count == 3
+
+    empty = evaluate_recommendations((), ())
+    assert empty.best_nearby.station is None
+    assert empty.best_nearby.best_nearby_candidate_count == 0
+    assert empty.best_nearby.best_nearby_rank is None
+    assert empty.best_nearby.best_nearby_rank_score is None
