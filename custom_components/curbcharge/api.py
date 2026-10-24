@@ -41,6 +41,7 @@ from .models import (
     ChargingStation,
     ChargingTariff,
     ConnectorStatus,
+    ConnectorTypeId,
     DiscoveryFilterSettings,
     FavouriteStationReference,
     ProviderTimestampSource,
@@ -617,9 +618,17 @@ def _parse_availabilities(
                 connector_format=connector_format,
                 power_type=power_type,
                 tariff_ids=tariff_ids,
+                connector_type_id=_ndw_connector_type_id(connector_type),
             )
         )
     return tuple(connectors)
+
+
+def _ndw_connector_type_id(connector_type: str) -> ConnectorTypeId | None:
+    try:
+        return ConnectorTypeId(connector_type)
+    except ValueError:
+        return None
 
 
 def _parse_tariff(

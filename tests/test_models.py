@@ -5,16 +5,24 @@ from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
+from custom_components.curbcharge.const import NDW_CONNECTOR_TYPE_CODES
 from custom_components.curbcharge.models import (
     ChargingConnector,
     ChargingLocation,
     ConnectorStatus,
+    ConnectorTypeId,
     DiscoveryFilterSettings,
     EVSEStatus,
     FavouriteStationReference,
     ProviderTimestampSource,
     parse_favourite_references,
 )
+
+
+def test_canonical_connector_ids_cover_ndw_selector_codes():
+    assert {connector_type.value for connector_type in ConnectorTypeId} == set(
+        NDW_CONNECTOR_TYPE_CODES
+    )
 
 
 def test_station_counts_known_connector_statuses(sample_stations):

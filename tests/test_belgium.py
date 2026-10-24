@@ -20,6 +20,7 @@ from custom_components.curbcharge.belgium import (
 )
 from custom_components.curbcharge.models import (
     ConnectorStatus,
+    ConnectorTypeId,
     DiscoveryFilterSettings,
     EVSEStatus,
     FavouriteStationReference,
@@ -821,11 +822,18 @@ def test_belgium_location_parser_skips_unreadable_address_lines():
 
 def test_belgium_connector_groups_validate_declared_counts_and_power():
     connector = {"connectorType": {"value": "iec62196T2"}}
+    chademo = {"connectorType": {"value": "chademo"}}
     inferred_connectors, inferred_count = belgium._connector_groups(
-        "evse", {"connector": [connector]}
+        "evse", {"connector": [connector, chademo]}
     )
     assert inferred_count
-    assert inferred_connectors[0].count == 1
+    assert {
+        item.connector_type: item.connector_type_id for item in inferred_connectors
+    } == {
+        "iec62196T2": ConnectorTypeId.TYPE_2,
+        "chademo": ConnectorTypeId.CHADEMO,
+    }
+    assert all(item.count == 1 for item in inferred_connectors)
 
     connectors, reported = belgium._connector_groups(
         "evse",
@@ -840,6 +848,13 @@ def test_belgium_connector_groups_validate_declared_counts_and_power():
     )
     assert reported
     assert connectors[0].max_power_kw == 22
+    assert connectors[0].connector_type_id is ConnectorTypeId.TYPE_2
+
+    unknown, _ = belgium._connector_groups(
+        "evse", {"connector": [{"connectorType": {"value": "futureConnector"}}]}
+    )
+    assert unknown[0].connector_type == "futureConnector"
+    assert unknown[0].connector_type_id is None
 
     invalid_records = (
         {"numberOfConnectors": True},

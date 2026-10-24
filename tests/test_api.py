@@ -32,6 +32,7 @@ from custom_components.curbcharge.const import (
 from custom_components.curbcharge.models import (
     ChargingTariff,
     ConnectorStatus,
+    ConnectorTypeId,
     DiscoveryFilterSettings,
     FavouriteStationReference,
     ProviderTimestampSource,
@@ -577,6 +578,28 @@ def test_connector_group_ids_survive_new_groups_before_existing_groups(
     }
 
     assert original_ids < updated_ids
+
+
+def test_station_parser_assigns_canonical_connector_type_ids(sample_geojson):
+    feature = copy.deepcopy(sample_geojson["features"][0])
+    station = _station_from_feature(feature, 52.0, 5.0)
+    connectors_by_type = {
+        connector.connector_type: connector for connector in station.connectors
+    }
+
+    assert (
+        connectors_by_type["IEC_62196_T2"].connector_type_id is ConnectorTypeId.TYPE_2
+    )
+    assert connectors_by_type["CHADEMO"].connector_type_id is ConnectorTypeId.CHADEMO
+
+    feature["properties"]["availabilities"][0]["connector_type"] = "FUTURE_CONNECTOR"
+    parsed = _station_from_feature(feature, 52.0, 5.0)
+    unknown = next(
+        connector
+        for connector in parsed.connectors
+        if connector.connector_type == "FUTURE_CONNECTOR"
+    )
+    assert unknown.connector_type_id is None
 
 
 def test_restricted_tariff_price_is_not_assumed():
