@@ -21,19 +21,31 @@ else:
 from .api import create_provider
 from .belgium import is_valid_belgium_api_token
 from .const import (
+    CONF_ALLOW_FALLBACK,
     CONF_API_TOKEN,
+    CONF_CONNECTOR_TYPE_IDS,
     CONF_CONNECTOR_TYPES,
+    CONF_EXCLUDED_OPERATORS,
     CONF_FAVOURITES,
     CONF_INCLUDE_UNKNOWN,
     CONF_LOCATION_ENTITY,
     CONF_LOCATION_MOVEMENT_THRESHOLD,
     CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
+    CONF_MAXIMUM_PRICE,
+    CONF_MAXIMUM_PRICE_CURRENCY,
     CONF_MIN_POWER_KW,
+    CONF_PERSONALIZATION,
+    CONF_PERSONALIZATION_ENABLED,
+    CONF_PERSONALIZATION_MIN_POWER_KW,
+    CONF_PERSONALIZATION_VERSION,
+    CONF_PREFERRED_OPERATORS,
     CONF_PROVIDER,
+    CONF_RANKING_PRESET,
     CONF_REQUIRE_AVAILABLE,
     CONF_SCAN_INTERVAL,
     CONF_SEARCH_RADIUS,
+    CONF_UNKNOWN_DATA_POLICY,
     CONFIG_ENTRY_VERSION,
     DEFAULT_INCLUDE_UNKNOWN,
     DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
@@ -50,6 +62,7 @@ from .const import (
     MIN_SCAN_INTERVAL_MINUTES,
     MIN_SEARCH_RADIUS_M,
     NDW_CONNECTOR_TYPE_SELECTOR_OPTIONS,
+    PERSONALIZATION_PROFILE_VERSION,
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NDW_DOT_NL,
 )
@@ -57,9 +70,14 @@ from .coordinator import CurbChargeCoordinator
 from .location import resolve_location, valid_coordinates
 from .models import (
     ChargingStation,
+    ConnectorTypeId,
     DiscoveryFilterSettings,
     FavouriteStationReference,
+    PersonalizationProfile,
+    PersonalizationRankingPreset,
+    PersonalizationUnknownDataPolicy,
     parse_favourite_references,
+    parse_operator_reference_lines,
 )
 from .provider import (
     AuthenticationError,
@@ -334,6 +352,157 @@ def options_schema(
             )
         )
     return vol.Schema(schema)
+
+
+def personalization_schema(profile: PersonalizationProfile) -> FlowSchema:
+    """Return the validated profile's editable options schema."""
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_PERSONALIZATION_ENABLED, default=profile.enabled
+            ): selector.BooleanSelector(),
+            vol.Required(
+                CONF_CONNECTOR_TYPE_IDS,
+                default=[
+                    connector.value.lower() for connector in profile.connector_type_ids
+                ],
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[connector.value.lower() for connector in ConnectorTypeId],
+                    multiple=True,
+                    mode=selector.SelectSelectorMode.LIST,
+                    translation_key="personalization_connector_type",
+                )
+            ),
+            vol.Optional(
+                CONF_PERSONALIZATION_MIN_POWER_KW,
+                default=profile.minimum_power_kw,
+            ): vol.Any(
+                None,
+                selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=0,
+                        step="any",
+                        mode=selector.NumberSelectorMode.BOX,
+                    )
+                ),
+            ),
+            vol.Required(
+                CONF_PREFERRED_OPERATORS,
+                default="\n".join(
+                    reference.as_input() for reference in profile.preferred_operators
+                ),
+            ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
+            vol.Required(
+                CONF_EXCLUDED_OPERATORS,
+                default="\n".join(
+                    reference.as_input() for reference in profile.excluded_operators
+                ),
+            ): selector.TextSelector(selector.TextSelectorConfig(multiline=True)),
+            vol.Optional(
+                CONF_MAXIMUM_PRICE,
+                default=(
+                    str(profile.maximum_price)
+                    if profile.maximum_price is not None
+                    else None
+                ),
+            ): selector.TextSelector(),
+            vol.Optional(
+                CONF_MAXIMUM_PRICE_CURRENCY,
+                default=profile.maximum_price_currency,
+            ): selector.TextSelector(),
+            vol.Required(
+                CONF_RANKING_PRESET, default=profile.ranking_preset.value
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[preset.value for preset in PersonalizationRankingPreset],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                    translation_key="personalization_ranking_preset",
+                )
+            ),
+            vol.Required(
+                CONF_ALLOW_FALLBACK, default=profile.allow_fallback
+            ): selector.BooleanSelector(),
+            vol.Required(
+                CONF_UNKNOWN_DATA_POLICY,
+                default=profile.unknown_data_policy.value,
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        policy.value for policy in PersonalizationUnknownDataPolicy
+                    ],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                    translation_key="personalization_unknown_data_policy",
+                )
+            ),
+        }
+    )
+
+
+def _personalization_profile_from_input(
+    user_input: Mapping[str, Any],
+) -> PersonalizationProfile:
+    """Convert form strings to the validated, serialized profile shape."""
+    maximum_price = user_input.get(CONF_MAXIMUM_PRICE)
+    if maximum_price is not None:
+        if not isinstance(maximum_price, str):
+            raise ValueError("Maximum price must be entered as a decimal string")
+        maximum_price = maximum_price.strip() or None
+
+    currency = user_input.get(CONF_MAXIMUM_PRICE_CURRENCY)
+    if currency is not None:
+        if not isinstance(currency, str):
+            raise ValueError("Maximum price currency must be a string")
+        currency = currency.strip() or None
+
+    raw_connector_type_ids = user_input.get(CONF_CONNECTOR_TYPE_IDS, [])
+    if not isinstance(raw_connector_type_ids, (list, tuple)):
+        raise ValueError("Personalization connector types must be a list")
+    connector_type_ids: list[str] = []
+    for raw_connector_type_id in raw_connector_type_ids:
+        if not isinstance(raw_connector_type_id, str):
+            raise ValueError("Personalization connector type is invalid")
+        try:
+            connector_type_id = ConnectorTypeId(raw_connector_type_id.upper()).value
+        except ValueError as err:
+            raise ValueError("Personalization connector type is invalid") from err
+        if connector_type_id not in connector_type_ids:
+            connector_type_ids.append(connector_type_id)
+
+    preferred_operators = parse_operator_reference_lines(
+        user_input.get(CONF_PREFERRED_OPERATORS, "")
+    )
+    excluded_operators = parse_operator_reference_lines(
+        user_input.get(CONF_EXCLUDED_OPERATORS, "")
+    )
+    return PersonalizationProfile.from_config(
+        {
+            CONF_PERSONALIZATION_VERSION: PERSONALIZATION_PROFILE_VERSION,
+            CONF_PERSONALIZATION_ENABLED: user_input.get(
+                CONF_PERSONALIZATION_ENABLED, False
+            ),
+            CONF_CONNECTOR_TYPE_IDS: connector_type_ids,
+            CONF_PERSONALIZATION_MIN_POWER_KW: user_input.get(
+                CONF_PERSONALIZATION_MIN_POWER_KW
+            ),
+            CONF_PREFERRED_OPERATORS: [
+                reference.as_config() for reference in preferred_operators
+            ],
+            CONF_EXCLUDED_OPERATORS: [
+                reference.as_config() for reference in excluded_operators
+            ],
+            CONF_MAXIMUM_PRICE: maximum_price,
+            CONF_MAXIMUM_PRICE_CURRENCY: currency,
+            CONF_RANKING_PRESET: user_input.get(
+                CONF_RANKING_PRESET, PersonalizationRankingPreset.BALANCED.value
+            ),
+            CONF_ALLOW_FALLBACK: user_input.get(CONF_ALLOW_FALLBACK, True),
+            CONF_UNKNOWN_DATA_POLICY: user_input.get(
+                CONF_UNKNOWN_DATA_POLICY,
+                PersonalizationUnknownDataPolicy.EXCLUDE.value,
+            ),
+        }
+    )
 
 
 def _show_form(
@@ -849,16 +1018,34 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class CurbChargeOptionsFlow(config_entries.OptionsFlow):
-    """Edit refresh, search, and favourite behavior."""
+    """Edit general settings and optional personalization."""
 
     async def async_step_init(
+        self, _user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Show the general and personalization options menu."""
+        try:
+            self._saved_personalization_profile()
+        except ValueError:
+            return await self.async_step_personalization()
+        return self.async_show_menu(
+            step_id="init", menu_options=["general", "personalization"]
+        )
+
+    def _saved_personalization_profile(self) -> PersonalizationProfile:
+        return PersonalizationProfile.from_config(
+            self.config_entry.options.get(CONF_PERSONALIZATION)
+        )
+
+    async def async_step_general(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Save options or show their current values."""
+        """Save general options or show their current values."""
         defaults = {**self.config_entry.data, **self.config_entry.options}
         provider_id = defaults.get(CONF_PROVIDER, PROVIDER_NDW_DOT_NL)
         if provider_id not in (PROVIDER_NDW_DOT_NL, PROVIDER_ECO_MOVEMENT_BE):
             provider_id = PROVIDER_NDW_DOT_NL
+        saved_profile = self._saved_personalization_profile()
         saved_favourites = parse_favourite_references(
             defaults.get(CONF_FAVOURITES, []), provider_id
         )
@@ -876,7 +1063,7 @@ class CurbChargeOptionsFlow(config_entries.OptionsFlow):
             except ValueError:
                 return _show_form(
                     self,
-                    step_id="init",
+                    step_id="general",
                     data_schema=options_schema(
                         defaults, favourite_options=favourite_options
                     ),
@@ -892,7 +1079,7 @@ class CurbChargeOptionsFlow(config_entries.OptionsFlow):
             except ValueError:
                 return _show_form(
                     self,
-                    step_id="init",
+                    step_id="general",
                     data_schema=options_schema(
                         defaults, favourite_options=favourite_options
                     ),
@@ -906,6 +1093,8 @@ class CurbChargeOptionsFlow(config_entries.OptionsFlow):
                 CONF_INCLUDE_UNKNOWN: user_input[CONF_INCLUDE_UNKNOWN],
                 CONF_FAVOURITES: [favourite.as_config() for favourite in favourites],
             }
+            if CONF_PERSONALIZATION in self.config_entry.options:
+                data[CONF_PERSONALIZATION] = saved_profile.as_config()
             if discovery_filters is not None:
                 data.update(discovery_filters.as_config())
             if defaults.get(CONF_LOCATION_SOURCE) == LOCATION_ENTITY:
@@ -922,8 +1111,44 @@ class CurbChargeOptionsFlow(config_entries.OptionsFlow):
 
         return _show_form(
             self,
-            step_id="init",
+            step_id="general",
             data_schema=options_schema(defaults, favourite_options=favourite_options),
+        )
+
+    async def async_step_personalization(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Validate and save the optional personalization profile."""
+        try:
+            profile = self._saved_personalization_profile()
+            saved_profile_invalid = False
+        except ValueError:
+            profile = PersonalizationProfile()
+            saved_profile_invalid = True
+
+        if user_input is not None:
+            try:
+                profile = _personalization_profile_from_input(user_input)
+            except ValueError:
+                return _show_form(
+                    self,
+                    step_id="personalization",
+                    data_schema=personalization_schema(profile),
+                    errors={"base": "invalid_personalization_profile"},
+                )
+            options = dict(self.config_entry.options)
+            options[CONF_PERSONALIZATION] = profile.as_config()
+            return self.async_create_entry(title="", data=options)
+
+        return _show_form(
+            self,
+            step_id="personalization",
+            data_schema=personalization_schema(profile),
+            errors=(
+                {"base": "invalid_saved_personalization_profile"}
+                if saved_profile_invalid
+                else None
+            ),
         )
 
 

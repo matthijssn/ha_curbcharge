@@ -1,6 +1,7 @@
 """Tests for CurbCharge setup and options flows."""
 
 from dataclasses import replace
+from decimal import Decimal
 from importlib import import_module
 from types import SimpleNamespace
 
@@ -12,19 +13,31 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.curbcharge import config_flow, schema
 from custom_components.curbcharge.const import (
+    CONF_ALLOW_FALLBACK,
     CONF_API_TOKEN,
+    CONF_CONNECTOR_TYPE_IDS,
     CONF_CONNECTOR_TYPES,
+    CONF_EXCLUDED_OPERATORS,
     CONF_FAVOURITES,
     CONF_INCLUDE_UNKNOWN,
     CONF_LOCATION_ENTITY,
     CONF_LOCATION_MOVEMENT_THRESHOLD,
     CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
+    CONF_MAXIMUM_PRICE,
+    CONF_MAXIMUM_PRICE_CURRENCY,
     CONF_MIN_POWER_KW,
+    CONF_PERSONALIZATION,
+    CONF_PERSONALIZATION_ENABLED,
+    CONF_PERSONALIZATION_MIN_POWER_KW,
+    CONF_PERSONALIZATION_VERSION,
+    CONF_PREFERRED_OPERATORS,
     CONF_PROVIDER,
+    CONF_RANKING_PRESET,
     CONF_REQUIRE_AVAILABLE,
     CONF_SCAN_INTERVAL,
     CONF_SEARCH_RADIUS,
+    CONF_UNKNOWN_DATA_POLICY,
     DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
     DEFAULT_SCAN_INTERVAL_MINUTES,
     DOMAIN,
@@ -32,13 +45,18 @@ from custom_components.curbcharge.const import (
     LOCATION_HOME,
     LOCATION_MANUAL,
     NDW_CONNECTOR_TYPE_CODES,
+    PERSONALIZATION_PROFILE_VERSION,
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NDW_DOT_NL,
 )
 from custom_components.curbcharge.coordinator import CurbChargeCoordinator
 from custom_components.curbcharge.models import (
+    ConnectorTypeId,
     DiscoveryFilterSettings,
     FavouriteStationReference,
+    PersonalizationProfile,
+    PersonalizationRankingPreset,
+    PersonalizationUnknownDataPolicy,
 )
 from custom_components.curbcharge.provider import (
     AuthenticationError,
@@ -174,6 +192,15 @@ def _discovery_filters(
         CONF_MIN_POWER_KW: minimum_power_kw,
         CONF_REQUIRE_AVAILABLE: require_available,
     }
+
+
+async def _open_options_step(hass, entry, step_id: str):
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["type"] is FlowResultType.MENU
+    assert set(result["menu_options"]) == {"general", "personalization"}
+    return await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": step_id}
+    )
 
 
 @pytest.mark.asyncio
@@ -975,6 +1002,199 @@ def test_entry_location_validates_manual_coordinates(hass):
 
 
 @pytest.mark.asyncio
+async def test_options_flow_menu_keeps_general_options_separate(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="options-menu",
+        data=_station_options(),
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+
+    assert result["type"] is FlowResultType.MENU
+    assert set(result["menu_options"]) == {"general", "personalization"}
+    general = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "general"}
+    )
+    assert general["type"] is FlowResultType.FORM
+    assert general["step_id"] == "general"
+
+
+@pytest.mark.asyncio
+async def test_options_flow_saves_versioned_personalization_profile(hass):
+    original_options = {
+        CONF_SCAN_INTERVAL: 5,
+        CONF_SEARCH_RADIUS: 500,
+        CONF_MAX_STATIONS: 10,
+        CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+        CONF_INCLUDE_UNKNOWN: True,
+        CONF_FAVOURITES: [],
+    }
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="personalization-profile",
+        data=_station_options(),
+        options=original_options,
+    )
+    entry.add_to_hass(hass)
+    result = await _open_options_step(hass, entry, "personalization")
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "personalization"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_PERSONALIZATION_ENABLED: True,
+            CONF_CONNECTOR_TYPE_IDS: [
+                ConnectorTypeId.TYPE_2.value.lower(),
+                ConnectorTypeId.TYPE_2.value.lower(),
+            ],
+            CONF_PERSONALIZATION_MIN_POWER_KW: 11.0,
+            CONF_PREFERRED_OPERATORS: (
+                "ndw_dot_nl:NLX\n"
+                "eco_movement_be:Example   CPO\n"
+                "eco_movement_be:example cpo"
+            ),
+            CONF_EXCLUDED_OPERATORS: "ndw_dot_nl:OTHER",
+            CONF_MAXIMUM_PRICE: "0.1200",
+            CONF_MAXIMUM_PRICE_CURRENCY: "eur",
+            CONF_RANKING_PRESET: PersonalizationRankingPreset.SHORTEST_DISTANCE.value,
+            CONF_ALLOW_FALLBACK: False,
+            CONF_UNKNOWN_DATA_POLICY: (
+                PersonalizationUnknownDataPolicy.ALLOW_FALLBACK.value
+            ),
+        },
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options[CONF_SCAN_INTERVAL] == original_options[CONF_SCAN_INTERVAL]
+    assert entry.options[CONF_FAVOURITES] == original_options[CONF_FAVOURITES]
+    profile = PersonalizationProfile.from_config(entry.options[CONF_PERSONALIZATION])
+    assert profile.enabled
+    assert profile.connector_type_ids == (ConnectorTypeId.TYPE_2,)
+    assert profile.minimum_power_kw == 11
+    assert profile.preferred_operators[1].key == "example cpo"
+    assert len(profile.preferred_operators) == 2
+    assert profile.maximum_price == Decimal("0.1200")
+    assert profile.maximum_price_currency == "EUR"
+    assert profile.as_config()[CONF_MAXIMUM_PRICE] == "0.1200"
+    assert entry.options[CONF_PERSONALIZATION][CONF_PERSONALIZATION_VERSION] == (
+        PERSONALIZATION_PROFILE_VERSION
+    )
+
+
+def test_personalization_form_conversion_defaults_and_rejects_bad_inputs():
+    profile = config_flow._personalization_profile_from_input({})
+    assert not profile.enabled
+    assert profile.connector_type_ids == ()
+
+    for connector_type_ids in ("not-a-list", [None], ["unknown"]):
+        with pytest.raises(ValueError):
+            config_flow._personalization_profile_from_input(
+                {CONF_CONNECTOR_TYPE_IDS: connector_type_ids}
+            )
+
+    with pytest.raises(ValueError, match="decimal string"):
+        config_flow._personalization_profile_from_input({CONF_MAXIMUM_PRICE: 1})
+    with pytest.raises(ValueError, match="currency"):
+        config_flow._personalization_profile_from_input(
+            {CONF_MAXIMUM_PRICE_CURRENCY: 1}
+        )
+
+
+@pytest.mark.asyncio
+async def test_general_options_preserve_a_saved_personalization_profile(hass):
+    profile = PersonalizationProfile(
+        enabled=True,
+        connector_type_ids=(ConnectorTypeId.TYPE_2,),
+    ).as_config()
+    original_options = {
+        CONF_SCAN_INTERVAL: 5,
+        CONF_SEARCH_RADIUS: 500,
+        CONF_MAX_STATIONS: 10,
+        CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+        CONF_INCLUDE_UNKNOWN: True,
+        CONF_FAVOURITES: [],
+        CONF_PERSONALIZATION: profile,
+    }
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="preserve-personalization",
+        data=_station_options(),
+        options=original_options,
+    )
+    entry.add_to_hass(hass)
+    result = await _open_options_step(hass, entry, "general")
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_SCAN_INTERVAL: 5,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+            CONF_INCLUDE_UNKNOWN: True,
+            CONF_FAVOURITES: [],
+            **_discovery_filters(),
+        },
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options[CONF_PERSONALIZATION] == profile
+
+
+@pytest.mark.asyncio
+async def test_options_flow_surfaces_malformed_saved_personalization(hass):
+    profile = PersonalizationProfile().as_config()
+    profile[CONF_PERSONALIZATION_VERSION] = PERSONALIZATION_PROFILE_VERSION + 1
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="malformed-personalization",
+        data=_station_options(),
+        options={CONF_PERSONALIZATION: profile},
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "personalization"
+    assert result["errors"] == {"base": "invalid_saved_personalization_profile"}
+
+
+@pytest.mark.asyncio
+async def test_options_flow_reports_invalid_personalization_input(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="invalid-personalization",
+        data=_station_options(),
+    )
+    entry.add_to_hass(hass)
+    result = await _open_options_step(hass, entry, "personalization")
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_PERSONALIZATION_ENABLED: True,
+            CONF_CONNECTOR_TYPE_IDS: [],
+            CONF_PERSONALIZATION_MIN_POWER_KW: None,
+            CONF_PREFERRED_OPERATORS: "ndw_dot_nl:Same",
+            CONF_EXCLUDED_OPERATORS: "ndw_dot_nl:Same",
+            CONF_MAXIMUM_PRICE: "1.00",
+            CONF_MAXIMUM_PRICE_CURRENCY: "EUR",
+            CONF_RANKING_PRESET: PersonalizationRankingPreset.BALANCED.value,
+            CONF_ALLOW_FALLBACK: True,
+            CONF_UNKNOWN_DATA_POLICY: (PersonalizationUnknownDataPolicy.EXCLUDE.value),
+        },
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "personalization"
+    assert result["errors"] == {"base": "invalid_personalization_profile"}
+
+
+@pytest.mark.asyncio
 async def test_options_flow_saves_integer_intervals_and_search_limits(hass):
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -987,7 +1207,7 @@ async def test_options_flow_saves_integer_intervals_and_search_limits(hass):
     )
     entry.add_to_hass(hass)
 
-    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await _open_options_step(hass, entry, "general")
     assert result["type"] is FlowResultType.FORM
     assert isinstance(result["data_schema"], flow_schema.Schema)
     result = await hass.config_entries.options.async_configure(
@@ -1028,10 +1248,10 @@ async def test_options_flow_keeps_form_open_for_non_finite_power(hass):
         },
     )
     entry.add_to_hass(hass)
-    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await _open_options_step(hass, entry, "general")
     flow = hass.config_entries.options._progress[result["flow_id"]]
 
-    result = await flow.async_step_init(
+    result = await flow.async_step_general(
         {
             CONF_SCAN_INTERVAL: 5,
             CONF_SEARCH_RADIUS: 500,
@@ -1044,7 +1264,7 @@ async def test_options_flow_keeps_form_open_for_non_finite_power(hass):
     )
 
     assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "init"
+    assert result["step_id"] == "general"
     assert result["errors"] == {"base": "invalid_discovery_filters"}
 
 
@@ -1063,7 +1283,7 @@ async def test_options_flow_saves_entity_movement_threshold(hass):
     )
     entry.add_to_hass(hass)
 
-    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await _open_options_step(hass, entry, "general")
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
@@ -1103,7 +1323,7 @@ async def test_options_flow_saves_stable_favourite_identity(hass, sample_station
     assert options[0]["value"] == station.provider_id
     assert station.address in options[0]["label"]
 
-    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await _open_options_step(hass, entry, "general")
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
@@ -1224,7 +1444,7 @@ async def test_options_flow_shows_error_for_stale_new_favourite(hass, sample_sta
     )
     coordinator.async_set_updated_data({station.provider_id: station})
     entry.runtime_data = coordinator
-    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await _open_options_step(hass, entry, "general")
 
     coordinator.async_set_updated_data({})
     result = await hass.config_entries.options.async_configure(
@@ -1256,7 +1476,7 @@ async def test_options_flow_defaults_unknown_provider_to_ndw(hass):
     )
     entry.add_to_hass(hass)
 
-    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await _open_options_step(hass, entry, "general")
 
     assert result["type"] is FlowResultType.FORM
     assert (
@@ -1287,7 +1507,7 @@ async def test_options_flow_falls_back_to_ndw_for_an_unknown_saved_provider(hass
     )
     entry.add_to_hass(hass)
 
-    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await _open_options_step(hass, entry, "general")
 
     assert result["type"] is FlowResultType.FORM
     assert (

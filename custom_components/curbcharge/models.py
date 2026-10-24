@@ -6,19 +6,33 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from typing import cast
 
 from .const import (
+    CONF_ALLOW_FALLBACK,
+    CONF_CONNECTOR_TYPE_IDS,
     CONF_CONNECTOR_TYPES,
+    CONF_EXCLUDED_OPERATORS,
+    CONF_MAXIMUM_PRICE,
+    CONF_MAXIMUM_PRICE_CURRENCY,
     CONF_MIN_POWER_KW,
+    CONF_PERSONALIZATION_ENABLED,
+    CONF_PERSONALIZATION_MIN_POWER_KW,
+    CONF_PERSONALIZATION_VERSION,
+    CONF_PREFERRED_OPERATORS,
+    CONF_RANKING_PRESET,
     CONF_REQUIRE_AVAILABLE,
+    CONF_UNKNOWN_DATA_POLICY,
     DEFAULT_CONNECTOR_TYPES,
     DEFAULT_MIN_POWER_KW,
     DEFAULT_REQUIRE_AVAILABLE,
     NDW_CONNECTOR_TYPE_CODES,
     NDW_CONNECTOR_TYPE_SELECTOR_OPTIONS,
+    PERSONALIZATION_PROFILE_VERSION,
+    PROVIDER_ECO_MOVEMENT_BE,
+    PROVIDER_NDW_DOT_NL,
 )
 
 
@@ -42,6 +56,273 @@ class ConnectorTypeId(StrEnum):
     CEE_16A_THREE_PHASE = "IEC_60309_2_THREE_16"
     CEE_32A_THREE_PHASE = "IEC_60309_2_THREE_32"
     DOMESTIC_A = "DOMESTIC_A"
+
+
+class PersonalizationRankingPreset(StrEnum):
+    """Supported fixed ranking objectives for a personalization profile."""
+
+    BALANCED = "balanced"
+    LOWEST_PRICE = "lowest_price"
+    SHORTEST_DISTANCE = "shortest_distance"
+    HIGHEST_AVAILABILITY = "highest_availability"
+    HIGHEST_POWER = "highest_power"
+
+
+class PersonalizationUnknownDataPolicy(StrEnum):
+    """Whether unknown preference values may enter the fallback pool."""
+
+    EXCLUDE = "exclude"
+    ALLOW_FALLBACK = "allow_fallback"
+
+
+@dataclass(frozen=True, slots=True)
+class OperatorReference:
+    """A provider-scoped CPO ID or exact normalized operator-name key."""
+
+    provider: str
+    key: str
+
+    def __post_init__(self) -> None:
+        if self.provider not in (PROVIDER_NDW_DOT_NL, PROVIDER_ECO_MOVEMENT_BE):
+            raise ValueError("Operator reference has an unsupported provider")
+        if not isinstance(self.key, str):
+            raise ValueError("Operator reference key must be a string")
+
+        key = self.key.strip()
+        if self.provider == PROVIDER_ECO_MOVEMENT_BE:
+            key = " ".join(key.split()).casefold()
+        if not key:
+            raise ValueError("Operator reference key must not be empty")
+        object.__setattr__(self, "key", key)
+
+    @classmethod
+    def from_config(cls, value: object) -> OperatorReference:
+        """Validate one serialized provider-scoped operator reference."""
+        if not isinstance(value, Mapping):
+            raise ValueError("Operator reference must be a mapping")
+        item = cast(Mapping[str, object], value)
+        if set(item) != {"provider", "key"}:
+            raise ValueError("Operator reference has invalid fields")
+        provider = item.get("provider")
+        key = item.get("key")
+        if not isinstance(provider, str) or not isinstance(key, str):
+            raise ValueError("Operator reference fields must be strings")
+        return cls(provider, key)
+
+    def as_config(self) -> dict[str, str]:
+        """Return the stable provider-scoped key stored in config-entry options."""
+        return {"provider": self.provider, "key": self.key}
+
+    def as_input(self) -> str:
+        """Return the stable line format used by the options-flow text fields."""
+        return f"{self.provider}:{self.key}"
+
+
+def parse_operator_reference_lines(value: object) -> tuple[OperatorReference, ...]:
+    """Parse provider-qualified operator references, deduplicating normalized keys."""
+    if not isinstance(value, str):
+        raise ValueError("Operator references must be multiline text")
+
+    references: list[OperatorReference] = []
+    seen: set[OperatorReference] = set()
+    for raw_line in value.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        provider, separator, key = line.partition(":")
+        if not separator:
+            raise ValueError("Operator reference must include a provider")
+        reference = OperatorReference(provider.strip(), key)
+        if reference not in seen:
+            references.append(reference)
+            seen.add(reference)
+    return tuple(references)
+
+
+@dataclass(frozen=True, slots=True)
+class PersonalizationProfile:
+    """Versioned options for opt-in recommendation personalization."""
+
+    enabled: bool = False
+    connector_type_ids: tuple[ConnectorTypeId, ...] = ()
+    minimum_power_kw: float | None = None
+    preferred_operators: tuple[OperatorReference, ...] = ()
+    excluded_operators: tuple[OperatorReference, ...] = ()
+    maximum_price: Decimal | None = None
+    maximum_price_currency: str | None = None
+    ranking_preset: PersonalizationRankingPreset = PersonalizationRankingPreset.BALANCED
+    allow_fallback: bool = True
+    unknown_data_policy: PersonalizationUnknownDataPolicy = (
+        PersonalizationUnknownDataPolicy.EXCLUDE
+    )
+
+    @classmethod
+    def from_config(cls, value: object | None) -> PersonalizationProfile:
+        """Validate a saved profile; a missing profile means disabled."""
+        if value is None:
+            return cls()
+        if not isinstance(value, Mapping):
+            raise ValueError("Personalization profile must be a mapping")
+
+        data = cast(Mapping[str, object], value)
+        expected_keys = {
+            CONF_PERSONALIZATION_VERSION,
+            CONF_PERSONALIZATION_ENABLED,
+            CONF_CONNECTOR_TYPE_IDS,
+            CONF_PERSONALIZATION_MIN_POWER_KW,
+            CONF_PREFERRED_OPERATORS,
+            CONF_EXCLUDED_OPERATORS,
+            CONF_MAXIMUM_PRICE,
+            CONF_MAXIMUM_PRICE_CURRENCY,
+            CONF_RANKING_PRESET,
+            CONF_ALLOW_FALLBACK,
+            CONF_UNKNOWN_DATA_POLICY,
+        }
+        if set(data) != expected_keys:
+            raise ValueError("Personalization profile has invalid fields")
+
+        version = data[CONF_PERSONALIZATION_VERSION]
+        if (
+            isinstance(version, bool)
+            or not isinstance(version, int)
+            or version != PERSONALIZATION_PROFILE_VERSION
+        ):
+            raise ValueError("Personalization profile version is unsupported")
+
+        enabled = data[CONF_PERSONALIZATION_ENABLED]
+        if not isinstance(enabled, bool):
+            raise ValueError("Personalization enabled must be a boolean")
+
+        raw_connector_type_ids = data[CONF_CONNECTOR_TYPE_IDS]
+        if not isinstance(raw_connector_type_ids, (list, tuple)):
+            raise ValueError("Personalization connector types must be a list")
+        connector_type_ids: list[ConnectorTypeId] = []
+        for raw_connector_type_id in raw_connector_type_ids:
+            if not isinstance(raw_connector_type_id, str):
+                raise ValueError("Personalization connector type is invalid")
+            try:
+                connector_type_id = ConnectorTypeId(raw_connector_type_id)
+            except ValueError as err:
+                raise ValueError(
+                    "Personalization connector type is unsupported"
+                ) from err
+            if connector_type_id not in connector_type_ids:
+                connector_type_ids.append(connector_type_id)
+
+        raw_minimum_power = data[CONF_PERSONALIZATION_MIN_POWER_KW]
+        if raw_minimum_power is None:
+            minimum_power_kw = None
+        elif isinstance(raw_minimum_power, bool) or not isinstance(
+            raw_minimum_power, (int, float)
+        ):
+            raise ValueError("Personalization minimum power is invalid")
+        else:
+            try:
+                minimum_power_kw = float(raw_minimum_power)
+            except (OverflowError, ValueError) as err:
+                raise ValueError("Personalization minimum power is invalid") from err
+            if not math.isfinite(minimum_power_kw) or minimum_power_kw < 0:
+                raise ValueError("Personalization minimum power is invalid")
+
+        def operator_references(field_name: str) -> tuple[OperatorReference, ...]:
+            raw_references = data[field_name]
+            if not isinstance(raw_references, (list, tuple)):
+                raise ValueError("Personalization operator references must be a list")
+            references: list[OperatorReference] = []
+            for raw_reference in raw_references:
+                reference = OperatorReference.from_config(raw_reference)
+                if reference not in references:
+                    references.append(reference)
+            return tuple(references)
+
+        preferred_operators = operator_references(CONF_PREFERRED_OPERATORS)
+        excluded_operators = operator_references(CONF_EXCLUDED_OPERATORS)
+        if set(preferred_operators) & set(excluded_operators):
+            raise ValueError("An operator cannot be both preferred and excluded")
+
+        raw_price = data[CONF_MAXIMUM_PRICE]
+        if raw_price is None:
+            maximum_price = None
+        elif not isinstance(raw_price, str) or not raw_price.strip():
+            raise ValueError("Personalization maximum price must be a decimal string")
+        else:
+            try:
+                maximum_price = Decimal(raw_price)
+            except InvalidOperation as err:
+                raise ValueError("Personalization maximum price is invalid") from err
+            if not maximum_price.is_finite() or maximum_price < 0:
+                raise ValueError("Personalization maximum price is invalid")
+
+        raw_currency = data[CONF_MAXIMUM_PRICE_CURRENCY]
+        if raw_currency is not None and not isinstance(raw_currency, str):
+            raise ValueError("Personalization currency is invalid")
+        if raw_currency is not None:
+            if (
+                len(raw_currency) != 3
+                or not raw_currency.isascii()
+                or not raw_currency.isalpha()
+            ):
+                raise ValueError("Personalization currency must be a 3-letter code")
+            raw_currency = raw_currency.upper()
+        if maximum_price is not None and raw_currency is None:
+            raise ValueError("Maximum price requires an explicit currency")
+
+        raw_ranking_preset = data[CONF_RANKING_PRESET]
+        if not isinstance(raw_ranking_preset, str):
+            raise ValueError("Personalization ranking preset is invalid")
+        try:
+            ranking_preset = PersonalizationRankingPreset(raw_ranking_preset)
+        except (TypeError, ValueError) as err:
+            raise ValueError("Personalization ranking preset is invalid") from err
+        raw_unknown_data_policy = data[CONF_UNKNOWN_DATA_POLICY]
+        if not isinstance(raw_unknown_data_policy, str):
+            raise ValueError("Personalization unknown-data policy is invalid")
+        try:
+            unknown_data_policy = PersonalizationUnknownDataPolicy(
+                raw_unknown_data_policy
+            )
+        except (TypeError, ValueError) as err:
+            raise ValueError("Personalization unknown-data policy is invalid") from err
+        allow_fallback = data[CONF_ALLOW_FALLBACK]
+        if not isinstance(allow_fallback, bool):
+            raise ValueError("Personalization fallback must be a boolean")
+
+        return cls(
+            enabled=enabled,
+            connector_type_ids=tuple(connector_type_ids),
+            minimum_power_kw=minimum_power_kw,
+            preferred_operators=preferred_operators,
+            excluded_operators=excluded_operators,
+            maximum_price=maximum_price,
+            maximum_price_currency=raw_currency,
+            ranking_preset=ranking_preset,
+            allow_fallback=allow_fallback,
+            unknown_data_policy=unknown_data_policy,
+        )
+
+    def as_config(self) -> dict[str, object]:
+        """Serialize the complete v1 profile with a lossless decimal price."""
+        return {
+            CONF_PERSONALIZATION_VERSION: PERSONALIZATION_PROFILE_VERSION,
+            CONF_PERSONALIZATION_ENABLED: self.enabled,
+            CONF_CONNECTOR_TYPE_IDS: [
+                connector_type_id.value for connector_type_id in self.connector_type_ids
+            ],
+            CONF_PERSONALIZATION_MIN_POWER_KW: self.minimum_power_kw,
+            CONF_PREFERRED_OPERATORS: [
+                reference.as_config() for reference in self.preferred_operators
+            ],
+            CONF_EXCLUDED_OPERATORS: [
+                reference.as_config() for reference in self.excluded_operators
+            ],
+            CONF_MAXIMUM_PRICE: (
+                str(self.maximum_price) if self.maximum_price is not None else None
+            ),
+            CONF_MAXIMUM_PRICE_CURRENCY: self.maximum_price_currency,
+            CONF_RANKING_PRESET: self.ranking_preset.value,
+            CONF_ALLOW_FALLBACK: self.allow_fallback,
+            CONF_UNKNOWN_DATA_POLICY: self.unknown_data_policy.value,
+        }
 
 
 class EVSEStatus(StrEnum):
@@ -263,6 +544,7 @@ class ChargingStation:
     connector_count_reported: bool = True
     tariff_status: TariffStatus | None = None
     last_updated_source: ProviderTimestampSource | None = None
+    operator_id: str | None = None
 
     def provider_data_age_seconds(self, now: datetime) -> int | None:
         """Return dynamic provider timestamp age in whole UTC seconds."""

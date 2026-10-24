@@ -138,7 +138,10 @@
   "options": {
     "step": {
       "init": {
-        "title": "Options CurbCharge",
+        "title": "Options CurbCharge"
+      },
+      "general": {
+        "title": "Paramètres généraux",
         "data": {
           "scan_interval": "Intervalle d'actualisation (minutes)",
           "search_radius": "Rayon de recherche (m)",
@@ -163,11 +166,40 @@
           "favourites": "Sélectionnez les bornes par leur nom. Les bornes favorites restent disponibles hors du rayon de recherche et s'ajoutent à la limite des bornes à proximité.",
           "location_movement_threshold": "Distance minimale que l'entité sélectionnée doit parcourir avant la mise à jour de la position de recherche. Saisissez 0 pour désactiver ce seuil."
         }
+      },
+      "personalization": {
+        "title": "Personnalisation",
+        "data": {
+          "enabled": "Activer la personnalisation",
+          "connector_type_ids": "Types de connecteur compatibles",
+          "minimum_power_kw": "Puissance minimale du connecteur (kW)",
+          "preferred_operators": "Opérateurs préférés",
+          "excluded_operators": "Opérateurs exclus",
+          "maximum_price": "Prix maximum par kWh",
+          "maximum_price_currency": "Devise du prix maximum",
+          "ranking_preset": "Préréglage de classement",
+          "allow_fallback": "Autoriser le repli",
+          "unknown_data_policy": "Politique des données inconnues"
+        },
+        "data_description": {
+          "enabled": "Active ce profil enregistré pour les recommandations personnalisées. Les recommandations existantes restent inchangées tant que l'évaluation personnalisée n'est pas disponible.",
+          "connector_type_ids": "Choisissez des normes de connecteur canoniques. Laissez vide pour accepter tous les types.",
+          "minimum_power_kw": "Minimum facultatif pour un groupe de connecteurs correspondant ; utilisez une valeur finie et non négative.",
+          "preferred_operators": "Saisissez une référence fournisseur par ligne, par exemple ndw_dot_nl:NLX ou eco_movement_be:Example CPO. Les identifiants NDW sont comparés exactement ; les noms belges sont nettoyés, espaces regroupés et comparés sans distinction de casse. Les choix enregistrés sont conservés hors du rayon actuel.",
+          "excluded_operators": "Saisissez une référence fournisseur par ligne au même format que pour les opérateurs préférés. Le repli ne contourne jamais une exclusion.",
+          "maximum_price": "Montant décimal facultatif et non négatif. Laissez vide pour ne pas fixer de plafond.",
+          "maximum_price_currency": "Obligatoire avec un prix maximum ; saisissez un code devise de trois lettres, comme EUR.",
+          "ranking_preset": "Choisissez un objectif de classement fixe ; les pondérations personnalisées ne sont pas prises en charge.",
+          "allow_fallback": "Autorise les candidats admissibles non préférés seulement en l'absence de correspondance complète.",
+          "unknown_data_policy": "Choisissez si des données inconnues sur le connecteur, la puissance ou l'opérateur peuvent apparaître en repli. Une disponibilité inconnue et une contrainte stricte connue ne sont jamais ignorées."
+        }
       }
     },
     "error": {
       "invalid_discovery_filters": "Saisissez des filtres valides. La puissance minimale doit être un nombre fini positif.",
-      "invalid_favourites": "Une ou plusieurs bornes favorites sélectionnées ne sont plus disponibles. Actualisez les options et réessayez."
+      "invalid_favourites": "Une ou plusieurs bornes favorites sélectionnées ne sont plus disponibles. Actualisez les options et réessayez.",
+      "invalid_personalization_profile": "Saisissez un profil valide. La puissance et le prix doivent être finis et non négatifs, un prix maximum exige une devise de trois lettres, les références d'opérateur doivent utiliser un préfixe fournisseur pris en charge, et un opérateur ne peut pas être à la fois préféré et exclu.",
+      "invalid_saved_personalization_profile": "Le profil de personnalisation enregistré est mal formé ou utilise une version de schéma non prise en charge. Vérifiez les champs et enregistrez un profil valide pour le remplacer."
     }
   },
   "services": {
@@ -246,6 +278,32 @@
         "cee-16a-three-phase": "CEE 16 A (triphasé)",
         "cee-32a-three-phase": "CEE 32 A (triphasé)",
         "domestic-a": "Prise domestique type A (NEMA 1-15)"
+      }
+    },
+    "personalization_connector_type": {
+      "options": {
+        "iec_62196_t2": "Type 2 (Mennekes)",
+        "iec_62196_t2_combo": "CCS Combo 2",
+        "chademo": "CHAdeMO",
+        "iec_60309_2_single_16": "CEE 16 A (monophasé)",
+        "iec_60309_2_three_16": "CEE 16 A (triphasé)",
+        "iec_60309_2_three_32": "CEE 32 A (triphasé)",
+        "domestic_a": "Prise domestique type A (NEMA 1-15)"
+      }
+    },
+    "personalization_ranking_preset": {
+      "options": {
+        "balanced": "Équilibré",
+        "lowest_price": "Prix le plus bas",
+        "shortest_distance": "Distance la plus courte",
+        "highest_availability": "Le plus de connecteurs disponibles",
+        "highest_power": "Puissance de connecteur la plus élevée"
+      }
+    },
+    "personalization_unknown_data_policy": {
+      "options": {
+        "exclude": "Exclure les préférences inconnues (recommandé)",
+        "allow_fallback": "Autoriser les valeurs inconnues uniquement en repli"
       }
     },
     "provider": {

@@ -122,8 +122,30 @@ by default; turning it off excludes NDW stations with no availability report
 before the station cap. The search radius remains the distance limit, and the
 maximum-station cap selects the nearest matching stations (with provider
 station ID as the tie-breaker). These filters are NDW-only; Belgium preview
-has no filter step or filter options. There is no operator filter or separate
-maximum-distance setting.
+has no discovery-filter step or options. There is no provider-side operator
+discovery filter or separate maximum-distance setting.
+
+The separate **Personalization** options page stores one optional, versioned
+profile in the config entry's Options. It is disabled by default and supports
+canonical connector types, minimum connector-group power, preferred and
+excluded operators, an optional maximum price and currency, a fixed ranking
+preset, fallback, and an unknown-data policy. A maximum price must be a
+nonnegative decimal and include a three-letter currency code.
+
+Enter operator references one per line as `ndw_dot_nl:<cpo_id>` or
+`eco_movement_be:<operator name>`. NDW's `cpo_id` identifies the CPO in its
+published data; see the
+[NDW OCPI data-submission documentation](https://docs.ndw.nu/en/data-uitwisseling/interface-beschrijvingen/dafne-api/dafne_api_supplier/).
+It is used as a provider-scoped key, not a promise that an operator identifier
+can never change; if it changes, the saved preference remains stored but no
+longer matches.
+Belgium currently has no stable operator ID in the available fixture, so its
+names match only after trimming, collapsing whitespace, and case-folding.
+These references are saved independently of the current search radius and are
+not fuzzy-matched. The profile is stored for personalization support; existing
+recommendation behavior remains unchanged until a recommendation evaluator
+consumes it. Older entries without a profile remain disabled without a config
+entry migration.
 
 See the
 [Belgium preview setup](#belgium-preview-setup) steps before choosing that

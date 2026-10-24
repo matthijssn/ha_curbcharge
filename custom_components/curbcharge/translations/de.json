@@ -138,7 +138,10 @@
   "options": {
     "step": {
       "init": {
-        "title": "CurbCharge-Optionen",
+        "title": "CurbCharge-Optionen"
+      },
+      "general": {
+        "title": "Allgemeine Einstellungen",
         "data": {
           "scan_interval": "Aktualisierungsintervall (Minuten)",
           "search_radius": "Suchradius (m)",
@@ -163,11 +166,40 @@
           "favourites": "Ladestationen anhand ihres Namens auswählen. Bevorzugte Ladestationen bleiben außerhalb des Suchradius verfügbar und werden zusätzlich zum Limit für nahe gelegene Stationen aufgenommen.",
           "location_movement_threshold": "Mindeststrecke, die sich die ausgewählte Entität bewegen muss, bevor der Suchstandort aktualisiert wird. Mit 0 wird die Schwelle deaktiviert."
         }
+      },
+      "personalization": {
+        "title": "Personalisierung",
+        "data": {
+          "enabled": "Personalisierung aktivieren",
+          "connector_type_ids": "Kompatible Anschlusstypen",
+          "minimum_power_kw": "Mindestleistung des Anschlusses (kW)",
+          "preferred_operators": "Bevorzugte Betreiber",
+          "excluded_operators": "Ausgeschlossene Betreiber",
+          "maximum_price": "Höchstpreis pro kWh",
+          "maximum_price_currency": "Währung des Höchstpreises",
+          "ranking_preset": "Rangfolge-Voreinstellung",
+          "allow_fallback": "Ausweichoptionen zulassen",
+          "unknown_data_policy": "Richtlinie für unbekannte Daten"
+        },
+        "data_description": {
+          "enabled": "Dieses gespeicherte Profil für personalisierte Empfehlungen aktivieren. Bestehende Empfehlungen bleiben unverändert, bis die Personalisierungsauswertung verfügbar ist.",
+          "connector_type_ids": "Kanonische Anschlussstandards auswählen. Leer lassen, um alle Typen zuzulassen.",
+          "minimum_power_kw": "Optionaler Mindestwert für eine passende Anschlussgruppe; nur endliche, nicht negative Werte verwenden.",
+          "preferred_operators": "Pro Zeile eine anbieterbezogene Referenz eingeben, zum Beispiel ndw_dot_nl:NLX oder eco_movement_be:Example CPO. NDW-IDs werden exakt verglichen; belgische Namen werden getrimmt, Leerzeichen zusammengefasst und ohne Beachtung der Groß-/Kleinschreibung verglichen. Gespeicherte Auswahl bleibt auch außerhalb des Suchradius erhalten.",
+          "excluded_operators": "Pro Zeile eine anbieterbezogene Referenz im selben Format wie bei bevorzugten Betreibern eingeben. Ausschlüsse werden durch Ausweichoptionen niemals umgangen.",
+          "maximum_price": "Optionaler nicht negativer Dezimalbetrag. Leer lassen, wenn kein Preislimit gelten soll.",
+          "maximum_price_currency": "Bei einem Höchstpreis erforderlich; einen dreistelligen Währungscode wie EUR eingeben.",
+          "ranking_preset": "Ein festes Rangfolgeziel auswählen; benutzerdefinierte Gewichtungen werden nicht unterstützt.",
+          "allow_fallback": "Zulässige nicht bevorzugte Kandidaten nur dann zulassen, wenn keine vollständige Übereinstimmung vorhanden ist.",
+          "unknown_data_policy": "Festlegen, ob unbekannte Anschluss-, Leistungs- oder Betreiberdaten als Ausweichoption verwendet werden dürfen. Unbekannte Verfügbarkeit und bekannte harte Einschränkungen werden nie gelockert."
+        }
       }
     },
     "error": {
       "invalid_discovery_filters": "Geben Sie gültige Filter ein. Die Mindestleistung muss eine endliche positive Zahl sein.",
-      "invalid_favourites": "Eine oder mehrere ausgewählte bevorzugte Ladestationen sind nicht mehr verfügbar. Aktualisieren Sie die Optionen und versuchen Sie es erneut."
+      "invalid_favourites": "Eine oder mehrere ausgewählte bevorzugte Ladestationen sind nicht mehr verfügbar. Aktualisieren Sie die Optionen und versuchen Sie es erneut.",
+      "invalid_personalization_profile": "Geben Sie ein gültiges Profil ein. Leistung und Preis müssen endlich und nicht negativ sein, ein Höchstpreis benötigt einen dreistelligen Währungscode, Betreiberreferenzen benötigen ein unterstütztes Anbieterpräfix und ein Betreiber darf nicht gleichzeitig bevorzugt und ausgeschlossen sein.",
+      "invalid_saved_personalization_profile": "Das gespeicherte Personalisierungsprofil ist fehlerhaft oder verwendet eine nicht unterstützte Schemaversion. Felder prüfen und ein gültiges Profil speichern, um es zu ersetzen."
     }
   },
   "services": {
@@ -246,6 +278,32 @@
         "cee-16a-three-phase": "CEE 16 A (dreiphasig)",
         "cee-32a-three-phase": "CEE 32 A (dreiphasig)",
         "domestic-a": "Haushaltsstecker Typ A (NEMA 1-15)"
+      }
+    },
+    "personalization_connector_type": {
+      "options": {
+        "iec_62196_t2": "Typ 2 (Mennekes)",
+        "iec_62196_t2_combo": "CCS Combo 2",
+        "chademo": "CHAdeMO",
+        "iec_60309_2_single_16": "CEE 16 A (einphasig)",
+        "iec_60309_2_three_16": "CEE 16 A (dreiphasig)",
+        "iec_60309_2_three_32": "CEE 32 A (dreiphasig)",
+        "domestic_a": "Haushaltsstecker Typ A (NEMA 1-15)"
+      }
+    },
+    "personalization_ranking_preset": {
+      "options": {
+        "balanced": "Ausgewogen",
+        "lowest_price": "Niedrigster Preis",
+        "shortest_distance": "Kürzeste Entfernung",
+        "highest_availability": "Meiste verfügbare Anschlüsse",
+        "highest_power": "Höchste Anschlussleistung"
+      }
+    },
+    "personalization_unknown_data_policy": {
+      "options": {
+        "exclude": "Unbekannte Präferenzwerte ausschließen (empfohlen)",
+        "allow_fallback": "Unbekannte Werte nur als Ausweichoption zulassen"
       }
     },
     "provider": {
