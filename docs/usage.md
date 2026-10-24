@@ -298,10 +298,11 @@ attributes for each station in the Best nearby ranking. The eligible cohort is
 fresh, in-radius stations with known positive availability; a Belgium
 status-only station may qualify even when its connector count is unknown. For
 `N` candidates, the one-based rank score is `100 * (N - rank + 1) / N`.
-Scores are relative to the current cohort; rank one scores 100, and an empty
-cohort has no rank or score and a candidate count of zero. After a failed
-refresh, recommendation snapshots are not presented as current, and rank,
-score, and candidate count are unknown. Existing station attributes such as
+Scores are relative to the current cohort, not an absolute station-quality or
+confidence measure; rank one scores 100, and an empty cohort has no rank or
+score and a candidate count of zero. After a failed refresh, recommendation
+snapshots are not presented as current, and rank, score, and candidate count
+are unknown. Existing station attributes such as
 `price_per_kwh`, `currency`, `distance_m`, `available_connectors`,
 `max_power_kw`, `provider`, and `provider_station_id` show the comparison
 inputs; unknown inputs stay null, not zero. Provider data age is not a scoring
@@ -312,13 +313,23 @@ The **Top nearby chargers** sensor uses that same backend ranking and returns
 at most five stations, independent of the nearby-station limit. Its state is
 the number of returned items; its `recommendations` attribute is `[]` after a
 successful empty update and `null` after a failed update. Each item includes
-the selected-station payload, one-based rank, candidate-relative score,
-comparison components, and a stable ranking reason. No per-rank entities or
-provider requests are created. Best and alternative selection sensors expose
+the shared selected-station payload plus one-based `rank`, candidate-relative
+`score`, `score_components` (`price_per_kwh`, `currency`, `distance_m`,
+`available_connectors`, and `max_power_kw`), the stable `reason` code
+`best_nearby_rank`, and the overall `ranking_reason`. The component values
+remain null when unknown. `best_nearby_candidate_count` reports the full
+eligible cohort even when more than five stations are available. No per-rank
+entities, separate recommendation history, or provider requests are created;
+Home Assistant Recorder may still retain the sensor's normal state and
+attribute history according to its own settings.
+
+Best nearby, Top nearby, and alternative selection sensors expose
 `result_status` values such as `selected`, `unavailable`,
-`no_current_stations`, `unknown_availability`, and `none_available`;
-Cheapest can also report `no_comparable_price`, Fastest
-`no_positive_power`, and Nearest `no_known_distance`.
+`no_current_stations`, `unknown_availability`, and `none_available`.
+Cheapest can also report `no_comparable_price` when no known price exists or
+prices use multiple currencies; Fastest reports `no_positive_power` when no
+eligible station has a finite positive power; Nearest reports
+`no_known_distance` when no eligible station has a known distance.
 
 When a tracked search center moves, newly matching stations are added on the
 next successful refresh. A non-favourite station absent from three consecutive

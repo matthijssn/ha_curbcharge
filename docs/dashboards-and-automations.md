@@ -81,6 +81,13 @@ type: custom:curbcharge-card
 entity: sensor.your_best_nearby_charger
 ```
 
+To render the bounded Top N list instead, select its entry-level sensor:
+
+```yaml
+type: custom:curbcharge-card
+entity: sensor.your_top_nearby_chargers
+```
+
 Existing YAML that sets only `entity` to a Status summary sensor remains
 compatible. The card editor also offers standard or compact layout and controls
 for price, connector details, station details, and update times. Secondary
@@ -178,6 +185,47 @@ entities:
   - entity: sensor.your_fastest_available_charger
   - entity: sensor.your_best_nearby_charger
   - entity: sensor.your_top_nearby_chargers
+```
+
+The Top nearby state is the number of listed results; the ordered list and
+candidate-relative scores are available as attributes. A template can read the
+first recommendation without re-sorting it:
+
+```jinja
+{% set recommendations = state_attr('sensor.your_top_nearby_chargers', 'recommendations') or [] %}
+{% if recommendations %}
+  {{ recommendations[0]['name'] }} (rank {{ recommendations[0]['rank'] }}, score {{ recommendations[0]['score'] }}/100)
+{% else %}
+  No current recommendation ({{ states('sensor.your_top_nearby_chargers') }})
+{% endif %}
+```
+
+For example, this automation notifies when the top-ranked station or score
+changes; it checks for a non-empty list so successful empty and unavailable
+results are not treated as a charger:
+
+```yaml
+alias: Notify about the top nearby charger
+trigger:
+  - platform: state
+    entity_id: sensor.your_top_nearby_chargers
+condition:
+  - condition: template
+    value_template: >
+      {% set recommendations = state_attr('sensor.your_top_nearby_chargers', 'recommendations') or [] %}
+      {{ recommendations | count > 0 }}
+action:
+  - service: notify.notify
+    data:
+      message: >
+        {% set recommendations = state_attr('sensor.your_top_nearby_chargers', 'recommendations') or [] %}
+        {% if recommendations %}
+          {% set recommendation = recommendations[0] %}
+          {{ recommendation['name'] }} (rank {{ recommendation['rank'] }}, score {{ recommendation['score'] }}/100).
+        {% else %}
+          No current recommendation is available.
+        {% endif %}
+mode: single
 ```
 
 Automations can use the selected station name as the sensor state and read
