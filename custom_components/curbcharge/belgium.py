@@ -31,6 +31,7 @@ from .models import (
     ChargingStation,
     ChargingTariff,
     ConnectorStatus,
+    ConnectorTypeId,
     DiscoveryFilterSettings,
     EVSEStatus,
     FavouriteStationReference,
@@ -672,9 +673,21 @@ def _connector_groups(
                 count=count,
                 available_count=None,
                 power_type=power_type,
+                connector_type_id=_belgium_connector_type_id(connector_type),
             )
         )
     return tuple(result), connector_count_reported
+
+
+def _belgium_connector_type_id(
+    connector_type: str | None,
+) -> ConnectorTypeId | None:
+    if connector_type is None:
+        return None
+    return {
+        "iec62196t2": ConnectorTypeId.TYPE_2,
+        "chademo": ConnectorTypeId.CHADEMO,
+    }.get(connector_type.casefold())
 
 
 def _evse_status_record(

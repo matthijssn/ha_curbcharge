@@ -32,6 +32,18 @@ class ConnectorStatus(StrEnum):
     UNKNOWN = "UNKNOWN"
 
 
+class ConnectorTypeId(StrEnum):
+    """Provider-independent identifiers for recognized connector standards."""
+
+    TYPE_2 = "IEC_62196_T2"
+    CCS_COMBO_2 = "IEC_62196_T2_COMBO"
+    CHADEMO = "CHADEMO"
+    CEE_16A_SINGLE_PHASE = "IEC_60309_2_SINGLE_16"
+    CEE_16A_THREE_PHASE = "IEC_60309_2_THREE_16"
+    CEE_32A_THREE_PHASE = "IEC_60309_2_THREE_32"
+    DOMESTIC_A = "DOMESTIC_A"
+
+
 class EVSEStatus(StrEnum):
     """Known operating states for an EVSE, distinct from connector states."""
 
@@ -170,6 +182,7 @@ class ChargingConnector:
     tariff_ids: tuple[str, ...] = ()
     tariffs: tuple[ChargingTariff, ...] = ()
     tariff_status: TariffStatus | None = None
+    connector_type_id: ConnectorTypeId | None = None
 
     @property
     def known_available_count(self) -> int | None:
