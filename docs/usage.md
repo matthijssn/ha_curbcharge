@@ -180,6 +180,20 @@ Each charging point is one Home Assistant device. CurbCharge creates:
   provider-record age when known.
 - The Status summary's `is_favorite` attribute identifies stations selected
   as favourites for this config entry.
+- One **Favorite status** sensor is created for each saved favourite and
+  attached to its station device. Its state is `available` only for a known
+  positive connector count, `none_available` for known zero, and `unknown` when
+  availability is unknown. Stale station data and failed coordinator refreshes
+  make it `unavailable`; attributes distinguish `is_stale`,
+  `provider_update_success`, and `missing_refresh_count`. Numeric attributes
+  expose available/total connectors, maximum power, price/currency, and
+  provider-data freshness for automation triggers.
+- The entry-level **Favorite summary** state is the configured favourite
+  count. Its attributes report configured, discovered, known, available,
+  unknown, stale, and confirmed-missing favourite counts, the last successful
+  update, and nearest, cheapest, and highest-power available-favourite
+  recommendations. Each recommendation uses the shared station payload; the
+  cheapest result is empty when prices span multiple currencies.
 - Integration-level **Best nearby charger**, **Nearest available charger**,
   **Cheapest available charger**, **Fastest available charger**, **Nearby
   charging units**, and **Nearby available connectors** sensors. The
@@ -333,8 +347,9 @@ integration's history.
 Favourites outside the normal NDW search results use additional small
 bounding-box requests; the provider client spaces these requests to respect
 its rate limit. Belgium favourites use the cached location snapshot and status
-requests through the shared limiter, so a large favourite list can lengthen a
-refresh.
+requests through the shared limiter. There is no favourite-count cap, so a
+large list of remote NDW favourites can lengthen a refresh under the shared
+provider limiter.
 
 For an Entity source, CurbCharge samples coordinates during the normal
 coordinator refreshes. It does not subscribe to every entity state change or
@@ -354,16 +369,21 @@ updates resume when valid coordinates return.
 
 ## Services
 
-`curbcharge.add_favorite` saves a freshly discovered station, and
-`curbcharge.remove_favorite` removes a saved favorite. Both actions require an
-administrator and a loaded CurbCharge configuration entry. Add requires a
-station ID from its latest successful nearby search; duplicate adds do nothing.
-Remove also works when the saved station is stale or missing from the provider.
-Favorite-only changes update entities without an immediate provider request;
-the regular polling schedule handles future data. These actions do not send
-notifications. CurbCharge does not provide device triggers or conditions. The
-Blueprint uses the existing Status summary state and a notification action
-selected by the user.
+`curbcharge.add_favorite` and `curbcharge.remove_favorite` are administrator-only
+actions. Both require `config_entry_id` for a loaded CurbCharge entry and a
+provider-local `station_id`; this is not a Home Assistant entity ID. Add accepts
+only a freshly discovered station from the entry's latest successful nearby
+search, and adding an existing favourite is an idempotent no-op. Remove works
+for saved favourites even when stale or confirmed missing. Unknown IDs,
+unloaded/wrong entries, and invalid calls produce visible validation errors.
+
+Favourite membership is persisted in that config entry's options. A
+membership-only change updates the favourite sensors without an immediate
+provider request; normal coordinator polling supplies future provider data.
+CurbCharge does not call notification services or provide device triggers or
+conditions. Notification actions in the Blueprint and automation examples are
+chosen by the user. See the
+[favorite services and automation examples](dashboards-and-automations.md#favorite-services-and-automations).
 
 ## Troubleshooting
 
@@ -391,6 +411,10 @@ selected by the user.
   conflicting, mixed-currency, or incomplete tax data.
 - **Data looks old:** Compare the station's provider update timestamp with
   Home Assistant's last successful refresh timestamp.
+- **Favorite action validation failed:** Select a loaded CurbCharge entry and
+  use the provider-local station ID, not an entity ID. Add requires a station
+  from the latest successful nearby search; remove accepts a saved station
+  that has since gone stale or missing.
 - **A station disappeared:** Temporarily missing stations remain unavailable
   for two successful polls and are removed after the third. Saved favourites
   remain unavailable until returned or unfavourited.
@@ -404,7 +428,10 @@ selected entity ID is stored locally in the config entry and redacted from
 diagnostics; its changing coordinates are not persisted or included in
 diagnostics. Favourite membership is stored by provider and station ID; current
 display names and addresses are not persisted. Saved coordinates are only
-lookup hints for NDW's spatial API and are redacted from diagnostics. Favourite
+lookup hints for NDW's spatial API and are redacted from diagnostics. The
+diagnostics `favourite_references` section reports a per-entry SHA-256 hash
+derived from the config-entry ID, provider, and station ID, plus presence and
+missing-refresh information; it does not expose the raw station ID. Favourite
 IDs and lookup hints are not included in the diagnostic station list.
 CurbCharge does not log entity IDs, coordinates,
 credentials, or raw provider responses. The integration does not request

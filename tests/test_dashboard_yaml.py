@@ -49,6 +49,7 @@ def test_documented_dashboard_examples_parse_and_link_to_canonical_files():
     }
     assert displayed_attributes >= {
         "result_status",
+        "is_favorite",
         "address",
         "available_connectors",
         "total_connectors",
@@ -66,6 +67,36 @@ def test_documented_dashboard_examples_parse_and_link_to_canonical_files():
         "sensor.your_nearby_available_connectors",
         "sensor.your_nearby_availability_percentage",
     }
+
+    favorite_rows = entities_cards[2]["entities"]
+    assert {row.get("entity") for row in favorite_rows} >= {
+        "sensor.your_favorite_summary",
+        "sensor.your_favorite_status",
+    }
+    favorite_attributes = {
+        row["attribute"] for row in favorite_rows if row.get("type") == "attribute"
+    }
+    assert favorite_attributes >= {
+        "configured_count",
+        "discovered_count",
+        "available_count",
+        "unknown_count",
+        "stale_count",
+        "missing_count",
+        "available_connectors",
+        "price_per_kwh",
+        "currency",
+        "is_stale",
+    }
+
+    favorite_guide = guide.split("### Favorite services and automations", 1)[1].split(
+        "### Availability notifications", 1
+    )[0]
+    assert "curbcharge.add_favorite" in favorite_guide
+    assert "curbcharge.remove_favorite" in favorite_guide
+    assert "notify.notify" in favorite_guide
+    assert "provider_update_success" in favorite_guide
+    assert "missing_refresh_count" in favorite_guide
 
     map_entities = {row["entity"] for row in map_example["entities"]}
     assert map_entities >= {
