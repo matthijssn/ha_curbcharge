@@ -355,44 +355,13 @@ class NdwDotNlProvider(BaseChargingProvider):
         body, _ = await self._async_request(
             TARIFF_FEED_URL, timeout=TARIFF_REQUEST_TIMEOUT
         )
-        try:
-            records_value: object = json.loads(gzip.decompress(body))
-        except (
-            gzip.BadGzipFile,
-            EOFError,
-            OSError,
-            zlib.error,
-            json.JSONDecodeError,
-            UnicodeDecodeError,
-        ) as err:
-            raise InvalidProviderResponseError(
-                "NDW DOT-NL returned an invalid tariff file"
-            ) from err
-        if not isinstance(records_value, list):
-            raise InvalidProviderResponseError(
-                "NDW DOT-NL returned an invalid tariff list"
-            )
-        records: list[object] = [record for record in records_value]
+        found = await asyncio.get_running_loop().run_in_executor(
+            None, _parse_tariff_feed, body, lookup_ids, now
+        )
 
         if expired:
             self._tariff_cache.clear()
             self._cached_tariff_ids.clear()
-
-        found: dict[str, ChargingTariff | None] = {}
-        for record_value in records:
-            if not isinstance(record_value, dict):
-                raise InvalidProviderResponseError(
-                    "NDW DOT-NL returned an invalid tariff"
-                )
-            record = _string_mapping(record_value, "tariff")
-            record_id = record.get("id")
-            if isinstance(record_id, str) and record_id in lookup_ids:
-                tariff_id = record_id
-                if tariff_id in found:
-                    raise InvalidProviderResponseError(
-                        "NDW DOT-NL returned a duplicate tariff"
-                    )
-                found[tariff_id] = _parse_tariff(cast(TariffRecord, record), now=now)
 
         for tariff_id in lookup_ids:
             self._tariff_cache[tariff_id] = found.get(tariff_id)
@@ -761,6 +730,42 @@ def _parse_tariff(
         tariff_type=_optional_string(record.get("type"), "tariff type"),
         status=status,
     )
+
+
+def _parse_tariff_feed(
+    body: bytes, lookup_ids: set[str], now: datetime
+) -> dict[str, ChargingTariff | None]:
+    """Decompress, validate, and select tariffs without blocking the event loop."""
+    try:
+        records_value: object = json.loads(gzip.decompress(body))
+    except (
+        gzip.BadGzipFile,
+        EOFError,
+        OSError,
+        zlib.error,
+        json.JSONDecodeError,
+        UnicodeDecodeError,
+    ) as err:
+        raise InvalidProviderResponseError(
+            "NDW DOT-NL returned an invalid tariff file"
+        ) from err
+    if not isinstance(records_value, list):
+        raise InvalidProviderResponseError("NDW DOT-NL returned an invalid tariff list")
+    records: list[object] = [record for record in records_value]
+
+    found: dict[str, ChargingTariff | None] = {}
+    for record_value in records:
+        if not isinstance(record_value, dict):
+            raise InvalidProviderResponseError("NDW DOT-NL returned an invalid tariff")
+        record = _string_mapping(record_value, "tariff")
+        record_id = record.get("id")
+        if isinstance(record_id, str) and record_id in lookup_ids:
+            if record_id in found:
+                raise InvalidProviderResponseError(
+                    "NDW DOT-NL returned a duplicate tariff"
+                )
+            found[record_id] = _parse_tariff(cast(TariffRecord, record), now=now)
+    return found
 
 
 def _unique_component_price(

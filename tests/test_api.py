@@ -6,6 +6,7 @@ import copy
 import gzip
 import json
 import logging
+import threading
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -646,7 +647,19 @@ def test_tax_included_component_is_not_taxed_twice():
 
 
 @pytest.mark.asyncio
-async def test_new_tariff_lookup_refreshes_existing_cached_tariffs():
+async def test_tariff_refresh_runs_in_executor_and_refreshes_cached_tariffs(
+    monkeypatch,
+):
+    parser_threads: list[int] = []
+    parse_tariff_feed = api._parse_tariff_feed
+
+    def record_parser_thread(
+        body: bytes, lookup_ids: set[str], now: datetime
+    ) -> dict[str, ChargingTariff | None]:
+        parser_threads.append(threading.get_ident())
+        return parse_tariff_feed(body, lookup_ids, now)
+
+    monkeypatch.setattr(api, "_parse_tariff_feed", record_parser_thread)
     records = [
         {
             "id": tariff_id,
@@ -680,6 +693,7 @@ async def test_new_tariff_lookup_refreshes_existing_cached_tariffs():
     assert tariffs["new"] is not None
     assert tariffs["new"].price_per_kwh == Decimal("0.605")
     assert provider._tariff_cache["old"].price_per_kwh == Decimal("0.484")
+    assert parser_threads and parser_threads[0] != threading.get_ident()
 
 
 def test_mixed_currency_tariffs_are_not_combined(sample_stations):
