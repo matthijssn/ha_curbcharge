@@ -28,7 +28,6 @@ from .models import (
     ChargingStation,
     DiscoveryFilterSettings,
     FavouriteStationReference,
-    TariffStatus,
 )
 from .provider import (
     AuthenticationError,
@@ -36,6 +35,7 @@ from .provider import (
     ChargingProviderError,
     ProviderRateLimitError,
 )
+from .statistics import StatisticsSnapshot, calculate_statistics_snapshot
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -122,6 +122,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         self.removed_station_ids: set[str] = set()
         self.last_successful_update: datetime | None = None
         self.recommendation_results: RecommendationResults | None = None
+        self.statistics_snapshot: StatisticsSnapshot | None = None
         self._update_unavailable = False
         super().__init__(
             hass,
@@ -133,9 +134,10 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
 
     @callback
     def async_set_updated_data(self, data: dict[str, ChargingStation]) -> None:
-        """Refresh cached recommendations before notifying listeners."""
+        """Refresh cached summaries before notifying listeners."""
         self.recommendation_results = None
         self._set_recommendation_results(data)
+        self._set_statistics_snapshot(data, datetime.now(UTC))
         super().async_set_updated_data(data)
 
     async def _async_update_data(self) -> dict[str, ChargingStation]:
@@ -232,6 +234,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         self.removed_station_ids = removed
         self._set_recommendation_results(current)
         self.last_successful_update = datetime.now(UTC)
+        self._set_statistics_snapshot(current, self.last_successful_update)
         return current
 
     def missing_refresh_count(self, station_id: str) -> int:
@@ -324,6 +327,22 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         )
         self.recommendation_results = evaluate_recommendations(
             best_nearby_stations, selection_stations, favorite_stations
+        )
+
+    def _set_statistics_snapshot(
+        self,
+        stations: Mapping[str, ChargingStation],
+        updated_at: datetime,
+    ) -> None:
+        """Replace the latest aggregate snapshot after a successful data update."""
+        self.statistics_snapshot = calculate_statistics_snapshot(
+            stations.values(),
+            radius_m=self.radius_m,
+            updated_at=updated_at,
+            max_stations=self.max_stations,
+            nearby_station_ids=self.nearby_station_ids,
+            favourite_ids=self.favourite_ids,
+            include_unknown=self.include_unknown,
         )
 
     def best_nearby_rank_for(
@@ -430,7 +449,7 @@ def evaluate_recommendations(
                     if tariff is not None and best_price is not None
                     else None
                 ),
-                known_price=_known_station_price(station),
+                known_price=station.comparable_price_per_kwh,
             )
 
     best_candidates: list[_RecommendationCandidate] = []
@@ -680,23 +699,6 @@ def _available_station_candidates(
         and candidate.available_connectors is not None
         and candidate.available_connectors > 0
     ]
-
-
-def _known_station_price(station: ChargingStation) -> tuple[str, Decimal] | None:
-    tariff = station.tariff
-    if (
-        tariff is None
-        or tariff.price_per_kwh is None
-        or not tariff.price_per_kwh.is_finite()
-        or not tariff.currency.strip()
-        or tariff.effective_status is not TariffStatus.AVAILABLE
-        or (
-            station.tariff_status is not None
-            and station.tariff_status is not TariffStatus.AVAILABLE
-        )
-    ):
-        return None
-    return tariff.currency.strip().upper(), tariff.price_per_kwh
 
 
 def _distance_key(distance_m: int | None) -> tuple[bool, int]:

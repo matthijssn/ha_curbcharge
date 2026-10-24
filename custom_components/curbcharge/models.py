@@ -585,6 +585,24 @@ class ChargingStation:
         return sum(connector.count for connector in self.connectors)
 
     @property
+    def comparable_price_per_kwh(self) -> tuple[str, Decimal] | None:
+        """Return a safe normalized gross price for cross-station comparison."""
+        tariff = self.tariff
+        if (
+            tariff is None
+            or tariff.price_per_kwh is None
+            or not tariff.price_per_kwh.is_finite()
+            or not tariff.currency.strip()
+            or tariff.effective_status is not TariffStatus.AVAILABLE
+            or (
+                self.tariff_status is not None
+                and self.tariff_status is not TariffStatus.AVAILABLE
+            )
+        ):
+            return None
+        return tariff.currency.strip().upper(), tariff.price_per_kwh
+
+    @property
     def has_available_connectors(self) -> bool | None:
         """Report whether availability is known to be positive."""
         if not self.availability_reported:
