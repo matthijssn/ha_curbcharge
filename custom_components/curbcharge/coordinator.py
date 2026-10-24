@@ -3,14 +3,14 @@
 import asyncio
 import logging
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from math import isfinite
-from typing import Any
+from typing import Any, NamedTuple
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import (
     DataUpdateCoordinator,
@@ -38,6 +38,43 @@ from .provider import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+class RecommendationResult(NamedTuple):
+    """One selected station and its position in the Best nearby ranking."""
+
+    station: ChargingStation | None
+    reason: str | None
+    best_nearby_rank: int | None
+    best_nearby_rank_score: float | None
+    best_nearby_candidate_count: int | None
+
+
+class RecommendationResults(NamedTuple):
+    """All recommendation results computed from one coordinator update."""
+
+    best_nearby: RecommendationResult
+    nearest_available: RecommendationResult
+    cheapest_available: RecommendationResult
+    fastest_available: RecommendationResult
+    favorite_nearest: RecommendationResult
+    favorite_cheapest: RecommendationResult
+    favorite_fastest: RecommendationResult
+    best_nearby_ranks: Mapping[tuple[str, str, str], tuple[int, float]]
+
+
+@dataclass(frozen=True, slots=True)
+class _RecommendationCandidate:
+    """Facts shared by the recommendation evaluators for one station."""
+
+    station: ChargingStation
+    has_available_connectors: bool | None
+    available_connectors: int | None
+    distance_m: int | None
+    max_power_kw: float | None
+    best_price_per_kwh: Decimal | None
+    best_currency: str | None
+    known_price: tuple[str, Decimal] | None
 
 
 class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
@@ -84,6 +121,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         self.station_removal_lock = asyncio.Lock()
         self.removed_station_ids: set[str] = set()
         self.last_successful_update: datetime | None = None
+        self.recommendation_results: RecommendationResults | None = None
         self._update_unavailable = False
         super().__init__(
             hass,
@@ -93,8 +131,16 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
             update_interval=self._default_update_interval,
         )
 
+    @callback
+    def async_set_updated_data(self, data: dict[str, ChargingStation]) -> None:
+        """Refresh cached recommendations before notifying listeners."""
+        self.recommendation_results = None
+        self._set_recommendation_results(data)
+        super().async_set_updated_data(data)
+
     async def _async_update_data(self) -> dict[str, ChargingStation]:
         """Fetch stations and retain ones temporarily missing upstream."""
+        self.recommendation_results = None
         self._update_search_location()
         try:
             stations = await self.provider.async_get_stations(
@@ -184,6 +230,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
 
         self._missing_refreshes = missing_refreshes
         self.removed_station_ids = removed
+        self._set_recommendation_results(current)
         self.last_successful_update = datetime.now(UTC)
         return current
 
@@ -251,25 +298,61 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         _LOGGER.warning("CurbCharge data update failed (%s)", error_type)
         self._update_unavailable = True
 
+    def _set_recommendation_results(
+        self, stations: Mapping[str, ChargingStation]
+    ) -> None:
+        """Evaluate all recommendation views once for the supplied station data."""
+        best_nearby_stations = tuple(
+            station
+            for station in stations.values()
+            if station.distance_m is not None and station.distance_m <= self.radius_m
+        )
+        if self.nearby_station_ids is None:
+            selection_stations = best_nearby_stations
+        else:
+            selection_stations = tuple(
+                station
+                for station in stations.values()
+                if not station.is_stale
+                and station.provider_id in self.nearby_station_ids
+            )
+        favorite_stations = tuple(
+            station
+            for favourite in self.favourites
+            if (station := stations.get(favourite.provider_id)) is not None
+            and not station.is_stale
+        )
+        self.recommendation_results = evaluate_recommendations(
+            best_nearby_stations, selection_stations, favorite_stations
+        )
+
+    def best_nearby_rank_for(
+        self, station: ChargingStation
+    ) -> tuple[int | None, float | None, int | None]:
+        """Return a station's current Best nearby rank, score, and cohort size."""
+        results = self.recommendation_results
+        if not self.last_update_success or results is None:
+            return None, None, None
+        ranking = results.best_nearby_ranks.get(_station_identity_key(station))
+        return (
+            ranking[0] if ranking is not None else None,
+            ranking[1] if ranking is not None else None,
+            results.best_nearby.best_nearby_candidate_count,
+        )
+
     @property
     def best_station(self) -> ChargingStation | None:
         """Return the recommended currently reported station."""
-        station, _ = recommend_station(
-            station
-            for station in (self.data or {}).values()
-            if station.distance_m is not None and station.distance_m <= self.radius_m
-        )
-        return station
+        if not self.last_update_success or self.recommendation_results is None:
+            return None
+        return self.recommendation_results.best_nearby.station
 
     @property
     def best_station_reason(self) -> str | None:
         """Return a stable reason code for the recommendation."""
-        _, reason = recommend_station(
-            station
-            for station in (self.data or {}).values()
-            if station.distance_m is not None and station.distance_m <= self.radius_m
-        )
-        return reason
+        if not self.last_update_success or self.recommendation_results is None:
+            return None
+        return self.recommendation_results.best_nearby.reason
 
 
 def _favourite_placeholder(
@@ -320,176 +403,282 @@ def _favourite_placeholder(
     )
 
 
+def evaluate_recommendations(
+    best_nearby_stations: Iterable[ChargingStation],
+    selection_stations: Iterable[ChargingStation],
+    favorite_stations: Iterable[ChargingStation] = (),
+) -> RecommendationResults:
+    """Evaluate all station recommendation views from shared candidate facts."""
+    best_stations = tuple(best_nearby_stations)
+    selected_stations = tuple(selection_stations)
+    favorites = tuple(favorite_stations)
+    candidates_by_object: dict[int, _RecommendationCandidate] = {}
+    for station in (*best_stations, *selected_stations, *favorites):
+        station_object_id = id(station)
+        if station_object_id not in candidates_by_object:
+            tariff = station.tariff
+            best_price = tariff.price_per_kwh if tariff is not None else None
+            candidates_by_object[station_object_id] = _RecommendationCandidate(
+                station=station,
+                has_available_connectors=station.has_available_connectors,
+                available_connectors=station.available_connectors,
+                distance_m=station.distance_m,
+                max_power_kw=station.max_power_kw,
+                best_price_per_kwh=best_price,
+                best_currency=(
+                    tariff.currency
+                    if tariff is not None and best_price is not None
+                    else None
+                ),
+                known_price=_known_station_price(station),
+            )
+
+    best_candidates: list[_RecommendationCandidate] = []
+    for station in best_stations:
+        candidate = candidates_by_object[id(station)]
+        if not station.is_stale and candidate.has_available_connectors is True:
+            best_candidates.append(candidate)
+    ranked_best, best_reason = _rank_best_nearby(best_candidates)
+    candidate_count = len(ranked_best)
+    best_nearby_ranks = {
+        _station_identity_key(candidate.station): (
+            rank,
+            100.0 * (candidate_count - rank + 1) / candidate_count,
+        )
+        for rank, candidate in enumerate(ranked_best, 1)
+    }
+
+    def result(
+        station: ChargingStation | None, reason: str | None
+    ) -> RecommendationResult:
+        ranking = (
+            best_nearby_ranks.get(_station_identity_key(station))
+            if station is not None
+            else None
+        )
+        return RecommendationResult(
+            station,
+            reason,
+            ranking[0] if ranking is not None else None,
+            ranking[1] if ranking is not None else None,
+            candidate_count,
+        )
+
+    selector_candidates = _available_station_candidates(
+        candidates_by_object[id(station)] for station in selected_stations
+    )
+    favorite_candidates = _available_station_candidates(
+        candidates_by_object[id(station)] for station in favorites
+    )
+    nearest_station, nearest_reason = _select_nearest_candidate(selector_candidates)
+    cheapest_station, cheapest_reason = _select_cheapest_candidate(selector_candidates)
+    fastest_station, fastest_reason = _select_fastest_candidate(selector_candidates)
+    favorite_nearest, favorite_nearest_reason = _select_nearest_candidate(
+        favorite_candidates
+    )
+    favorite_cheapest, favorite_cheapest_reason = _select_cheapest_candidate(
+        favorite_candidates
+    )
+    favorite_fastest, favorite_fastest_reason = _select_fastest_candidate(
+        favorite_candidates
+    )
+    return RecommendationResults(
+        result(ranked_best[0].station if ranked_best else None, best_reason),
+        result(nearest_station, nearest_reason),
+        result(cheapest_station, cheapest_reason),
+        result(fastest_station, fastest_reason),
+        result(favorite_nearest, favorite_nearest_reason),
+        result(favorite_cheapest, favorite_cheapest_reason),
+        result(favorite_fastest, favorite_fastest_reason),
+        best_nearby_ranks,
+    )
+
+
 def recommend_station(
     stations: Iterable[ChargingStation],
 ) -> tuple[ChargingStation | None, str | None]:
     """Rank available stations without comparing unlike currencies."""
-    candidates = [
-        station
-        for station in _fresh_stations(stations)
-        if station.has_available_connectors is True
-    ]
-    if not candidates:
-        return None, None
-    if len(candidates) == 1:
-        return candidates[0], "only_available_station"
-
-    currencies = {
-        station.tariff.currency
-        for station in candidates
-        if station.tariff is not None and station.tariff.price_per_kwh is not None
-    }
-    compare_prices = len(currencies) <= 1
-
-    def sort_key(station: ChargingStation) -> tuple[Any, ...]:
-        price = (
-            station.tariff.price_per_kwh
-            if compare_prices and station.tariff is not None
-            else None
-        )
-        return (
-            price is None,
-            price if price is not None else Decimal(0),
-            *_distance_key(station),
-            -(station.available_connectors or 0),
-            -(station.max_power_kw or 0),
-            *_station_identity_key(station),
-        )
-
-    ranked = sorted(candidates, key=sort_key)
-    winner = ranked[0]
-    winner_price = (
-        winner.tariff.price_per_kwh
-        if compare_prices and winner.tariff is not None
-        else None
-    )
-    known_prices = [
-        station.tariff.price_per_kwh
-        for station in candidates
-        if station.tariff is not None and station.tariff.price_per_kwh is not None
-    ]
-    if winner_price is not None:
-        if any(price != winner_price for price in known_prices):
-            return winner, "lowest_price_per_kwh"
-        if any(
-            station.tariff is None or station.tariff.price_per_kwh is None
-            for station in candidates
-        ):
-            return winner, "known_price_per_kwh"
-
-    if len({station.distance_m for station in candidates}) > 1:
-        if not compare_prices:
-            return winner, "shortest_distance_mixed_currencies"
-        if not known_prices:
-            return winner, "shortest_distance_price_unknown"
-        return winner, "shortest_distance_equal_prices"
-
-    if len({station.available_connectors for station in candidates}) > 1:
-        return winner, "more_available_connectors"
-    if len({station.max_power_kw for station in candidates}) > 1:
-        return winner, "higher_maximum_power"
-    if not compare_prices:
-        return winner, "stable_station_id_mixed_currencies"
-    if not known_prices:
-        return winner, "stable_station_id_price_unknown"
-    return winner, "stable_station_id"
+    result = evaluate_recommendations(stations, ()).best_nearby
+    return result.station, result.reason
 
 
 def select_nearest_station(
     stations: Iterable[ChargingStation],
 ) -> tuple[ChargingStation | None, str]:
     """Select the closest fresh station with known positive availability."""
-    candidates = _available_station_candidates(stations)
-    if not candidates:
-        return None, "no_available_station"
-    candidates_with_distance = [
-        station for station in candidates if station.distance_m is not None
-    ]
-    if not candidates_with_distance:
-        return None, "no_known_distance"
-
-    winner = min(
-        candidates_with_distance,
-        key=lambda station: (*_distance_key(station), *_station_identity_key(station)),
-    )
-    return winner, "shortest_distance"
+    result = evaluate_recommendations((), stations).nearest_available
+    return result.station, result.reason or "no_available_station"
 
 
 def select_cheapest_station(
     stations: Iterable[ChargingStation],
 ) -> tuple[ChargingStation | None, str]:
     """Select the cheapest fresh available station within one known currency."""
-    candidates = _available_station_candidates(stations)
-    if not candidates:
-        return None, "no_available_station"
-
-    priced_candidates: list[tuple[ChargingStation, str, Decimal]] = []
-    for station in candidates:
-        known_price = _known_station_price(station)
-        if known_price is None:
-            continue
-        currency, price = known_price
-        priced_candidates.append((station, currency, price))
-    if not priced_candidates:
-        return None, "no_known_price"
-
-    currencies = {currency for _, currency, _ in priced_candidates}
-    if len(currencies) > 1:
-        return None, "mixed_currencies"
-
-    winner = min(
-        priced_candidates,
-        key=lambda candidate: (
-            candidate[2],
-            *_distance_key(candidate[0]),
-            *_station_identity_key(candidate[0]),
-        ),
-    )[0]
-    return winner, "lowest_price_per_kwh"
+    result = evaluate_recommendations((), stations).cheapest_available
+    return result.station, result.reason or "no_available_station"
 
 
 def select_fastest_station(
     stations: Iterable[ChargingStation],
 ) -> tuple[ChargingStation | None, str]:
     """Select the fresh available station with the highest positive power."""
-    candidates = _available_station_candidates(stations)
+    result = evaluate_recommendations((), stations).fastest_available
+    return result.station, result.reason or "no_available_station"
+
+
+def _rank_best_nearby(
+    candidates: list[_RecommendationCandidate],
+) -> tuple[list[_RecommendationCandidate], str | None]:
+    """Preserve the established Best nearby order and reason codes."""
+    if not candidates:
+        return [], None
+    if len(candidates) == 1:
+        return candidates, "only_available_station"
+
+    currencies = {
+        candidate.best_currency
+        for candidate in candidates
+        if candidate.best_price_per_kwh is not None
+    }
+    compare_prices = len(currencies) <= 1
+    ranked = sorted(
+        candidates,
+        key=lambda candidate: (
+            candidate.best_price_per_kwh is None or not compare_prices,
+            (
+                candidate.best_price_per_kwh
+                if compare_prices and candidate.best_price_per_kwh is not None
+                else Decimal(0)
+            ),
+            *_distance_key(candidate.distance_m),
+            -(candidate.available_connectors or 0),
+            -(candidate.max_power_kw or 0),
+            *_station_identity_key(candidate.station),
+        ),
+    )
+    winner = ranked[0]
+    winner_price = winner.best_price_per_kwh if compare_prices else None
+    known_prices = [
+        candidate.best_price_per_kwh
+        for candidate in candidates
+        if candidate.best_price_per_kwh is not None
+    ]
+    if winner_price is not None:
+        if any(price != winner_price for price in known_prices):
+            return ranked, "lowest_price_per_kwh"
+        if any(candidate.best_price_per_kwh is None for candidate in candidates):
+            return ranked, "known_price_per_kwh"
+
+    if len({candidate.distance_m for candidate in candidates}) > 1:
+        if not compare_prices:
+            return ranked, "shortest_distance_mixed_currencies"
+        if not known_prices:
+            return ranked, "shortest_distance_price_unknown"
+        return ranked, "shortest_distance_equal_prices"
+
+    if len({candidate.available_connectors for candidate in candidates}) > 1:
+        return ranked, "more_available_connectors"
+    if len({candidate.max_power_kw for candidate in candidates}) > 1:
+        return ranked, "higher_maximum_power"
+    if not compare_prices:
+        return ranked, "stable_station_id_mixed_currencies"
+    if not known_prices:
+        return ranked, "stable_station_id_price_unknown"
+    return ranked, "stable_station_id"
+
+
+def _select_nearest_candidate(
+    candidates: Iterable[_RecommendationCandidate],
+) -> tuple[ChargingStation | None, str]:
+    candidates = list(candidates)
     if not candidates:
         return None, "no_available_station"
-    powered_candidates: list[tuple[ChargingStation, float]] = []
-    for station in candidates:
-        power = station.max_power_kw
+    candidates_with_distance = [
+        candidate for candidate in candidates if candidate.distance_m is not None
+    ]
+    if not candidates_with_distance:
+        return None, "no_known_distance"
+    winner = min(
+        candidates_with_distance,
+        key=lambda candidate: (
+            *_distance_key(candidate.distance_m),
+            *_station_identity_key(candidate.station),
+        ),
+    )
+    return winner.station, "shortest_distance"
+
+
+def _select_cheapest_candidate(
+    candidates: Iterable[_RecommendationCandidate],
+) -> tuple[ChargingStation | None, str]:
+    candidates = list(candidates)
+    if not candidates:
+        return None, "no_available_station"
+    priced_candidates = [
+        (candidate, candidate.known_price)
+        for candidate in candidates
+        if candidate.known_price is not None
+    ]
+    if not priced_candidates:
+        return None, "no_known_price"
+    currencies = {price[0] for _, price in priced_candidates}
+    if len(currencies) > 1:
+        return None, "mixed_currencies"
+    winner, _price = min(
+        priced_candidates,
+        key=lambda candidate: (
+            candidate[1][1],
+            *_distance_key(candidate[0].distance_m),
+            -(candidate[0].available_connectors or 0),
+            *_descending_power_key(candidate[0].max_power_kw),
+            *_station_identity_key(candidate[0].station),
+        ),
+    )
+    return winner.station, "lowest_price_per_kwh"
+
+
+def _select_fastest_candidate(
+    candidates: Iterable[_RecommendationCandidate],
+) -> tuple[ChargingStation | None, str]:
+    candidates = list(candidates)
+    if not candidates:
+        return None, "no_available_station"
+    powered_candidates: list[tuple[_RecommendationCandidate, float]] = []
+    for candidate in candidates:
+        power = candidate.max_power_kw
         if power is not None and isfinite(power) and power > 0:
-            powered_candidates.append((station, power))
+            powered_candidates.append((candidate, power))
     if not powered_candidates:
         return None, "no_positive_power"
 
-    winner = min(
+    currencies = {
+        candidate.known_price[0]
+        for candidate, _power in powered_candidates
+        if candidate.known_price is not None
+    }
+    compare_prices = len(currencies) <= 1
+    winner, _power = min(
         powered_candidates,
-        key=lambda station: (
-            -station[1],
-            *_distance_key(station[0]),
-            *_station_identity_key(station[0]),
+        key=lambda candidate: (
+            -candidate[1],
+            *_distance_key(candidate[0].distance_m),
+            -(candidate[0].available_connectors or 0),
+            *_comparable_price_key(candidate[0], compare_prices),
+            *_station_identity_key(candidate[0].station),
         ),
     )
-    return winner[0], "highest_maximum_power"
-
-
-def _fresh_stations(
-    stations: Iterable[ChargingStation],
-) -> list[ChargingStation]:
-    return [station for station in stations if not station.is_stale]
+    return winner.station, "highest_maximum_power"
 
 
 def _available_station_candidates(
-    stations: Iterable[ChargingStation],
-) -> list[ChargingStation]:
+    candidates: Iterable[_RecommendationCandidate],
+) -> list[_RecommendationCandidate]:
     return [
-        station
-        for station in _fresh_stations(stations)
-        if (
-            station.available_connectors is not None
-            and station.available_connectors > 0
-        )
+        candidate
+        for candidate in candidates
+        if not candidate.station.is_stale
+        and candidate.available_connectors is not None
+        and candidate.available_connectors > 0
     ]
 
 
@@ -510,11 +699,30 @@ def _known_station_price(station: ChargingStation) -> tuple[str, Decimal] | None
     return tariff.currency.strip().upper(), tariff.price_per_kwh
 
 
-def _distance_key(station: ChargingStation) -> tuple[bool, int]:
+def _distance_key(distance_m: int | None) -> tuple[bool, int]:
     return (
-        station.distance_m is None,
-        station.distance_m if station.distance_m is not None else 0,
+        distance_m is None,
+        distance_m if distance_m is not None else 0,
     )
+
+
+def _descending_power_key(power: float | None) -> tuple[bool, float]:
+    known_power = power if power is not None and isfinite(power) else None
+    return (
+        known_power is None,
+        -known_power if known_power is not None else 0.0,
+    )
+
+
+def _comparable_price_key(
+    candidate: _RecommendationCandidate, compare_prices: bool
+) -> tuple[bool, Decimal]:
+    price = (
+        candidate.known_price[1]
+        if compare_prices and candidate.known_price is not None
+        else None
+    )
+    return price is None, price if price is not None else Decimal(0)
 
 
 def _station_identity_key(station: ChargingStation) -> tuple[str, str, str]:

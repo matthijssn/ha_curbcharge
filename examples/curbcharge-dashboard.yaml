@@ -20,6 +20,18 @@ views:
             name: Recommendation status
           - type: attribute
             entity: sensor.your_best_nearby_charger
+            attribute: best_nearby_rank
+            name: Best nearby rank
+          - type: attribute
+            entity: sensor.your_best_nearby_charger
+            attribute: best_nearby_rank_score
+            name: Best nearby rank score
+          - type: attribute
+            entity: sensor.your_best_nearby_charger
+            attribute: best_nearby_candidate_count
+            name: Ranked candidates
+          - type: attribute
+            entity: sensor.your_best_nearby_charger
             attribute: is_favorite
             name: Favorite
           - type: attribute

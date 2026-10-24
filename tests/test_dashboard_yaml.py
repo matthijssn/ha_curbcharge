@@ -49,6 +49,9 @@ def test_documented_dashboard_examples_parse_and_link_to_canonical_files():
     }
     assert displayed_attributes >= {
         "result_status",
+        "best_nearby_rank",
+        "best_nearby_rank_score",
+        "best_nearby_candidate_count",
         "is_favorite",
         "address",
         "available_connectors",
