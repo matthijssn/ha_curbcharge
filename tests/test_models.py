@@ -2,10 +2,28 @@
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta, timezone
+from decimal import Decimal
 
 import pytest
 
-from custom_components.curbcharge.const import NDW_CONNECTOR_TYPE_CODES
+from custom_components.curbcharge.const import (
+    CONF_ALLOW_FALLBACK,
+    CONF_CONNECTOR_TYPE_IDS,
+    CONF_EXCLUDED_OPERATORS,
+    CONF_MAXIMUM_PRICE,
+    CONF_MAXIMUM_PRICE_CURRENCY,
+    CONF_PERSONALIZATION_ENABLED,
+    CONF_PERSONALIZATION_MIN_POWER_KW,
+    CONF_PERSONALIZATION_VERSION,
+    CONF_PREFERRED_OPERATORS,
+    CONF_RANKING_PRESET,
+    CONF_UNKNOWN_DATA_POLICY,
+    CONFIG_ENTRY_VERSION,
+    NDW_CONNECTOR_TYPE_CODES,
+    PERSONALIZATION_PROFILE_VERSION,
+    PROVIDER_ECO_MOVEMENT_BE,
+    PROVIDER_NDW_DOT_NL,
+)
 from custom_components.curbcharge.models import (
     ChargingConnector,
     ChargingLocation,
@@ -14,8 +32,13 @@ from custom_components.curbcharge.models import (
     DiscoveryFilterSettings,
     EVSEStatus,
     FavouriteStationReference,
+    OperatorReference,
+    PersonalizationProfile,
+    PersonalizationRankingPreset,
+    PersonalizationUnknownDataPolicy,
     ProviderTimestampSource,
     parse_favourite_references,
+    parse_operator_reference_lines,
 )
 
 
@@ -23,6 +46,148 @@ def test_canonical_connector_ids_cover_ndw_selector_codes():
     assert {connector_type.value for connector_type in ConnectorTypeId} == set(
         NDW_CONNECTOR_TYPE_CODES
     )
+
+
+def _personalization_config(**overrides):
+    config = {
+        CONF_PERSONALIZATION_VERSION: PERSONALIZATION_PROFILE_VERSION,
+        CONF_PERSONALIZATION_ENABLED: False,
+        CONF_CONNECTOR_TYPE_IDS: [],
+        CONF_PERSONALIZATION_MIN_POWER_KW: None,
+        CONF_PREFERRED_OPERATORS: [],
+        CONF_EXCLUDED_OPERATORS: [],
+        CONF_MAXIMUM_PRICE: None,
+        CONF_MAXIMUM_PRICE_CURRENCY: None,
+        CONF_RANKING_PRESET: PersonalizationRankingPreset.BALANCED.value,
+        CONF_ALLOW_FALLBACK: True,
+        CONF_UNKNOWN_DATA_POLICY: PersonalizationUnknownDataPolicy.EXCLUDE.value,
+    }
+    config.update(overrides)
+    return config
+
+
+def test_missing_personalization_profile_defaults_disabled_without_entry_migration():
+    profile = PersonalizationProfile.from_config(None)
+
+    assert CONFIG_ENTRY_VERSION == 2
+    assert not profile.enabled
+    assert profile.as_config() == _personalization_config()
+
+
+def test_personalization_profile_round_trips_and_deduplicates_values():
+    config = _personalization_config(
+        **{
+            CONF_PERSONALIZATION_ENABLED: True,
+            CONF_CONNECTOR_TYPE_IDS: [
+                ConnectorTypeId.TYPE_2.value,
+                ConnectorTypeId.TYPE_2.value,
+            ],
+            CONF_PERSONALIZATION_MIN_POWER_KW: 0,
+            CONF_PREFERRED_OPERATORS: [
+                {"provider": PROVIDER_NDW_DOT_NL, "key": "NLX"},
+                {"provider": PROVIDER_ECO_MOVEMENT_BE, "key": "Example   CPO"},
+                {"provider": PROVIDER_ECO_MOVEMENT_BE, "key": " EXAMPLE CPO "},
+            ],
+            CONF_EXCLUDED_OPERATORS: [
+                {"provider": PROVIDER_NDW_DOT_NL, "key": "OTHER"}
+            ],
+            CONF_MAXIMUM_PRICE: "0.012300",
+            CONF_MAXIMUM_PRICE_CURRENCY: "eur",
+            CONF_RANKING_PRESET: PersonalizationRankingPreset.HIGHEST_POWER.value,
+            CONF_ALLOW_FALLBACK: False,
+            CONF_UNKNOWN_DATA_POLICY: (
+                PersonalizationUnknownDataPolicy.ALLOW_FALLBACK.value
+            ),
+        }
+    )
+
+    profile = PersonalizationProfile.from_config(config)
+
+    assert profile.enabled
+    assert profile.connector_type_ids == (ConnectorTypeId.TYPE_2,)
+    assert profile.minimum_power_kw == 0
+    assert profile.preferred_operators == (
+        OperatorReference(PROVIDER_NDW_DOT_NL, "NLX"),
+        OperatorReference(PROVIDER_ECO_MOVEMENT_BE, "example cpo"),
+    )
+    assert profile.maximum_price == Decimal("0.012300")
+    assert profile.maximum_price_currency == "EUR"
+    assert profile.ranking_preset is PersonalizationRankingPreset.HIGHEST_POWER
+    assert not profile.allow_fallback
+    assert (
+        profile.unknown_data_policy is PersonalizationUnknownDataPolicy.ALLOW_FALLBACK
+    )
+    assert profile.as_config()[CONF_MAXIMUM_PRICE] == "0.012300"
+    assert PersonalizationProfile.from_config(profile.as_config()) == profile
+
+
+def test_operator_reference_lines_use_provider_scoped_exact_keys():
+    assert parse_operator_reference_lines(
+        "ndw_dot_nl:NLX\neco_movement_be: Example   CPO \neco_movement_be:example cpo\n"
+    ) == (
+        OperatorReference(PROVIDER_NDW_DOT_NL, "NLX"),
+        OperatorReference(PROVIDER_ECO_MOVEMENT_BE, "example cpo"),
+    )
+
+
+@pytest.mark.parametrize(
+    "value",
+    (
+        None,
+        1,
+        "not-a-provider-reference",
+        "unknown_provider:operator",
+        "ndw_dot_nl:",
+    ),
+)
+def test_operator_reference_lines_reject_invalid_values(value):
+    with pytest.raises(ValueError):
+        parse_operator_reference_lines(value)
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    (
+        {CONF_PERSONALIZATION_VERSION: 2},
+        {CONF_PERSONALIZATION_VERSION: True},
+        {CONF_PERSONALIZATION_ENABLED: 1},
+        {CONF_CONNECTOR_TYPE_IDS: "IEC_62196_T2"},
+        {CONF_CONNECTOR_TYPE_IDS: ["unknown"]},
+        {CONF_CONNECTOR_TYPE_IDS: [None]},
+        {CONF_PERSONALIZATION_MIN_POWER_KW: True},
+        {CONF_PERSONALIZATION_MIN_POWER_KW: -1},
+        {CONF_PERSONALIZATION_MIN_POWER_KW: float("inf")},
+        {CONF_PERSONALIZATION_MIN_POWER_KW: 10**1000},
+        {CONF_PREFERRED_OPERATORS: "not-a-list"},
+        {CONF_PREFERRED_OPERATORS: [None]},
+        {CONF_PREFERRED_OPERATORS: [{"provider": PROVIDER_NDW_DOT_NL, "key": ""}]},
+        {CONF_PREFERRED_OPERATORS: [{"provider": "unknown", "key": "operator"}]},
+        {
+            CONF_PREFERRED_OPERATORS: [
+                {"provider": PROVIDER_NDW_DOT_NL, "key": "same"}
+            ],
+            CONF_EXCLUDED_OPERATORS: [{"provider": PROVIDER_NDW_DOT_NL, "key": "same"}],
+        },
+        {CONF_MAXIMUM_PRICE: ""},
+        {CONF_MAXIMUM_PRICE: "not-a-decimal"},
+        {CONF_MAXIMUM_PRICE: "NaN"},
+        {CONF_MAXIMUM_PRICE: "Infinity"},
+        {CONF_MAXIMUM_PRICE: "-0.01"},
+        {
+            CONF_MAXIMUM_PRICE: "1.00",
+            CONF_MAXIMUM_PRICE_CURRENCY: None,
+        },
+        {CONF_MAXIMUM_PRICE_CURRENCY: "US"},
+        {CONF_MAXIMUM_PRICE_CURRENCY: "€UR"},
+        {CONF_RANKING_PRESET: "unknown"},
+        {CONF_ALLOW_FALLBACK: 1},
+        {CONF_UNKNOWN_DATA_POLICY: "unknown"},
+        {"unexpected": True},
+    ),
+)
+def test_personalization_profile_rejects_invalid_saved_values(overrides):
+    with pytest.raises(ValueError):
+        PersonalizationProfile.from_config(_personalization_config(**overrides))
 
 
 def test_station_counts_known_connector_statuses(sample_stations):

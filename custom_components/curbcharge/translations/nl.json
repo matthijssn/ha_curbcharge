@@ -138,7 +138,10 @@
   "options": {
     "step": {
       "init": {
-        "title": "CurbCharge-opties",
+        "title": "CurbCharge-opties"
+      },
+      "general": {
+        "title": "Algemene instellingen",
         "data": {
           "scan_interval": "Bijwerkinterval (minuten)",
           "search_radius": "Zoekradius (m)",
@@ -163,11 +166,40 @@
           "favourites": "Selecteer laadpunten op naam. Favorieten blijven beschikbaar buiten de zoekradius en worden toegevoegd boven op de limiet voor laadpunten in de buurt.",
           "location_movement_threshold": "Minimale afstand die de geselecteerde entiteit moet afleggen voordat de zoeklocatie wordt bijgewerkt. Stel in op 0 om de drempel uit te schakelen."
         }
+      },
+      "personalization": {
+        "title": "Personalisatie",
+        "data": {
+          "enabled": "Personalisatie inschakelen",
+          "connector_type_ids": "Compatibele connectortypen",
+          "minimum_power_kw": "Minimaal connectorvermogen (kW)",
+          "preferred_operators": "Voorkeursbeheerders",
+          "excluded_operators": "Uitgesloten beheerders",
+          "maximum_price": "Maximumprijs per kWh",
+          "maximum_price_currency": "Valuta voor maximumprijs",
+          "ranking_preset": "Rangschikkingsprofiel",
+          "allow_fallback": "Terugval toestaan",
+          "unknown_data_policy": "Beleid voor onbekende gegevens"
+        },
+        "data_description": {
+          "enabled": "Schakel dit opgeslagen profiel in voor gepersonaliseerde aanbevelingen. Bestaande aanbevelingen blijven ongewijzigd totdat personalisatie-evaluatie beschikbaar is.",
+          "connector_type_ids": "Kies canonieke connectorstandaarden. Laat leeg om elk connectortype toe te staan.",
+          "minimum_power_kw": "Optioneel minimum voor een passende connectorgroep; gebruik een eindige, niet-negatieve waarde.",
+          "preferred_operators": "Voer per regel één providerreferentie in, bijvoorbeeld ndw_dot_nl:NLX of eco_movement_be:Example CPO. NDW-ID's worden exact vergeleken; Belgische namen worden getrimd, witruimte samengevoegd en hoofdletterongevoelig vergeleken. Opgeslagen keuzes blijven bewaard als ze niet in de buurt zijn.",
+          "excluded_operators": "Voer per regel één providerreferentie in met hetzelfde formaat als bij voorkeursbeheerders. Uitsluitingen worden nooit door terugval omzeild.",
+          "maximum_price": "Optioneel niet-negatief decimaal bedrag. Laat leeg voor geen prijsmaximum.",
+          "maximum_price_currency": "Verplicht bij een maximumprijs; voer een valutacode van drie letters in, zoals EUR.",
+          "ranking_preset": "Kies een vast rangschikkingsdoel; aangepaste gewichten worden niet ondersteund.",
+          "allow_fallback": "Sta geschikte niet-voorkeursopties alleen toe als er geen volledige match is.",
+          "unknown_data_policy": "Kies of onbekende connector-, vermogens- of beheerdersgegevens als terugval mogen worden gebruikt. Onbekende beschikbaarheid en bekende harde beperkingen worden nooit versoepeld."
+        }
       }
     },
     "error": {
       "invalid_discovery_filters": "Voer geldige filters in. Het minimumvermogen moet een eindig positief getal zijn.",
-      "invalid_favourites": "Een of meer geselecteerde favorieten zijn niet meer beschikbaar. Vernieuw de opties en probeer het opnieuw."
+      "invalid_favourites": "Een of meer geselecteerde favorieten zijn niet meer beschikbaar. Vernieuw de opties en probeer het opnieuw.",
+      "invalid_personalization_profile": "Voer een geldig profiel in. Vermogen en prijs moeten eindig en niet-negatief zijn, een maximumprijs vereist een valutacode van drie letters, operatorreferenties vereisen een ondersteund providerprefix en een beheerder kan niet tegelijk voorkeur en uitsluiting zijn.",
+      "invalid_saved_personalization_profile": "Het opgeslagen personalisatieprofiel is ongeldig of gebruikt een niet-ondersteunde schemaversie. Controleer de velden en sla een geldig profiel op om het te vervangen."
     }
   },
   "services": {
@@ -246,6 +278,32 @@
         "cee-16a-three-phase": "CEE 16 A (driefase)",
         "cee-32a-three-phase": "CEE 32 A (driefase)",
         "domestic-a": "Huishoudelijk type A (NEMA 1-15)"
+      }
+    },
+    "personalization_connector_type": {
+      "options": {
+        "IEC_62196_T2": "Type 2 (Mennekes)",
+        "IEC_62196_T2_COMBO": "CCS Combo 2",
+        "CHADEMO": "CHAdeMO",
+        "IEC_60309_2_SINGLE_16": "CEE 16 A (eenfase)",
+        "IEC_60309_2_THREE_16": "CEE 16 A (driefase)",
+        "IEC_60309_2_THREE_32": "CEE 32 A (driefase)",
+        "DOMESTIC_A": "Huishoudelijk type A (NEMA 1-15)"
+      }
+    },
+    "personalization_ranking_preset": {
+      "options": {
+        "balanced": "Gebalanceerd",
+        "lowest_price": "Laagste prijs",
+        "shortest_distance": "Kortste afstand",
+        "highest_availability": "Meeste beschikbare connectoren",
+        "highest_power": "Hoogste connectorvermogen"
+      }
+    },
+    "personalization_unknown_data_policy": {
+      "options": {
+        "exclude": "Onbekende voorkeursgegevens uitsluiten (aanbevolen)",
+        "allow_fallback": "Onbekende waarden alleen als terugval toestaan"
       }
     },
     "provider": {

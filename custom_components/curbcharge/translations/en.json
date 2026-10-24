@@ -138,7 +138,10 @@
   "options": {
     "step": {
       "init": {
-        "title": "CurbCharge options",
+        "title": "CurbCharge options"
+      },
+      "general": {
+        "title": "General settings",
         "data": {
           "scan_interval": "Polling interval (minutes)",
           "search_radius": "Search radius (m)",
@@ -163,11 +166,40 @@
           "favourites": "Select charging points by name. Favourites remain available outside the search radius and are added beyond the nearby station limit.",
           "location_movement_threshold": "Minimum distance the selected entity must move before the search location is updated. Set to 0 to disable the threshold."
         }
+      },
+      "personalization": {
+        "title": "Personalization",
+        "data": {
+          "enabled": "Enable personalization",
+          "connector_type_ids": "Compatible connector types",
+          "minimum_power_kw": "Minimum connector power (kW)",
+          "preferred_operators": "Preferred operators",
+          "excluded_operators": "Excluded operators",
+          "maximum_price": "Maximum price per kWh",
+          "maximum_price_currency": "Maximum-price currency",
+          "ranking_preset": "Ranking preset",
+          "allow_fallback": "Allow fallback",
+          "unknown_data_policy": "Unknown-data policy"
+        },
+        "data_description": {
+          "enabled": "Enable this saved profile for personalized recommendations. Until personalization evaluation is available, existing recommendations remain unchanged.",
+          "connector_type_ids": "Choose canonical connector standards. Leave empty to accept any connector type.",
+          "minimum_power_kw": "Optional minimum for a matching connector group; use a finite nonnegative value.",
+          "preferred_operators": "Enter one provider-qualified reference per line, for example ndw_dot_nl:NLX or eco_movement_be:Example CPO. NDW IDs match exactly; Belgium names are trimmed, whitespace-collapsed, and case-insensitive. Saved choices are retained when not nearby.",
+          "excluded_operators": "Enter one provider-qualified reference per line using the same format as preferred operators. Matching exclusions are never bypassed by fallback.",
+          "maximum_price": "Optional nonnegative decimal amount. Leave blank for no price cap.",
+          "maximum_price_currency": "Required with a maximum price; enter a three-letter currency code such as EUR.",
+          "ranking_preset": "Choose a fixed ranking objective; custom weights are not supported.",
+          "allow_fallback": "Allow eligible non-preferred candidates only when no full match exists.",
+          "unknown_data_policy": "Choose whether unknown connector, power, or operator values may enter fallback results. Unknown availability and known hard-constraint failures are never relaxed."
+        }
       }
     },
     "error": {
       "invalid_discovery_filters": "Enter valid discovery filters. Minimum power must be a finite positive number.",
-      "invalid_favourites": "One or more selected favourites are no longer available. Refresh the options and try again."
+      "invalid_favourites": "One or more selected favourites are no longer available. Refresh the options and try again.",
+      "invalid_personalization_profile": "Enter a valid profile. Power and price must be finite and nonnegative, a maximum price needs a three-letter currency, operator references need a supported provider prefix, and an operator cannot be both preferred and excluded.",
+      "invalid_saved_personalization_profile": "The saved personalization profile is malformed or uses an unsupported schema version. Review the fields and save a valid profile to replace it."
     }
   },
   "services": {
@@ -246,6 +278,32 @@
         "cee-16a-three-phase": "CEE 16 A (three phase)",
         "cee-32a-three-phase": "CEE 32 A (three phase)",
         "domestic-a": "Domestic A (NEMA 1-15)"
+      }
+    },
+    "personalization_connector_type": {
+      "options": {
+        "IEC_62196_T2": "Type 2 (Mennekes)",
+        "IEC_62196_T2_COMBO": "CCS Combo 2",
+        "CHADEMO": "CHAdeMO",
+        "IEC_60309_2_SINGLE_16": "CEE 16 A (single phase)",
+        "IEC_60309_2_THREE_16": "CEE 16 A (three phase)",
+        "IEC_60309_2_THREE_32": "CEE 32 A (three phase)",
+        "DOMESTIC_A": "Domestic A (NEMA 1-15)"
+      }
+    },
+    "personalization_ranking_preset": {
+      "options": {
+        "balanced": "Balanced",
+        "lowest_price": "Lowest price",
+        "shortest_distance": "Shortest distance",
+        "highest_availability": "Most available connectors",
+        "highest_power": "Highest connector power"
+      }
+    },
+    "personalization_unknown_data_policy": {
+      "options": {
+        "exclude": "Exclude unknown preference values (recommended)",
+        "allow_fallback": "Allow unknown values only as fallback"
       }
     },
     "provider": {

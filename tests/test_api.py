@@ -587,6 +587,7 @@ def test_station_parser_assigns_canonical_connector_type_ids(sample_geojson):
         connector.connector_type: connector for connector in station.connectors
     }
 
+    assert station.operator_id == "TEST"
     assert (
         connectors_by_type["IEC_62196_T2"].connector_type_id is ConnectorTypeId.TYPE_2
     )
