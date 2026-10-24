@@ -282,13 +282,13 @@
     },
     "personalization_connector_type": {
       "options": {
-        "IEC_62196_T2": "Type 2 (Mennekes)",
-        "IEC_62196_T2_COMBO": "CCS Combo 2",
-        "CHADEMO": "CHAdeMO",
-        "IEC_60309_2_SINGLE_16": "CEE 16 A (eenfase)",
-        "IEC_60309_2_THREE_16": "CEE 16 A (driefase)",
-        "IEC_60309_2_THREE_32": "CEE 32 A (driefase)",
-        "DOMESTIC_A": "Huishoudelijk type A (NEMA 1-15)"
+        "iec_62196_t2": "Type 2 (Mennekes)",
+        "iec_62196_t2_combo": "CCS Combo 2",
+        "chademo": "CHAdeMO",
+        "iec_60309_2_single_16": "CEE 16 A (eenfase)",
+        "iec_60309_2_three_16": "CEE 16 A (driefase)",
+        "iec_60309_2_three_32": "CEE 32 A (driefase)",
+        "domestic_a": "Huishoudelijk type A (NEMA 1-15)"
       }
     },
     "personalization_ranking_preset": {

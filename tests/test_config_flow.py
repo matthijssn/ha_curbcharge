@@ -1046,7 +1046,10 @@ async def test_options_flow_saves_versioned_personalization_profile(hass):
         result["flow_id"],
         {
             CONF_PERSONALIZATION_ENABLED: True,
-            CONF_CONNECTOR_TYPE_IDS: [ConnectorTypeId.TYPE_2.value],
+            CONF_CONNECTOR_TYPE_IDS: [
+                ConnectorTypeId.TYPE_2.value.lower(),
+                ConnectorTypeId.TYPE_2.value.lower(),
+            ],
             CONF_PERSONALIZATION_MIN_POWER_KW: 11.0,
             CONF_PREFERRED_OPERATORS: (
                 "ndw_dot_nl:NLX\n"
@@ -1079,6 +1082,25 @@ async def test_options_flow_saves_versioned_personalization_profile(hass):
     assert entry.options[CONF_PERSONALIZATION][CONF_PERSONALIZATION_VERSION] == (
         PERSONALIZATION_PROFILE_VERSION
     )
+
+
+def test_personalization_form_conversion_defaults_and_rejects_bad_inputs():
+    profile = config_flow._personalization_profile_from_input({})
+    assert not profile.enabled
+    assert profile.connector_type_ids == ()
+
+    for connector_type_ids in ("not-a-list", [None], ["unknown"]):
+        with pytest.raises(ValueError):
+            config_flow._personalization_profile_from_input(
+                {CONF_CONNECTOR_TYPE_IDS: connector_type_ids}
+            )
+
+    with pytest.raises(ValueError, match="decimal string"):
+        config_flow._personalization_profile_from_input({CONF_MAXIMUM_PRICE: 1})
+    with pytest.raises(ValueError, match="currency"):
+        config_flow._personalization_profile_from_input(
+            {CONF_MAXIMUM_PRICE_CURRENCY: 1}
+        )
 
 
 @pytest.mark.asyncio

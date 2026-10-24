@@ -123,11 +123,40 @@ def test_personalization_profile_round_trips_and_deduplicates_values():
 
 def test_operator_reference_lines_use_provider_scoped_exact_keys():
     assert parse_operator_reference_lines(
-        "ndw_dot_nl:NLX\neco_movement_be: Example   CPO \neco_movement_be:example cpo\n"
+        "\nndw_dot_nl:NLX\n\neco_movement_be: Example   CPO \n"
+        "eco_movement_be:example cpo\n"
     ) == (
         OperatorReference(PROVIDER_NDW_DOT_NL, "NLX"),
         OperatorReference(PROVIDER_ECO_MOVEMENT_BE, "example cpo"),
     )
+
+
+def test_operator_reference_rejects_non_string_keys_and_formats_input():
+    with pytest.raises(ValueError):
+        OperatorReference(PROVIDER_NDW_DOT_NL, None)
+
+    assert OperatorReference(PROVIDER_NDW_DOT_NL, "NLX").as_input() == (
+        "ndw_dot_nl:NLX"
+    )
+
+
+@pytest.mark.parametrize(
+    "value",
+    (
+        1,
+        {"provider": PROVIDER_NDW_DOT_NL, "key": "NLX", "extra": True},
+        {"provider": PROVIDER_NDW_DOT_NL, "key": None},
+    ),
+)
+def test_operator_reference_from_config_rejects_invalid_mappings(value):
+    with pytest.raises(ValueError):
+        OperatorReference.from_config(value)
+
+
+@pytest.mark.parametrize("value", (False, []))
+def test_personalization_profile_rejects_non_mapping(value):
+    with pytest.raises(ValueError):
+        PersonalizationProfile.from_config(value)
 
 
 @pytest.mark.parametrize(
@@ -164,11 +193,18 @@ def test_operator_reference_lines_reject_invalid_values(value):
         {CONF_PREFERRED_OPERATORS: [{"provider": "unknown", "key": "operator"}]},
         {
             CONF_PREFERRED_OPERATORS: [
+                {"provider": PROVIDER_NDW_DOT_NL, "key": "NLX", "extra": True}
+            ]
+        },
+        {CONF_PREFERRED_OPERATORS: [{"provider": PROVIDER_NDW_DOT_NL, "key": None}]},
+        {
+            CONF_PREFERRED_OPERATORS: [
                 {"provider": PROVIDER_NDW_DOT_NL, "key": "same"}
             ],
             CONF_EXCLUDED_OPERATORS: [{"provider": PROVIDER_NDW_DOT_NL, "key": "same"}],
         },
         {CONF_MAXIMUM_PRICE: ""},
+        {CONF_MAXIMUM_PRICE: 1},
         {CONF_MAXIMUM_PRICE: "not-a-decimal"},
         {CONF_MAXIMUM_PRICE: "NaN"},
         {CONF_MAXIMUM_PRICE: "Infinity"},
@@ -178,10 +214,13 @@ def test_operator_reference_lines_reject_invalid_values(value):
             CONF_MAXIMUM_PRICE_CURRENCY: None,
         },
         {CONF_MAXIMUM_PRICE_CURRENCY: "US"},
+        {CONF_MAXIMUM_PRICE_CURRENCY: 1},
         {CONF_MAXIMUM_PRICE_CURRENCY: "€UR"},
         {CONF_RANKING_PRESET: "unknown"},
+        {CONF_RANKING_PRESET: None},
         {CONF_ALLOW_FALLBACK: 1},
         {CONF_UNKNOWN_DATA_POLICY: "unknown"},
+        {CONF_UNKNOWN_DATA_POLICY: None},
         {"unexpected": True},
     ),
 )

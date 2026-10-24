@@ -363,10 +363,12 @@ def personalization_schema(profile: PersonalizationProfile) -> FlowSchema:
             ): selector.BooleanSelector(),
             vol.Required(
                 CONF_CONNECTOR_TYPE_IDS,
-                default=[connector.value for connector in profile.connector_type_ids],
+                default=[
+                    connector.value.lower() for connector in profile.connector_type_ids
+                ],
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
-                    options=[connector.value for connector in ConnectorTypeId],
+                    options=[connector.value.lower() for connector in ConnectorTypeId],
                     multiple=True,
                     mode=selector.SelectSelectorMode.LIST,
                     translation_key="personalization_connector_type",
@@ -453,6 +455,20 @@ def _personalization_profile_from_input(
             raise ValueError("Maximum price currency must be a string")
         currency = currency.strip() or None
 
+    raw_connector_type_ids = user_input.get(CONF_CONNECTOR_TYPE_IDS, [])
+    if not isinstance(raw_connector_type_ids, (list, tuple)):
+        raise ValueError("Personalization connector types must be a list")
+    connector_type_ids: list[str] = []
+    for raw_connector_type_id in raw_connector_type_ids:
+        if not isinstance(raw_connector_type_id, str):
+            raise ValueError("Personalization connector type is invalid")
+        try:
+            connector_type_id = ConnectorTypeId(raw_connector_type_id.upper()).value
+        except ValueError as err:
+            raise ValueError("Personalization connector type is invalid") from err
+        if connector_type_id not in connector_type_ids:
+            connector_type_ids.append(connector_type_id)
+
     preferred_operators = parse_operator_reference_lines(
         user_input.get(CONF_PREFERRED_OPERATORS, "")
     )
@@ -465,7 +481,7 @@ def _personalization_profile_from_input(
             CONF_PERSONALIZATION_ENABLED: user_input.get(
                 CONF_PERSONALIZATION_ENABLED, False
             ),
-            CONF_CONNECTOR_TYPE_IDS: user_input.get(CONF_CONNECTOR_TYPE_IDS, []),
+            CONF_CONNECTOR_TYPE_IDS: connector_type_ids,
             CONF_PERSONALIZATION_MIN_POWER_KW: user_input.get(
                 CONF_PERSONALIZATION_MIN_POWER_KW
             ),
@@ -1011,7 +1027,7 @@ class CurbChargeOptionsFlow(config_entries.OptionsFlow):
         try:
             self._saved_personalization_profile()
         except ValueError:
-            return self._invalid_saved_personalization_form()
+            return await self.async_step_personalization()
         return self.async_show_menu(
             step_id="init", menu_options=["general", "personalization"]
         )
@@ -1019,14 +1035,6 @@ class CurbChargeOptionsFlow(config_entries.OptionsFlow):
     def _saved_personalization_profile(self) -> PersonalizationProfile:
         return PersonalizationProfile.from_config(
             self.config_entry.options.get(CONF_PERSONALIZATION)
-        )
-
-    def _invalid_saved_personalization_form(self) -> FlowResult:
-        return _show_form(
-            self,
-            step_id="personalization",
-            data_schema=personalization_schema(PersonalizationProfile()),
-            errors={"base": "invalid_saved_personalization_profile"},
         )
 
     async def async_step_general(
@@ -1037,10 +1045,7 @@ class CurbChargeOptionsFlow(config_entries.OptionsFlow):
         provider_id = defaults.get(CONF_PROVIDER, PROVIDER_NDW_DOT_NL)
         if provider_id not in (PROVIDER_NDW_DOT_NL, PROVIDER_ECO_MOVEMENT_BE):
             provider_id = PROVIDER_NDW_DOT_NL
-        try:
-            saved_profile = self._saved_personalization_profile()
-        except ValueError:
-            return self._invalid_saved_personalization_form()
+        saved_profile = self._saved_personalization_profile()
         saved_favourites = parse_favourite_references(
             defaults.get(CONF_FAVOURITES, []), provider_id
         )
