@@ -74,7 +74,7 @@ and [Waze](https://developers.google.com/waze/deeplinks).
 
 The native view has no custom-card dependency. If you prefer the bundled
 CurbCharge card's summary layout, set its `entity` to a station **Status
-summary** sensor or the Best nearby recommendation sensor:
+summary** sensor, the Best nearby sensor, or the Top nearby chargers sensor:
 
 ```yaml
 type: custom:curbcharge-card
@@ -108,6 +108,10 @@ requests. It displays the station name and operator when available, address,
 availability, connector counts, maximum power, distance, price/currency when
 known, and update times. Labels follow the Home Assistant language in English,
 Dutch, French, or German.
+When configured with **Top nearby chargers**, it renders the backend-ordered
+recommendations as one ordered list, including each station's rank, score,
+ranking explanation, availability, and available price, power, and distance.
+It does not sort the list or create per-result navigation links.
 When the entity has a valid destination, a collapsed **Navigate** disclosure
 offers explicit Google Maps, Apple Maps, Waze, and open-map links; nothing opens
 until the user taps a link. It is hidden for an unavailable/stale entity or an
@@ -173,6 +177,7 @@ entities:
   - entity: sensor.your_cheapest_available_charger
   - entity: sensor.your_fastest_available_charger
   - entity: sensor.your_best_nearby_charger
+  - entity: sensor.your_top_nearby_chargers
 ```
 
 Automations can use the selected station name as the sensor state and read

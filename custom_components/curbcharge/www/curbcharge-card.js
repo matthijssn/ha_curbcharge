@@ -27,9 +27,18 @@ const TEXT = {
     available: "Available",
     favorite: "Favorite",
     selected: "Selected",
+    topNearby: "Top nearby chargers",
+    recommendations: "Recommendations",
+    rank: "Rank",
+    score: "Score",
+    reason: "Reason",
+    bestNearbyRanking: "Ranked by Best nearby",
     noneAvailable: "None available",
     noCurrentStations: "No current stations",
     unknownAvailability: "Availability unknown",
+    noComparablePrice: "Price not comparable",
+    noPositivePower: "No positive power",
+    noKnownDistance: "Distance unknown",
     unknown: "Unknown",
     unavailable: "Unavailable",
     availableConnectors: "Available connectors",
@@ -68,9 +77,18 @@ const TEXT = {
     available: "Beschikbaar",
     favorite: "Favoriet",
     selected: "Geselecteerd",
+    topNearby: "Top laadpunten in de buurt",
+    recommendations: "Aanbevelingen",
+    rank: "Rang",
+    score: "Score",
+    reason: "Reden",
+    bestNearbyRanking: "Gerangschikt volgens beste laadpunt in de buurt",
     noneAvailable: "Geen beschikbaar",
     noCurrentStations: "Geen actuele stations",
     unknownAvailability: "Beschikbaarheid onbekend",
+    noComparablePrice: "Prijs niet vergelijkbaar",
+    noPositivePower: "Geen positief vermogen",
+    noKnownDistance: "Afstand onbekend",
     unknown: "Onbekend",
     unavailable: "Niet beschikbaar",
     availableConnectors: "Beschikbare connectoren",
@@ -109,9 +127,18 @@ const TEXT = {
     available: "Disponible",
     favorite: "Favori",
     selected: "Sélectionnée",
+    topNearby: "Meilleures bornes à proximité",
+    recommendations: "Recommandations",
+    rank: "Rang",
+    score: "Score",
+    reason: "Motif",
+    bestNearbyRanking: "Classée selon la meilleure borne à proximité",
     noneAvailable: "Aucun disponible",
     noCurrentStations: "Aucune station actuelle",
     unknownAvailability: "Disponibilité inconnue",
+    noComparablePrice: "Prix non comparable",
+    noPositivePower: "Aucune puissance positive",
+    noKnownDistance: "Distance inconnue",
     unknown: "Inconnu",
     unavailable: "Indisponible",
     availableConnectors: "Connecteurs disponibles",
@@ -150,9 +177,18 @@ const TEXT = {
     available: "Verfügbar",
     favorite: "Favorit",
     selected: "Ausgewählt",
+    topNearby: "Top-Ladestationen in der Nähe",
+    recommendations: "Empfehlungen",
+    rank: "Rang",
+    score: "Bewertung",
+    reason: "Begründung",
+    bestNearbyRanking: "Nach Best nearby sortiert",
     noneAvailable: "Keine verfügbar",
     noCurrentStations: "Keine aktuellen Stationen",
     unknownAvailability: "Verfügbarkeit unbekannt",
+    noComparablePrice: "Preis nicht vergleichbar",
+    noPositivePower: "Keine positive Leistung",
+    noKnownDistance: "Entfernung unbekannt",
     unknown: "Unbekannt",
     unavailable: "Nicht verfügbar",
     availableConnectors: "Verfügbare Anschlüsse",
@@ -229,6 +265,68 @@ function formatTimestamp(value, hass, unknown) {
     dateStyle: "short",
     timeStyle: "short",
   }).format(date);
+}
+
+function formatPrice(price, currency, hass, unknown) {
+  return typeof price === "number" &&
+    Number.isFinite(price) &&
+    typeof currency === "string" &&
+    currency
+    ? `${formatNumber(price, hass, unknown)} ${currency}/kWh`
+    : unknown;
+}
+
+function formatRecommendation(item, hass, text, options) {
+  const recommendation =
+    item && typeof item === "object" ? item : {};
+  const name =
+    typeof recommendation.name === "string" && recommendation.name.trim()
+      ? recommendation.name
+      : text.unknown;
+  const rows = [
+    [text.rank, formatCount(recommendation.rank, hass, text.unknown)],
+    [text.score, formatNumber(recommendation.score, hass, text.unknown)],
+    [
+      text.reason,
+      recommendation.reason === "best_nearby_rank"
+        ? text.bestNearbyRanking
+        : text.unknown,
+    ],
+    [
+      text.availableConnectors,
+      formatCount(recommendation.available_connectors, hass, text.unknown),
+    ],
+  ];
+  if (options.show_price) {
+    rows.push([
+      text.price,
+      formatPrice(
+        recommendation.price_per_kwh,
+        recommendation.currency,
+        hass,
+        text.unknown,
+      ),
+    ]);
+  }
+  if (options.show_station_details) {
+    rows.push(
+      [
+        text.maximumPower,
+        typeof recommendation.max_power_kw === "number" &&
+        Number.isFinite(recommendation.max_power_kw)
+          ? `${formatNumber(recommendation.max_power_kw, hass, text.unknown)} kW`
+          : text.unknown,
+      ],
+      [
+        text.distance,
+        typeof recommendation.distance_m === "number" &&
+        Number.isFinite(recommendation.distance_m)
+          ? `${formatNumber(recommendation.distance_m, hass, text.unknown)} m`
+          : text.unknown,
+      ],
+    );
+  }
+  return { name, rows };
 }
 
 function buildNavigationLinks(entity, attributes, text) {
@@ -320,12 +418,22 @@ export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
   const unavailable =
     entity.state === "unavailable" || attributes.result_status === "unavailable";
   const values = unavailable ? {} : attributes;
+  const hasRecommendationList = Object.hasOwn(attributes, "recommendations");
+  const recommendations =
+    hasRecommendationList && Array.isArray(values.recommendations)
+      ? values.recommendations.map((item) =>
+          formatRecommendation(item, hass, text, options),
+        )
+      : null;
   const statusLabels = {
     available: text.available,
     selected: text.selected,
     none_available: text.noneAvailable,
     no_current_stations: text.noCurrentStations,
     unknown_availability: text.unknownAvailability,
+    no_comparable_price: text.noComparablePrice,
+    no_positive_power: text.noPositivePower,
+    no_known_distance: text.noKnownDistance,
     unknown: text.unknown,
     unavailable: text.unavailable,
   };
@@ -346,13 +454,12 @@ export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
         ? text.open
         : text.closed
       : text.unknown;
-  const price =
-    typeof values.price_per_kwh === "number" &&
-    Number.isFinite(values.price_per_kwh) &&
-    typeof values.currency === "string" &&
-    values.currency
-      ? `${formatNumber(values.price_per_kwh, hass, text.unknown)} ${values.currency}/kWh`
-      : text.unknown;
+  const price = formatPrice(
+    values.price_per_kwh,
+    values.currency,
+    hass,
+    text.unknown,
+  );
   const providerUpdatedAt = Object.hasOwn(attributes, "provider_last_updated")
     ? values.provider_last_updated
     : typeof attributes.result_status === "string" ||
@@ -360,18 +467,20 @@ export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
       ? undefined
       : values.last_updated;
   const navigationLinks = buildNavigationLinks(entity, attributes, text);
-  const primaryRows = [
-    [
-      text.availableConnectors,
-      formatCount(values.available_connectors, hass, text.unknown),
-    ],
-  ];
-  if (options.show_price) {
+  const primaryRows = hasRecommendationList
+    ? []
+    : [
+        [
+          text.availableConnectors,
+          formatCount(values.available_connectors, hass, text.unknown),
+        ],
+      ];
+  if (options.show_price && !hasRecommendationList) {
     primaryRows.push([text.price, price]);
   }
 
   const detailsRows = [];
-  if (options.show_connector_details) {
+  if (options.show_connector_details && !hasRecommendationList) {
     detailsRows.push(
       [
         text.occupiedConnectors,
@@ -387,7 +496,7 @@ export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
       ],
     );
   }
-  if (options.show_station_details) {
+  if (options.show_station_details && !hasRecommendationList) {
     const operator =
       typeof values.operator === "string" ? values.operator.trim() : "";
     if (operator) {
@@ -417,7 +526,7 @@ export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
       [text.providerOpenStatus, openStatus],
     );
   }
-  if (options.show_update_times) {
+  if (options.show_update_times && !hasRecommendationList) {
     detailsRows.push(
       [
         text.providerUpdated,
@@ -432,10 +541,12 @@ export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
 
   return {
     title:
-      values.station_name ||
-      attributes.friendly_name ||
-      entity.entity_id ||
-      "CurbCharge",
+      (hasRecommendationList
+        ? attributes.friendly_name || text.topNearby
+        : values.station_name ||
+          attributes.friendly_name ||
+          entity.entity_id ||
+          "CurbCharge"),
     isFavorite,
     favoriteLabel: text.favorite,
     status,
@@ -446,6 +557,9 @@ export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
     navigationLinks,
     primaryRows,
     detailsRows,
+    ...(hasRecommendationList
+      ? { recommendations, recommendationsLabel: text.recommendations }
+      : {}),
   };
 }
 
@@ -578,6 +692,20 @@ class CurbChargeCard extends HTMLElement {
         font-weight: 700;
         line-height: 1.15;
       }
+      .recommendations { display: grid; gap: 10px; }
+      .recommendations-heading { font-size: 1em; margin: 0; }
+      .recommendation-list { display: grid; gap: 10px; margin: 0; padding-inline-start: 24px; }
+      .recommendation-item {
+        background: var(--secondary-background-color);
+        border-radius: var(--ha-card-border-radius, 12px);
+        padding: 10px 12px;
+      }
+      .recommendation-name { font-size: 1em; margin: 0 0 8px; }
+      .recommendation-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr));
+        gap: 8px;
+      }
       .details > summary, .navigation > summary {
         border-top: 1px solid var(--divider-color);
         cursor: pointer;
@@ -624,12 +752,40 @@ class CurbChargeCard extends HTMLElement {
     header.append(title, status);
     card.append(header);
 
-    const primaryGrid = document.createElement("div");
-    primaryGrid.className = "primary-grid";
-    for (const row of data.primaryRows) {
-      primaryGrid.append(createMetric(row, true));
+    if (data.primaryRows.length > 0) {
+      const primaryGrid = document.createElement("div");
+      primaryGrid.className = "primary-grid";
+      for (const row of data.primaryRows) {
+        primaryGrid.append(createMetric(row, true));
+      }
+      card.append(primaryGrid);
     }
-    card.append(primaryGrid);
+
+    if (Array.isArray(data.recommendations)) {
+      const section = document.createElement("section");
+      section.className = "recommendations";
+      const heading = document.createElement("h3");
+      heading.className = "recommendations-heading";
+      heading.textContent = data.recommendationsLabel;
+      const list = document.createElement("ol");
+      list.className = "recommendation-list";
+      for (const recommendation of data.recommendations) {
+        const item = document.createElement("li");
+        item.className = "recommendation-item";
+        const name = document.createElement("h4");
+        name.className = "recommendation-name";
+        name.textContent = recommendation.name;
+        const grid = document.createElement("div");
+        grid.className = "recommendation-grid";
+        for (const row of recommendation.rows) {
+          grid.append(createMetric(row));
+        }
+        item.append(name, grid);
+        list.append(item);
+      }
+      section.append(heading, list);
+      card.append(section);
+    }
 
     if (data.detailsRows.length > 0) {
       const details = document.createElement("details");

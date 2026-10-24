@@ -318,11 +318,233 @@ test("renders recommendation payload and separates provider and HA timestamps", 
   );
 });
 
+test("renders a server-ordered recommendation list with unknown and zero values", () => {
+  const data = cardModule.buildCardData(
+    {
+      entity_id: "sensor.top_nearby_chargers",
+      state: 2,
+      attributes: {
+        friendly_name: "Top nearby chargers",
+        result_status: "selected",
+        recommendations: [
+          {
+            name: "Station Two",
+            rank: 2,
+            score: 50,
+            reason: "best_nearby_rank",
+            available_connectors: null,
+            price_per_kwh: null,
+            currency: null,
+            max_power_kw: null,
+            distance_m: null,
+          },
+          {
+            name: "Station One",
+            rank: 1,
+            score: 100,
+            reason: "best_nearby_rank",
+            available_connectors: 0,
+            price_per_kwh: 0,
+            currency: "EUR",
+            max_power_kw: 0,
+            distance_m: 0,
+          },
+        ],
+      },
+    },
+    { language: "en" },
+  );
+
+  assert.equal(data.title, "Top nearby chargers");
+  assert.equal(data.status, "Selected");
+  assert.deepEqual(data.primaryRows, []);
+  assert.deepEqual(data.detailsRows, []);
+  assert.deepEqual(data.recommendations.map(({ name }) => name), [
+    "Station Two",
+    "Station One",
+  ]);
+  assert.deepEqual(data.recommendations[0].rows, [
+    ["Rank", "2"],
+    ["Score", "50"],
+    ["Reason", "Ranked by Best nearby"],
+    ["Available connectors", "Unknown"],
+    ["Price per kWh", "Unknown"],
+    ["Maximum charging power", "Unknown"],
+    ["Distance", "Unknown"],
+  ]);
+  assert.deepEqual(data.recommendations[1].rows, [
+    ["Rank", "1"],
+    ["Score", "100"],
+    ["Reason", "Ranked by Best nearby"],
+    ["Available connectors", "0"],
+    ["Price per kWh", "0 EUR/kWh"],
+    ["Maximum charging power", "0 kW"],
+    ["Distance", "0 m"],
+  ]);
+});
+
+test("renders Top N as an ordered list without per-result navigation", () => {
+  const Card = elements.get("curbcharge-card");
+  const card = new Card();
+  card.setConfig({ entity: "sensor.top_nearby_chargers" });
+  card.hass = {
+    language: "en",
+    states: {
+      "sensor.top_nearby_chargers": {
+        entity_id: "sensor.top_nearby_chargers",
+        state: 2,
+        attributes: {
+          result_status: "selected",
+          recommendations: [
+            { name: "Second in rank", rank: 2, score: 50, reason: "best_nearby_rank" },
+            { name: "First in rank", rank: 1, score: 100, reason: "best_nearby_rank" },
+          ],
+        },
+      },
+    },
+  };
+
+  const renderedCard = card.shadowRoot.children[1];
+  const section = renderedCard.children.find(
+    (child) => child.className === "recommendations",
+  );
+  const list = section.children.find((child) => child.tagName === "ol");
+
+  assert.equal(section.children[0].textContent, "Recommendations");
+  assert.deepEqual(
+    list.children.map((item) => item.children[0].textContent),
+    ["Second in rank", "First in rank"],
+  );
+  assert.equal(
+    renderedCard.children.some((child) => child.className === "navigation"),
+    false,
+  );
+});
+
+test("renders a successful empty Top N list and suppresses unavailable stale items", () => {
+  const empty = cardModule.buildCardData(
+    {
+      entity_id: "sensor.top_nearby_chargers",
+      state: 0,
+      attributes: {
+        result_status: "no_current_stations",
+        recommendations: [],
+      },
+    },
+    { language: "en" },
+  );
+  assert.deepEqual(empty.recommendations, []);
+
+  const unavailable = cardModule.buildCardData(
+    {
+      entity_id: "sensor.top_nearby_chargers",
+      state: "unavailable",
+      attributes: {
+        result_status: "unavailable",
+        recommendations: [{ name: "Stale station", rank: 1, score: 100 }],
+      },
+    },
+    { language: "en" },
+  );
+  assert.equal(unavailable.status, "Unavailable");
+  assert.equal(unavailable.recommendations, null);
+
+  const Card = elements.get("curbcharge-card");
+  const card = new Card();
+  card.setConfig({ entity: "sensor.top_nearby_chargers" });
+  card.hass = {
+    language: "en",
+    states: {
+      "sensor.top_nearby_chargers": {
+        entity_id: "sensor.top_nearby_chargers",
+        state: "unavailable",
+        attributes: {
+          result_status: "unavailable",
+          recommendations: [{ name: "Stale station", rank: 1, score: 100 }],
+        },
+      },
+    },
+  };
+  assert.doesNotMatch(visibleText(card.shadowRoot), /Stale station/);
+});
+
+test("localizes Top N score and reason labels in every supported language", () => {
+  const labels = {
+    en: {
+      topNearby: "Top nearby chargers",
+      recommendations: "Recommendations",
+      rank: "Rank",
+      score: "Score",
+      reason: "Reason",
+      bestNearbyRanking: "Ranked by Best nearby",
+    },
+    nl: {
+      topNearby: "Top laadpunten in de buurt",
+      recommendations: "Aanbevelingen",
+      rank: "Rang",
+      score: "Score",
+      reason: "Reden",
+      bestNearbyRanking: "Gerangschikt volgens beste laadpunt in de buurt",
+    },
+    fr: {
+      topNearby: "Meilleures bornes à proximité",
+      recommendations: "Recommandations",
+      rank: "Rang",
+      score: "Score",
+      reason: "Motif",
+      bestNearbyRanking: "Classée selon la meilleure borne à proximité",
+    },
+    de: {
+      topNearby: "Top-Ladestationen in der Nähe",
+      recommendations: "Empfehlungen",
+      rank: "Rang",
+      score: "Bewertung",
+      reason: "Begründung",
+      bestNearbyRanking: "Nach Best nearby sortiert",
+    },
+  };
+
+  for (const [language, expected] of Object.entries(labels)) {
+    const data = cardModule.buildCardData(
+      {
+        entity_id: "sensor.top_nearby_chargers",
+        state: 1,
+        attributes: {
+          result_status: "selected",
+          recommendations: [
+            { name: "Station", rank: 1, score: 100, reason: "best_nearby_rank" },
+          ],
+        },
+      },
+      { language },
+    );
+    const rows = data.recommendations[0].rows;
+
+    assert.equal(data.title, expected.topNearby);
+    assert.equal(data.recommendationsLabel, expected.recommendations);
+    assert.deepEqual(rows.find(([label]) => label === expected.rank), [
+      expected.rank,
+      "1",
+    ]);
+    assert.deepEqual(rows.find(([label]) => label === expected.score), [
+      expected.score,
+      "100",
+    ]);
+    assert.deepEqual(rows.find(([label]) => label === expected.reason), [
+      expected.reason,
+      expected.bestNearbyRanking,
+    ]);
+  }
+});
+
 test("shows recommendation result states distinctly and suppresses unavailable data", () => {
   const cases = [
     ["no_current_stations", "No current stations", "unknown"],
     ["unknown_availability", "Availability unknown", "unknown"],
     ["none_available", "None available", "unknown"],
+    ["no_comparable_price", "Price not comparable", "unknown"],
+    ["no_positive_power", "No positive power", "unknown"],
+    ["no_known_distance", "Distance unknown", "unknown"],
     ["unavailable", "Unavailable", "unavailable"],
   ];
 
@@ -368,6 +590,9 @@ test("localizes recommendation states, operator, and address in every supported 
       no_current_stations: "No current stations",
       unknown_availability: "Availability unknown",
       none_available: "None available",
+      no_comparable_price: "Price not comparable",
+      no_positive_power: "No positive power",
+      no_known_distance: "Distance unknown",
       unavailable: "Unavailable",
       operator: "Operator",
       address: "Address",
@@ -377,6 +602,9 @@ test("localizes recommendation states, operator, and address in every supported 
       no_current_stations: "Geen actuele stations",
       unknown_availability: "Beschikbaarheid onbekend",
       none_available: "Geen beschikbaar",
+      no_comparable_price: "Prijs niet vergelijkbaar",
+      no_positive_power: "Geen positief vermogen",
+      no_known_distance: "Afstand onbekend",
       unavailable: "Niet beschikbaar",
       operator: "Exploitant",
       address: "Adres",
@@ -386,6 +614,9 @@ test("localizes recommendation states, operator, and address in every supported 
       no_current_stations: "Aucune station actuelle",
       unknown_availability: "Disponibilité inconnue",
       none_available: "Aucun disponible",
+      no_comparable_price: "Prix non comparable",
+      no_positive_power: "Aucune puissance positive",
+      no_known_distance: "Distance inconnue",
       unavailable: "Indisponible",
       operator: "Exploitant",
       address: "Adresse",
@@ -395,6 +626,9 @@ test("localizes recommendation states, operator, and address in every supported 
       no_current_stations: "Keine aktuellen Stationen",
       unknown_availability: "Verfügbarkeit unbekannt",
       none_available: "Keine verfügbar",
+      no_comparable_price: "Preis nicht vergleichbar",
+      no_positive_power: "Keine positive Leistung",
+      no_known_distance: "Entfernung unbekannt",
       unavailable: "Nicht verfügbar",
       operator: "Betreiber",
       address: "Adresse",
@@ -446,6 +680,9 @@ test("localizes recommendation states, operator, and address in every supported 
       "no_current_stations",
       "unknown_availability",
       "none_available",
+      "no_comparable_price",
+      "no_positive_power",
+      "no_known_distance",
       "unavailable",
     ]) {
       const data = cardModule.buildCardData(
