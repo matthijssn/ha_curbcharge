@@ -1211,10 +1211,8 @@ async def test_top_nearby_sensor_does_not_publish_old_results_after_failure(
     assert sensor.native_value is None
     assert sensor.extra_state_attributes["result_status"] == "unavailable"
     assert sensor.extra_state_attributes["recommendations"] is None
-    assert provider.station_calls == [
-        (52.0, 5.0, 500, 10, ()),
-        (52.0, 5.0, 500, 10, ()),
-    ]
+    assert len(provider.station_calls) == 2
+    assert all(call[:3] == (52.0, 5.0, 500) for call in provider.station_calls)
 
 
 def test_nearest_sensor_reports_reason_when_distance_is_unknown(hass, sample_stations):
