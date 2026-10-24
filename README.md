@@ -26,9 +26,15 @@ See [provider coverage and limitations](docs/usage.md#data-source-and-coverage).
 
 ## Installation
 
+### HACS (default catalog)
+
+In HACS, open **Integrations**, search for **CurbCharge**, and install it.
+Restart Home Assistant.
+
 ### HACS custom repository
 
-[Add CurbCharge to HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=matthijssn&repository=ha_curbcharge&category=integration),
+To add CurbCharge as a custom repository, use [Add CurbCharge to
+HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=matthijssn&repository=ha_curbcharge&category=integration),
 or:
 
 1. In HACS, open **Integrations** and choose **Custom repositories** from the
