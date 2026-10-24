@@ -45,6 +45,7 @@ from custom_components.curbcharge.sensor import (
     OccupiedConnectorsSensor,
     PricePerKwhSensor,
     StatusSummarySensor,
+    TopNearbyChargersSensor,
     TotalConnectorsSensor,
     UnavailableConnectorsSensor,
     async_setup_dynamic_favorite_status_sensors,
@@ -1057,6 +1058,7 @@ def test_selection_sensors_report_station_details_and_reasons(hass, sample_stati
         assert sensor.unique_id == f"selector-area_{suffix}"
         assert sensor.extra_state_attributes == {
             "reason": reason,
+            "result_status": "selected",
             "last_updated": "2025-01-02T03:04:05+00:00",
             "last_successful_update": "2025-01-02T03:04:05+00:00",
             "best_nearby_rank": rank,
@@ -1085,6 +1087,134 @@ def test_selection_sensors_report_station_details_and_reasons(hass, sample_stati
     assert provider.station_calls == []
 
 
+def test_top_nearby_sensor_returns_bounded_backend_ranked_payload(
+    hass, sample_stations
+):
+    base = sample_stations[0]
+    stations = []
+    for index in range(7):
+        station = _selection_station(
+            base,
+            distance=50 + index * 50,
+            power=10 + index,
+            price=f"0.{20 - index:02d}",
+        )
+        stations.append(
+            replace(
+                station,
+                provider_id=f"top-{index}",
+                name=f"Station {index}",
+                location=(
+                    replace(station.location, provider_id=f"location-{index}")
+                    if station.location is not None
+                    else None
+                ),
+            )
+        )
+    stale = replace(
+        _selection_station(base, distance=10, power=500, price="0.01"),
+        provider_id="stale-top",
+        name="Stale",
+        is_stale=True,
+    )
+    provider = FakeProvider()
+    coordinator = _coordinator(hass, stations[0], max_stations=1, provider=provider)
+    coordinator.async_set_updated_data(
+        {station.provider_id: station for station in (*stations, stale)}
+    )
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="top-area")
+    sensor = TopNearbyChargersSensor(coordinator, entry)
+    reloaded_sensor = TopNearbyChargersSensor(coordinator, entry)
+
+    assert sensor.native_value == 5
+    assert sensor.unique_id == "top-area_top_nearby_chargers"
+    assert reloaded_sensor.unique_id == sensor.unique_id
+    assert sensor.device_info is None
+    attributes = sensor.extra_state_attributes
+    recommendations = attributes["recommendations"]
+    assert attributes["result_status"] == "selected"
+    assert attributes["best_nearby_candidate_count"] == 7
+    assert len(recommendations) == 5
+    assert [item["name"] for item in recommendations] == [
+        "Station 6",
+        "Station 5",
+        "Station 4",
+        "Station 3",
+        "Station 2",
+    ]
+    assert [item["rank"] for item in recommendations] == [1, 2, 3, 4, 5]
+    assert [item["score"] for item in recommendations] == pytest.approx(
+        [100, 600 / 7, 500 / 7, 400 / 7, 300 / 7]
+    )
+    assert recommendations[0]["reason"] == "best_nearby_rank"
+    assert recommendations[0]["ranking_reason"] == attributes["reason"]
+    assert recommendations[0]["score_components"] == {
+        "price_per_kwh": 0.14,
+        "currency": "EUR",
+        "distance_m": 350,
+        "available_connectors": 1,
+        "max_power_kw": 16,
+    }
+    assert "Stale" not in [item["name"] for item in recommendations]
+    assert provider.station_calls == []
+
+
+def test_top_nearby_sensor_distinguishes_empty_unknown_and_none_available(
+    hass, sample_stations
+):
+    station = sample_stations[0]
+    coordinator = _coordinator(hass, station)
+    sensor = TopNearbyChargersSensor(
+        coordinator, MockConfigEntry(domain=DOMAIN, unique_id="top-status-area")
+    )
+
+    coordinator.async_set_updated_data({})
+    assert sensor.native_value == 0
+    assert sensor.extra_state_attributes["result_status"] == "no_current_stations"
+    assert sensor.extra_state_attributes["recommendations"] == []
+
+    unknown = replace(station, availability_reported=False)
+    coordinator.async_set_updated_data({unknown.provider_id: unknown})
+    assert sensor.native_value == 0
+    assert sensor.extra_state_attributes["result_status"] == "unknown_availability"
+    assert sensor.extra_state_attributes["recommendations"] == []
+
+    unavailable = replace(
+        station,
+        connectors=tuple(
+            replace(connector, available_count=0) for connector in station.connectors
+        ),
+    )
+    coordinator.async_set_updated_data({unavailable.provider_id: unavailable})
+    assert sensor.native_value == 0
+    assert sensor.extra_state_attributes["result_status"] == "none_available"
+    assert sensor.extra_state_attributes["recommendations"] == []
+
+
+@pytest.mark.asyncio
+async def test_top_nearby_sensor_does_not_publish_old_results_after_failure(
+    hass, sample_stations
+):
+    station = sample_stations[0]
+    provider = FakeProvider([(station,), ChargingProviderError("offline")])
+    coordinator = CurbChargeCoordinator(hass, provider, 52.0, 5.0, 500, 10, 5, True)
+    sensor = TopNearbyChargersSensor(
+        coordinator, MockConfigEntry(domain=DOMAIN, unique_id="top-failed-area")
+    )
+
+    await coordinator.async_refresh()
+    assert sensor.native_value == 1
+
+    await coordinator.async_refresh()
+
+    assert not coordinator.last_update_success
+    assert sensor.native_value is None
+    assert sensor.extra_state_attributes["result_status"] == "unavailable"
+    assert sensor.extra_state_attributes["recommendations"] is None
+    assert len(provider.station_calls) == 2
+    assert all(call[:3] == (52.0, 5.0, 500) for call in provider.station_calls)
+
+
 def test_nearest_sensor_reports_reason_when_distance_is_unknown(hass, sample_stations):
     station = _selection_station(
         sample_stations[0], distance=None, power=50, price="0.40"
@@ -1099,6 +1229,46 @@ def test_nearest_sensor_reports_reason_when_distance_is_unknown(hass, sample_sta
 
     assert sensor.native_value is None
     assert sensor.extra_state_attributes["reason"] == "no_known_distance"
+    assert sensor.extra_state_attributes["result_status"] == "no_known_distance"
+
+
+def test_alternative_selection_statuses_cover_unknown_and_missing_values(
+    hass, sample_stations
+):
+    station = sample_stations[0]
+    coordinator = _coordinator(hass, station)
+    nearest = NearestAvailableChargerSensor(
+        coordinator, MockConfigEntry(domain=DOMAIN, unique_id="status-nearest")
+    )
+
+    unknown = replace(station, availability_reported=False)
+    coordinator.async_set_updated_data({unknown.provider_id: unknown})
+    assert nearest.extra_state_attributes["result_status"] == "unknown_availability"
+
+    unavailable = replace(
+        station,
+        connectors=tuple(
+            replace(connector, available_count=0) for connector in station.connectors
+        ),
+    )
+    coordinator.async_set_updated_data({unavailable.provider_id: unavailable})
+    assert nearest.extra_state_attributes["result_status"] == "none_available"
+
+    no_price = replace(
+        _selection_station(station, distance=100, power=50, price="0.2"), tariff=None
+    )
+    coordinator.async_set_updated_data({no_price.provider_id: no_price})
+    cheapest = CheapestAvailableChargerSensor(
+        coordinator, MockConfigEntry(domain=DOMAIN, unique_id="status-cheapest")
+    )
+    assert cheapest.extra_state_attributes["result_status"] == "no_comparable_price"
+
+    no_power = _selection_station(station, distance=100, power=0, price="0.2")
+    coordinator.async_set_updated_data({no_power.provider_id: no_power})
+    fastest = FastestAvailableChargerSensor(
+        coordinator, MockConfigEntry(domain=DOMAIN, unique_id="status-fastest")
+    )
+    assert fastest.extra_state_attributes["result_status"] == "no_positive_power"
 
 
 def test_selection_sensors_expose_reason_and_timestamp_without_results(
@@ -1119,6 +1289,7 @@ def test_selection_sensors_expose_reason_and_timestamp_without_results(
         assert sensor.native_value is None
         assert sensor.extra_state_attributes == {
             "reason": "no_available_station",
+            "result_status": "no_current_stations",
             "last_updated": "2025-01-02T03:04:05+00:00",
             "last_successful_update": "2025-01-02T03:04:05+00:00",
             "best_nearby_rank": None,
@@ -1153,6 +1324,7 @@ async def test_selection_sensor_does_not_publish_old_result_after_refresh_failur
     assert sensor.native_value is None
     attributes = sensor.extra_state_attributes
     assert attributes["reason"] == "unavailable"
+    assert attributes["result_status"] == "unavailable"
     assert attributes["best_nearby_rank"] is None
     assert attributes["best_nearby_rank_score"] is None
     assert attributes["best_nearby_candidate_count"] is None
@@ -1173,6 +1345,7 @@ def test_selection_sensors_handle_uninitialized_coordinator(hass):
         assert sensor.native_value is None
         assert sensor.extra_state_attributes == {
             "reason": "unavailable",
+            "result_status": "unavailable",
             "last_updated": None,
             "last_successful_update": None,
             "best_nearby_rank": None,
@@ -1208,6 +1381,7 @@ def test_cheapest_sensor_reports_mixed_currency_no_result(hass, sample_stations)
     assert sensor.native_value is None
     assert sensor.extra_state_attributes == {
         "reason": "mixed_currencies",
+        "result_status": "no_comparable_price",
         "last_updated": "2025-01-02T03:04:05+00:00",
         "last_successful_update": "2025-01-02T03:04:05+00:00",
         "best_nearby_rank": None,
