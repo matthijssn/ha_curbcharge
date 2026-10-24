@@ -4,7 +4,7 @@ import asyncio
 from collections.abc import Callable
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, NamedTuple
+from typing import Any
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -36,6 +36,7 @@ from .entity import (
     setup_dynamic_station_entities,
 )
 from .models import ChargingConnector, ChargingStation, ChargingTariff, TariffStatus
+from .statistics import availability_statistics
 
 PARALLEL_UPDATES = 0
 _TOP_NEARBY_LIMIT = 5
@@ -543,65 +544,6 @@ def _selection_result_status(
     return "none_available"
 
 
-class _AvailabilityPercentageSummary(NamedTuple):
-    available_connectors: int | None
-    total_connectors: int | None
-    reported_total_connectors: int | None
-    known_connector_group_count: int | None
-    excluded_connector_group_count: int | None
-    unknown_availability_station_count: int | None
-    unreported_total_station_count: int | None
-
-
-def _availability_percentage_summary(
-    current_stations: tuple[ChargingStation, ...] | None,
-) -> _AvailabilityPercentageSummary:
-    if current_stations is None:
-        return _AvailabilityPercentageSummary(None, None, None, None, None, None, None)
-
-    available_connectors = 0
-    total_connectors = 0
-    reported_total_connectors = 0
-    known_connector_group_count = 0
-    excluded_connector_group_count = 0
-    unknown_availability_station_count = 0
-    unreported_total_station_count = 0
-    for station in current_stations:
-        if not station.availability_reported or any(
-            connector.known_available_count is None for connector in station.connectors
-        ):
-            unknown_availability_station_count += 1
-        if not station.connector_count_reported:
-            unreported_total_station_count += 1
-            excluded_connector_group_count += len(station.connectors)
-            continue
-        reported_total_connectors += sum(
-            connector.count for connector in station.connectors
-        )
-        if not station.availability_reported:
-            excluded_connector_group_count += len(station.connectors)
-            continue
-
-        for connector in station.connectors:
-            available = connector.known_available_count
-            if available is None:
-                excluded_connector_group_count += 1
-                continue
-            available_connectors += available
-            total_connectors += connector.count
-            known_connector_group_count += 1
-
-    return _AvailabilityPercentageSummary(
-        available_connectors,
-        total_connectors,
-        reported_total_connectors,
-        known_connector_group_count,
-        excluded_connector_group_count,
-        unknown_availability_station_count,
-        unreported_total_station_count,
-    )
-
-
 def _nearby_aggregate_attributes(
     coordinator: CurbChargeCoordinator,
     current_stations: tuple[ChargingStation, ...] | None,
@@ -874,7 +816,7 @@ class NearbyAvailabilityPercentageSensor(
 
     @property
     def native_value(self) -> float | None:
-        summary = _availability_percentage_summary(_current_stations(self.coordinator))
+        summary = availability_statistics(_current_stations(self.coordinator))
         if summary.available_connectors is None or not summary.total_connectors:
             return None
         return round(100 * summary.available_connectors / summary.total_connectors, 1)
@@ -882,7 +824,7 @@ class NearbyAvailabilityPercentageSensor(
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         current_stations = _current_stations(self.coordinator)
-        summary = _availability_percentage_summary(current_stations)
+        summary = availability_statistics(current_stations)
         coverage = (
             None
             if not summary.reported_total_connectors or summary.total_connectors is None

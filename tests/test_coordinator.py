@@ -125,6 +125,44 @@ async def test_recommendations_are_cached_once_and_cleared_after_failure(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "failure",
+    (
+        ProviderConnectionError("offline"),
+        ProviderRateLimitError("limited", retry_after=120),
+    ),
+    ids=("provider-error", "rate-limit"),
+)
+async def test_statistics_snapshot_refreshes_on_success_and_survives_failure(
+    hass, sample_stations, failure
+):
+    first = replace(sample_stations[0], distance_m=100)
+    second = replace(sample_stations[1], distance_m=200)
+    provider = FakeProvider([(first,), (first, second), failure])
+    coordinator = _coordinator(hass, provider)
+
+    await coordinator.async_refresh()
+    first_snapshot = coordinator.statistics_snapshot
+    assert first_snapshot is not None
+    assert first_snapshot.fresh_station_count == 1
+    assert first_snapshot.last_successful_update == coordinator.last_successful_update
+
+    await coordinator.async_refresh()
+    second_snapshot = coordinator.statistics_snapshot
+    assert second_snapshot is not None
+    assert second_snapshot is not first_snapshot
+    assert second_snapshot.fresh_station_count == 2
+
+    last_successful_update = coordinator.last_successful_update
+    await coordinator.async_refresh()
+
+    assert not coordinator.last_update_success
+    assert coordinator.statistics_snapshot is second_snapshot
+    assert coordinator.last_successful_update == last_successful_update
+    assert len(provider.station_calls) == 3
+
+
+@pytest.mark.asyncio
 async def test_coordinator_passes_ndw_filters_and_unknown_setting(
     hass, sample_stations
 ):
@@ -160,15 +198,24 @@ async def test_temporarily_missing_stations_are_retained_then_removed(
     coordinator = _coordinator(hass, provider)
 
     await coordinator.async_refresh()
+    assert coordinator.statistics_snapshot is not None
+    assert coordinator.statistics_snapshot.fresh_station_count == 1
+
     for _ in (1, 2):
         await coordinator.async_refresh()
         assert coordinator.data[station.provider_id].is_stale
         assert station.provider_id not in coordinator.removed_station_ids
+        assert coordinator.statistics_snapshot is not None
+        assert coordinator.statistics_snapshot.fresh_station_count == 0
+        assert coordinator.statistics_snapshot.stale_station_count == 1
 
     await coordinator.async_refresh()
 
     assert station.provider_id not in coordinator.data
     assert coordinator.removed_station_ids == {station.provider_id}
+    assert coordinator.statistics_snapshot is not None
+    assert coordinator.statistics_snapshot.stale_station_count == 0
+    assert coordinator.statistics_snapshot.data_quality_status == "empty"
 
 
 @pytest.mark.asyncio
