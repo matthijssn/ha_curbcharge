@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import copy
 import hashlib
 import json
 import math
@@ -72,6 +71,23 @@ class BelgiumDatexDocument(TypedDict, total=False):
 
     payload: dict[str, object]
     messageContainer: dict[str, object]
+
+
+def _parse_datex_document(body: bytes) -> BelgiumDatexDocument:
+    """Parse and validate a DATEX II response body."""
+    try:
+        payload: object = json.loads(body)
+    except (json.JSONDecodeError, UnicodeDecodeError) as err:
+        raise InvalidProviderResponseError(
+            "Eco-Movement returned invalid Belgium DATEX II JSON"
+        ) from err
+    if not isinstance(payload, dict) or any(
+        not isinstance(key, str) for key in payload
+    ):
+        raise InvalidProviderResponseError(
+            "Eco-Movement returned an invalid Belgium DATEX II document"
+        )
+    return cast(BelgiumDatexDocument, payload)
 
 
 class BelgiumRequestLimiter:
@@ -163,19 +179,19 @@ class BelgiumDatexClient:
         self._locations_cached_at: float | None = None
 
     async def async_get_locations(self) -> BelgiumDatexDocument:
-        """Return the static country snapshot, cached for less than one day."""
+        """Return the shared, read-only static snapshot, cached for less than a day."""
         now = time.monotonic()
         if (
             self._locations is not None
             and self._locations_cached_at is not None
             and now - self._locations_cached_at < _LOCATION_CACHE_SECONDS
         ):
-            return copy.deepcopy(self._locations)
+            return self._locations
 
         locations = await self._async_request_json("/locations")
         self._locations = locations
         self._locations_cached_at = time.monotonic()
-        return copy.deepcopy(locations)
+        return locations
 
     async def async_get_evse_status(self, evse_id: str) -> BelgiumDatexDocument:
         """Fetch current status and ad-hoc price for one EVSE."""
@@ -226,19 +242,9 @@ class BelgiumDatexClient:
                 "Could not connect to the Belgium charging-data provider"
             ) from None
 
-        try:
-            payload: object = json.loads(body)
-        except (json.JSONDecodeError, UnicodeDecodeError) as err:
-            raise InvalidProviderResponseError(
-                "Eco-Movement returned invalid Belgium DATEX II JSON"
-            ) from err
-        if not isinstance(payload, dict) or any(
-            not isinstance(key, str) for key in payload
-        ):
-            raise InvalidProviderResponseError(
-                "Eco-Movement returned an invalid Belgium DATEX II document"
-            )
-        return cast(BelgiumDatexDocument, payload)
+        return await asyncio.get_running_loop().run_in_executor(
+            None, _parse_datex_document, body
+        )
 
 
 class BelgiumChargingProvider(BaseChargingProvider):
@@ -271,8 +277,9 @@ class BelgiumChargingProvider(BaseChargingProvider):
             raise UnsupportedLocationError(
                 "The Belgium provider does not support this search radius"
             )
-        _parse_static_stations(
-            await self._client.async_get_locations(), latitude, longitude
+        document = await self._client.async_get_locations()
+        await asyncio.get_running_loop().run_in_executor(
+            None, _parse_static_stations, document, latitude, longitude
         )
 
     async def async_get_stations(
@@ -286,36 +293,18 @@ class BelgiumChargingProvider(BaseChargingProvider):
         include_unknown: bool = True,
     ) -> StationDiscoveryResult:
         """Fetch nearby EVSEs and separately selected favourites."""
-        all_stations = _parse_static_stations(
-            await self._client.async_get_locations(), latitude, longitude
+        document = await self._client.async_get_locations()
+        nearby, favourite_stations = await asyncio.get_running_loop().run_in_executor(
+            None,
+            _select_static_stations,
+            document,
+            latitude,
+            longitude,
+            radius_m,
+            max_stations,
+            favourites,
+            self.provider_id,
         )
-        stations_by_id = {station.provider_id: station for station in all_stations}
-        nearby = [
-            station
-            for station in all_stations
-            if station.distance_m is not None and station.distance_m <= radius_m
-        ]
-        nearby.sort(
-            key=lambda station: (
-                station.distance_m is None,
-                station.distance_m if station.distance_m is not None else 0,
-                station.provider_id,
-            )
-        )
-        nearby = nearby[:max_stations]
-        nearby_ids = {station.provider_id for station in nearby}
-
-        favourite_stations: dict[str, ChargingStation] = {}
-        for favourite in favourites:
-            if favourite.provider != self.provider_id:
-                raise InvalidProviderResponseError(
-                    "A saved favourite belongs to a different provider"
-                )
-            if favourite.provider_id in nearby_ids:
-                continue
-            station = stations_by_id.get(favourite.provider_id)
-            if station is not None:
-                favourite_stations[favourite.provider_id] = station
 
         async def update_status(
             stations: list[ChargingStation],
@@ -455,6 +444,47 @@ def _parse_static_stations(
                         )
                     )
     return stations
+
+
+def _select_static_stations(
+    document: BelgiumDatexDocument,
+    latitude: float,
+    longitude: float,
+    radius_m: int,
+    max_stations: int,
+    favourites: tuple[FavouriteStationReference, ...],
+    provider_id: str,
+) -> tuple[list[ChargingStation], dict[str, ChargingStation]]:
+    """Parse the snapshot and select nearby and favourited stations."""
+    all_stations = _parse_static_stations(document, latitude, longitude)
+    stations_by_id = {station.provider_id: station for station in all_stations}
+    nearby = [
+        station
+        for station in all_stations
+        if station.distance_m is not None and station.distance_m <= radius_m
+    ]
+    nearby.sort(
+        key=lambda station: (
+            station.distance_m is None,
+            station.distance_m if station.distance_m is not None else 0,
+            station.provider_id,
+        )
+    )
+    nearby = nearby[:max_stations]
+    nearby_ids = {station.provider_id for station in nearby}
+
+    favourite_stations: dict[str, ChargingStation] = {}
+    for favourite in favourites:
+        if favourite.provider != provider_id:
+            raise InvalidProviderResponseError(
+                "A saved favourite belongs to a different provider"
+            )
+        if favourite.provider_id in nearby_ids:
+            continue
+        station = stations_by_id.get(favourite.provider_id)
+        if station is not None:
+            favourite_stations[favourite.provider_id] = station
+    return nearby, favourite_stations
 
 
 def _charging_location(site: dict[str, object]) -> ChargingLocation:

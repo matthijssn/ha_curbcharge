@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import threading
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -151,15 +152,24 @@ def _status_document(
 
 
 @pytest.mark.asyncio
-async def test_locations_are_authorized_and_cached():
+async def test_locations_are_authorized_cached_and_parsed_in_executor(monkeypatch):
+    parser_threads: list[int] = []
+    parse_document = belgium._parse_datex_document
+
+    def record_parser_thread(body: bytes) -> belgium.BelgiumDatexDocument:
+        parser_threads.append(threading.get_ident())
+        return parse_document(body)
+
+    monkeypatch.setattr(belgium, "_parse_datex_document", record_parser_thread)
     session = FakeSession([FakeResponse({"payload": {"sites": []}})])
     client = _client(session)
 
     locations = await client.async_get_locations()
-    locations["payload"]["modified"] = True
     cached = await client.async_get_locations()
 
-    assert cached == {"payload": {"sites": []}}
+    assert cached is locations
+    assert locations == {"payload": {"sites": []}}
+    assert parser_threads and parser_threads[0] != threading.get_ident()
     assert len(session.requests) == 1
     url, headers = session.requests[0]
     assert url == f"{belgium._API_BASE_URL}/locations"
@@ -211,7 +221,15 @@ def test_api_token_must_be_printable_non_whitespace_ascii():
 
 
 @pytest.mark.asyncio
-async def test_belgium_provider_maps_location_evse_connectors_and_status():
+async def test_belgium_provider_maps_location_evse_connectors_and_status(monkeypatch):
+    selection_threads: list[int] = []
+    select_static_stations = belgium._select_static_stations
+
+    def record_selection_thread(*args: Any) -> Any:
+        selection_threads.append(threading.get_ident())
+        return select_static_stations(*args)
+
+    monkeypatch.setattr(belgium, "_select_static_stations", record_selection_thread)
     session = FakeSession(
         [
             FakeResponse(_locations_document()),
@@ -258,6 +276,7 @@ async def test_belgium_provider_maps_location_evse_connectors_and_status():
     assert station.tariff is not None
     assert station.tariff.currency == "EUR"
     assert station.tariff.price_per_kwh == Decimal("0.42")
+    assert selection_threads and selection_threads[0] != threading.get_ident()
     assert all(
         connector.status is ConnectorStatus.UNKNOWN
         and connector.available_count is None
