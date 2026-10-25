@@ -426,6 +426,7 @@ def test_shared_ndw_limiter_rejects_invalid_hass_data(hass):
 def test_ndw_provider_exposes_stable_country_identity():
     provider = NdwDotNlProvider(FakeSession([]))
 
+    assert provider.provider_name == api.PROVIDER_NAME
     assert provider.provider_id == "ndw_dot_nl"
     assert provider.country_code == "NL"
 
