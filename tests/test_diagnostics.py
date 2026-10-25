@@ -20,11 +20,13 @@ from custom_components.curbcharge.const import (
     CONF_LOCATION_ENTITY,
     CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
+    CONF_PERSONALIZATION,
     CONF_PROVIDER,
     CONF_SEARCH_RADIUS,
     DOMAIN,
     LOCATION_ENTITY,
     LOCATION_MANUAL,
+    MAX_MAX_STATIONS,
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NDW_DOT_NL,
 )
@@ -36,6 +38,8 @@ from custom_components.curbcharge.models import (
     ChargingTariff,
     EVSEStatus,
     FavouriteStationReference,
+    OperatorReference,
+    PersonalizationProfile,
     ProviderTimestampSource,
 )
 from custom_components.curbcharge.provider import ProviderConnectionError
@@ -47,6 +51,12 @@ from tests.test_belgium import (
     _locations_document,
     _status_document,
 )
+
+
+def _expected_station_id_hash(entry_id: str, provider: str, station_id: str) -> str:
+    return hashlib.sha256(f"{entry_id}:{provider}:{station_id}".encode()).hexdigest()[
+        :16
+    ]
 
 
 @pytest.mark.asyncio
@@ -108,7 +118,9 @@ async def test_diagnostics_redact_coordinates_and_addresses(
     assert "maps.apple.com/directions" not in serialized
     assert "waze.com/ul?" not in serialized
     assert "geo:" not in serialized
+    assert station.provider_id not in serialized
     assert stale.provider_id not in serialized
+    assert unknown.provider_id not in serialized
     assert "diagnostic-secret-token" not in serialized
     assert "nested-data-secret-token" not in serialized
     assert "options-secret-token" not in serialized
@@ -120,14 +132,20 @@ async def test_diagnostics_redact_coordinates_and_addresses(
     assert diagnostics["retained_stations"] == 1
     assert len(diagnostics["stations"]) == 2
     assert diagnostics["stations"][0]["available_connectors"] == 2
-    assert diagnostics["stations"][0]["distance_m_rounded"] == 0
+    assert diagnostics["stations"][0]["provider_station_id_hash"] == (
+        _expected_station_id_hash(entry.entry_id, station.provider, station.provider_id)
+    )
+    assert "distance_m_rounded" not in diagnostics["stations"][0]
     assert diagnostics["stations"][0]["provider_data_age_seconds"] == 65
     assert diagnostics["stations"][0]["provider_timestamp_source"] == "ndw_feature"
     assert diagnostics["stations"][0]["tariff"]["price_per_kwh"] == "0.42"
     unknown_diagnostics = next(
         station
         for station in diagnostics["stations"]
-        if station["provider_station_id"] == unknown.provider_id
+        if station["provider_station_id_hash"]
+        == _expected_station_id_hash(
+            entry.entry_id, unknown.provider, unknown.provider_id
+        )
     )
     assert unknown_diagnostics["availability_reported"] is False
     assert unknown_diagnostics["available_connectors"] is None
@@ -235,13 +253,69 @@ async def test_diagnostics_redact_favourite_references_and_station_details(
     assert diagnostics["favourite_references"] == [
         {
             "provider": favourite.provider,
-            "station_id_hash": hashlib.sha256(
-                f"{entry.entry_id}:{favourite.provider}:{favourite.provider_id}".encode()
-            ).hexdigest()[:16],
+            "station_id_hash": _expected_station_id_hash(
+                entry.entry_id, favourite.provider, favourite.provider_id
+            ),
             "presence": "present",
             "missing_refresh_count": 0,
         }
     ]
+    assert diagnostics["favourite_references_truncated"] is False
+
+
+@pytest.mark.asyncio
+async def test_diagnostics_bound_favourite_details_and_redact_personalization(hass):
+    favourite_count = MAX_MAX_STATIONS + 5
+    favourites = tuple(
+        FavouriteStationReference(
+            provider=PROVIDER_NDW_DOT_NL,
+            provider_id=f"private-favourite-{index}",
+            name=f"Private favourite {index}",
+            latitude=52.123456,
+            longitude=5.654321,
+        )
+        for index in range(favourite_count)
+    )
+    profile = PersonalizationProfile(
+        enabled=True,
+        preferred_operators=tuple(
+            OperatorReference(PROVIDER_NDW_DOT_NL, f"private-operator-{index}")
+            for index in range(1000)
+        ),
+    ).as_config()
+    coordinator = CurbChargeCoordinator(
+        hass,
+        FakeProvider(),
+        52.0,
+        5.0,
+        500,
+        10,
+        5,
+        True,
+        favourites,
+    )
+    coordinator.async_set_updated_data({})
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="bounded-diagnostics",
+        data={CONF_PROVIDER: PROVIDER_NDW_DOT_NL},
+        options={
+            CONF_FAVOURITES: [favourite.as_config() for favourite in favourites],
+            CONF_PERSONALIZATION: profile,
+        },
+    )
+    entry.runtime_data = coordinator
+
+    diagnostics = await async_get_config_entry_diagnostics(hass, entry)
+    serialized = json.dumps(diagnostics)
+
+    assert diagnostics["favourite_count"] == favourite_count
+    assert len(diagnostics["favourite_references"]) == MAX_MAX_STATIONS
+    assert diagnostics["favourite_references_truncated"] is True
+    assert all(favourite.provider_id not in serialized for favourite in favourites)
+    assert all(favourite.name not in serialized for favourite in favourites)
+    assert "private-operator-0" not in serialized
+    assert "private-operator-999" not in serialized
 
 
 @pytest.mark.asyncio
@@ -388,6 +462,8 @@ async def test_belgium_diagnostics_redact_nested_secrets_and_location(hass):
         "belgium-options-secret-token",
         "nested-belgium-options-secret-token",
         "evse-stale",
+        "evse-internal-1",
+        "evse-unknown",
         "50.999999",
         "4.999999",
         "50.85",
@@ -405,11 +481,15 @@ async def test_belgium_diagnostics_redact_nested_secrets_and_location(hass):
     assert diagnostics["discovered_stations"] == 2
     assert diagnostics["retained_stations"] == 1
     assert len(diagnostics["stations"]) == 2
+    evse_hash = _expected_station_id_hash(
+        entry.entry_id, station.provider, station.provider_id
+    )
     evse_diagnostics = next(
         station
         for station in diagnostics["stations"]
-        if station["provider_station_id"] == "evse-internal-1"
+        if station["provider_station_id_hash"] == evse_hash
     )
+    assert "distance_m_rounded" not in evse_diagnostics
     assert evse_diagnostics["evse_status"] == "AVAILABLE"
     assert evse_diagnostics["available_connectors"] is None
     assert evse_diagnostics["unknown_connectors"] == 2
@@ -418,7 +498,10 @@ async def test_belgium_diagnostics_redact_nested_secrets_and_location(hass):
     unknown_diagnostics = next(
         station
         for station in diagnostics["stations"]
-        if station["provider_station_id"] == "evse-unknown"
+        if station["provider_station_id_hash"]
+        == _expected_station_id_hash(
+            entry.entry_id, unknown.provider, unknown.provider_id
+        )
     )
     assert unknown_diagnostics["availability_reported"] is False
     assert unknown_diagnostics["evse_status"] == "UNKNOWN"

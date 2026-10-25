@@ -7,7 +7,11 @@ body:
   - type: markdown
     attributes:
       value: |
-        Do not include credentials, API tokens, exact home coordinates, or unredacted diagnostics. Review screenshots and logs for personal information before attaching them.
+        Downloaded diagnostics are sanitized but may still contain provider and
+        charging-status summaries and hashed station references. Review
+        diagnostics, screenshots, and logs for personal information before
+        attaching them. Never include credentials, API tokens, exact home
+        coordinates, or unredacted diagnostics.
   - type: input
     id: home_assistant_version
     attributes:
