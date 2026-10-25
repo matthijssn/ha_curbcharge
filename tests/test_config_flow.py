@@ -209,6 +209,9 @@ async def test_config_flow_uses_home_coordinates(hass, monkeypatch):
     hass.config.longitude = 5.1
     provider = FakeProvider()
     monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
+    monkeypatch.setattr(
+        "custom_components.curbcharge.create_provider", lambda *_args: provider
+    )
 
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": "user"}
