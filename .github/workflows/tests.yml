@@ -36,6 +36,35 @@ jobs:
       - run: node --test tests/curbcharge-card.test.mjs
       - name: Test with coverage threshold
         run: pytest --cov=custom_components/curbcharge --cov-report=term-missing --cov-report=json:coverage.json --cov-fail-under=96
+      - name: Enforce per-module coverage
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          coverage = json.loads(Path("coverage.json").read_text(encoding="utf-8"))
+          modules = {
+              path: report["summary"]["percent_covered"]
+              for path, report in coverage["files"].items()
+              if path.startswith("custom_components/curbcharge/")
+              and path.endswith(".py")
+          }
+          if not modules:
+              raise SystemExit("No CurbCharge Python modules were included in coverage.json")
+
+          below_threshold = {
+              path: percent for path, percent in modules.items() if percent <= 95.0
+          }
+          if below_threshold:
+              details = "\n".join(
+                  f" - {path}: {percent:.2f}%"
+                  for path, percent in sorted(below_threshold.items())
+              )
+              raise SystemExit(
+                  "Every CurbCharge module must exceed 95% coverage:\n" + details
+              )
+          print(f"All {len(modules)} CurbCharge modules exceed 95% coverage.")
+          PY
       - name: Reject coverage decreases
         if: github.event_name == 'push' || github.event_name == 'pull_request'
         env:
