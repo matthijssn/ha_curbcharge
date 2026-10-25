@@ -15,8 +15,10 @@ from .const import (
     CONF_INCLUDE_UNKNOWN,
     CONF_LOCATION_ENTITY,
     CONF_LOCATION_SOURCE,
+    CONF_PERSONALIZATION,
     CONF_PROVIDER,
     CONF_SEARCH_RADIUS,
+    MAX_MAX_STATIONS,
     MISSING_STATION_REFRESHES,
 )
 from .coordinator import CurbChargeCoordinator
@@ -27,7 +29,14 @@ TO_REDACT = [
     CONF_LOCATION_ENTITY,
     CONF_API_TOKEN,
     CONF_FAVOURITES,
+    CONF_PERSONALIZATION,
 ]
+
+
+def _station_id_hash(entry_id: str, provider: str, station_id: str) -> str:
+    return hashlib.sha256(f"{entry_id}:{provider}:{station_id}".encode()).hexdigest()[
+        :16
+    ]
 
 
 def _favourite_presence(coordinator: CurbChargeCoordinator, station_id: str) -> str:
@@ -76,18 +85,21 @@ async def async_get_config_entry_diagnostics(
         ),
         "favourite_count": len(coordinator.favourite_ids),
         "coordinator_update_success": coordinator.last_update_success,
+        "favourite_references_truncated": (
+            len(coordinator.favourites) > MAX_MAX_STATIONS
+        ),
         "favourite_references": [
             {
                 "provider": favourite.provider,
-                "station_id_hash": hashlib.sha256(
-                    f"{entry.entry_id}:{favourite.provider}:{favourite.provider_id}".encode()
-                ).hexdigest()[:16],
+                "station_id_hash": _station_id_hash(
+                    entry.entry_id, favourite.provider, favourite.provider_id
+                ),
                 "presence": _favourite_presence(coordinator, favourite.provider_id),
                 "missing_refresh_count": coordinator.missing_refresh_count(
                     favourite.provider_id
                 ),
             }
-            for favourite in coordinator.favourites
+            for favourite in coordinator.favourites[:MAX_MAX_STATIONS]
         ],
         "discovered_stations": fresh_station_count,
         "retained_stations": len(coordinator.data or {}) - fresh_station_count,
@@ -98,16 +110,13 @@ async def async_get_config_entry_diagnostics(
         ),
         "stations": [
             {
-                "provider_station_id": station.provider_id,
+                "provider_station_id_hash": _station_id_hash(
+                    entry.entry_id, station.provider, station.provider_id
+                ),
                 "provider": station.provider,
                 "provider_name": station.provider_name,
                 "country_code": station.country_code,
                 "operator": station.operator,
-                "distance_m_rounded": (
-                    round(station.distance_m / 1000) * 1000
-                    if station.distance_m is not None
-                    else None
-                ),
                 "availability_reported": station.availability_reported,
                 "connector_count_reported": station.connector_count_reported,
                 "evse_status": (

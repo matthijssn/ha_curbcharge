@@ -515,26 +515,34 @@ chosen by the user. See the
 
 ## Privacy and diagnostics
 
-Diagnostics omit station addresses and exact station coordinates, redact
-manual coordinates, Entity source IDs, and saved favourite references from
-entry data, and round distances to the nearest kilometre. In Entity mode, the
-selected entity ID is stored locally in the config entry and redacted from
-diagnostics; its changing coordinates are not persisted or included in
-diagnostics. Favourite membership is stored by provider and station ID; current
-display names and addresses are not persisted. Saved coordinates are only
-lookup hints for NDW's spatial API and are redacted from diagnostics. The
-diagnostics `favourite_references` section reports a per-entry SHA-256 hash
-derived from the config-entry ID, provider, and station ID, plus presence and
-missing-refresh information; it does not expose the raw station ID. Favourite
-IDs and lookup hints are not included in the diagnostic station list.
-CurbCharge does not log entity IDs, coordinates,
-credentials, or raw provider responses. The integration does not request
-credentials from NDW. History and statistics are Home Assistant Recorder data
-and follow its database, retention, and exclusion settings; CurbCharge does
-not create a separate history database, change Recorder settings, or send
-recorded history to a provider. It does not predict availability or use AI. To
-download diagnostics, open **Settings → Devices & services → CurbCharge**, open
-the integration menu, and select **Download diagnostics**.
+Diagnostics omit station addresses, exact station coordinates, and station
+distances. They redact manual coordinates, Entity source IDs, saved favourite
+references, API tokens, and personalization profile values from config-entry
+data and options. In Entity mode, the selected entity ID is stored locally in
+the config entry and redacted from diagnostics; its changing coordinates are
+not persisted or included in diagnostics. Favourite membership is stored by
+provider and station ID; current display names and addresses are not persisted.
+Saved coordinates are only lookup hints for NDW's spatial API and are redacted
+from diagnostics.
+
+The diagnostics `favourite_count` remains accurate, while
+`favourite_references` includes at most 50 detail rows and
+`favourite_references_truncated` indicates when some details were omitted.
+Reference and non-favourite station IDs are represented by per-entry SHA-256
+hashes derived from the config-entry ID, provider, and station ID. Station
+summaries retain provider, country, availability, connector, and tariff details
+but omit distance to reduce location linkability. Review downloaded diagnostics
+before sharing; they are sanitized, but still contain provider and charging
+status information.
+
+CurbCharge does not log entity IDs, coordinates, credentials, or raw provider
+responses. The integration does not request credentials from NDW. History and
+statistics are Home Assistant Recorder data and follow its database,
+retention, and exclusion settings; CurbCharge does not create a separate
+history database, change Recorder settings, or send recorded history to a
+provider. It does not predict availability or use AI. To download diagnostics,
+open **Settings → Devices & services → CurbCharge**, open the integration menu,
+and select **Download diagnostics**.
 
 ## Removing CurbCharge
 
