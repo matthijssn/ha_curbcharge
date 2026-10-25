@@ -55,6 +55,7 @@ directory at `custom_components/curbcharge`, then restart Home Assistant.
 - [User guide: coverage, setup, entities, updates, and privacy](docs/usage.md)
 - [Dashboards, cards, and automations](docs/dashboards-and-automations.md)
 - [Development and releases](docs/development.md)
+- [Contributing](CONTRIBUTING.md) | [Code of Conduct](CODE_OF_CONDUCT.md) | [Security policy](SECURITY.md)
 - [Copyable YAML examples](examples/)
 
 ## Support

@@ -1,0 +1,69 @@
+name: Provider data quality
+description: Report missing, stale, or incorrect public charging-point data.
+title: "[Data quality]: "
+labels:
+  - bug
+  - provider
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include credentials, API tokens, exact home coordinates, personal information, or unredacted provider responses. Use public references and sanitized examples only.
+  - type: input
+    id: country_provider
+    attributes:
+      label: Country and provider
+      description: Name the country and the data provider.
+    validations:
+      required: true
+  - type: input
+    id: integration_version
+    attributes:
+      label: CurbCharge version
+      placeholder: "0.1.2"
+    validations:
+      required: true
+  - type: input
+    id: home_assistant_version
+    attributes:
+      label: Home Assistant version
+      placeholder: "2026.10.0"
+    validations:
+      required: true
+  - type: input
+    id: public_station_reference
+    attributes:
+      label: Public station or dataset reference
+      description: Use a public provider identifier or URL only; do not include account-specific identifiers.
+    validations:
+      required: false
+  - type: input
+    id: observed_at
+    attributes:
+      label: Observation timestamp (UTC)
+      description: Give the date and time in UTC, for example 2026-10-25T12:00:00Z.
+      placeholder: "2026-10-25T12:00:00Z"
+    validations:
+      required: true
+  - type: textarea
+    id: expected_fields
+    attributes:
+      label: Expected fields and values
+      description: List the field names, expected values, and a public source or reason for the expectation.
+    validations:
+      required: true
+  - type: textarea
+    id: observed_fields
+    attributes:
+      label: Observed fields and values
+      description: List the field names and sanitized values CurbCharge showed or used.
+    validations:
+      required: true
+  - type: textarea
+    id: sanitized_example
+    attributes:
+      label: Sanitized example or reproduction steps
+      description: Remove credentials, personal data, exact coordinates, and unrelated provider response fields before sharing.
+      render: text
+    validations:
+      required: false
