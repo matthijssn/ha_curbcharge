@@ -209,9 +209,11 @@ async def test_config_flow_uses_home_coordinates(hass, monkeypatch):
     hass.config.longitude = 5.1
     provider = FakeProvider()
     monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
-    monkeypatch.setattr(
-        "custom_components.curbcharge.create_provider", lambda *_args: provider
-    )
+
+    async def setup_entry(_hass, _entry):
+        return True
+
+    monkeypatch.setattr("custom_components.curbcharge.async_setup_entry", setup_entry)
 
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": "user"}
@@ -330,9 +332,6 @@ async def test_config_flow_uses_entity_location_without_storing_coordinates(
     )
     provider = FakeProvider()
     monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
-    monkeypatch.setattr(
-        "custom_components.curbcharge.create_provider", lambda *_args: provider
-    )
 
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": "user"}
@@ -353,7 +352,6 @@ async def test_config_flow_uses_entity_location_without_storing_coordinates(
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], _discovery_filters()
     )
-    await hass.async_block_till_done()
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert provider.validation_calls == [(*location, 500)]
