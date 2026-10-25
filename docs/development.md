@@ -6,6 +6,10 @@ The protected `main` branch requires the `test`, `hassfest`, and `hacs` check
 contexts. The Hassfest and HACS workflows use distinct job contexts so each
 validator can block merges independently.
 
+The `test` workflow checks the minimum Home Assistant 2024.12.0 release with
+Python 3.12 and `pytest-homeassistant-custom-component` 0.13.190, then runs the
+current Home Assistant test package on Python 3.13.
+
 Install the Python test tools:
 
 ```bash
