@@ -81,6 +81,7 @@ def _mock_entry_setup(monkeypatch):
     monkeypatch.setattr(
         "custom_components.curbcharge.async_setup_entry", mock_setup_entry
     )
+    monkeypatch.setattr(config_flow, "async_get_clientsession", lambda *_args: None)
 
 
 def test_flow_schema_module_falls_back_to_voluptuous(monkeypatch):
@@ -219,7 +220,6 @@ async def test_config_flow_uses_home_coordinates(hass, monkeypatch):
     hass.config.longitude = 5.1
     provider = FakeProvider()
     monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
-    monkeypatch.setattr(config_flow, "async_get_clientsession", lambda *_args: None)
 
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": "user"}
