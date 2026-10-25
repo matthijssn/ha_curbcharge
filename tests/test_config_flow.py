@@ -209,6 +209,7 @@ async def test_config_flow_uses_home_coordinates(hass, monkeypatch):
     hass.config.longitude = 5.1
     provider = FakeProvider()
     monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
+    monkeypatch.setattr(config_flow, "async_get_clientsession", lambda *_args: None)
 
     async def setup_entry(_hass, _entry):
         return True
