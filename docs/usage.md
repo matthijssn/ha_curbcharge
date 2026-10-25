@@ -404,12 +404,46 @@ These timestamps are distinct from the Home Assistant State object's
 reports provider data at its polling cadence; Home Assistant history records
 entity state changes, so a change between polls cannot appear in the
 integration's history.
-Favourites outside the normal NDW search results use additional small
-bounding-box requests; the provider client spaces these requests to respect
-its rate limit. Belgium favourites use the cached location snapshot and status
-requests through the shared limiter. There is no favourite-count cap, so a
-large list of remote NDW favourites can lengthen a refresh under the shared
-provider limiter.
+
+### Favourite scaling and cap policy
+
+Favourites remain uncapped and are additive to the nearby station limit. The
+synthetic measurements below use one-page responses and no tariff IDs. NDW
+favourites are assumed to be absent from the initial search response; Belgium
+uses one status request per favourite with a status-capable EVSE ID and caches
+its `/locations` snapshot.
+
+| Favourites | NDW requests / limiter spacing | Belgium cold requests / spacing | Belgium warm requests / spacing |
+| --- | --- | --- | --- |
+| 0 | 1 / 0 s | 1 / 0 s | 0 / 0 s |
+| 1 | 2 / 0.11 s | 2 / 10 s | 1 / 0 s |
+| 10 | 11 / 1.10 s | 11 / 100 s | 10 / 90 s |
+| 50 | 51 / 5.50 s | 51 / 500 s | 50 / 490 s |
+
+NDW counts include one initial search and one follow-up bounding-box query for
+each favourite missing from that response. Favourites already present do not add
+a query; a tariff-feed cache miss can add one request shared by all returned
+stations. Belgium cold counts include one `/locations` request; warm counts
+use its cached snapshot. Limiter spacing assumes immediate responses and
+excludes network and parsing time. The warm case assumes at least five minutes
+between polls. Nearby station status requests are additional to the favourite
+counts.
+
+In the synthetic HA test with no connector groups, each returned favourite adds
+11 entity-registry entries: nine station sensors, one availability binary
+sensor, and one Favorite status sensor. At 50 favourites this is 550
+favourite-specific entries and 50 station devices. Belgium EVSEs sharing one
+site also reuse one site device, for 51 devices total; separate sites add
+parent devices, and connector groups add sensor entries.
+
+No hard cap is introduced. The Belgium 50-favourite case can spend about 8m10s
+to 8m20s in rate-limit spacing, longer than the default five-minute poll. At
+that default interval, one status request per EVSE averages 0.2 per minute,
+below the documented two-per-minute per-EVSE quota; the shared IP limit is the
+aggregate bottleneck. These synthetic counts show linear growth but do not
+establish a safe universal cut-off or an HA resource limit. Saved favourites
+are therefore preserved. Any future cap needs an explicit policy that
+grandfathers existing favourites instead of silently truncating them.
 
 For an Entity source, CurbCharge samples coordinates during the normal
 coordinator refreshes. It does not subscribe to every entity state change or

@@ -780,6 +780,114 @@ async def test_setup_unload_and_reload_keep_stable_entities(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("favorite_count", [0, 1, 10, 50])
+@pytest.mark.parametrize(
+    ("provider_id", "provider_name", "country_code"),
+    [
+        (PROVIDER_NDW_DOT_NL, "NDW DOT-NL", "NL"),
+        (PROVIDER_ECO_MOVEMENT_BE, "Eco-Movement Belgium", "BE"),
+    ],
+)
+async def test_favorite_entity_and_device_growth_is_linear(
+    hass,
+    monkeypatch,
+    sample_stations,
+    favorite_count,
+    provider_id,
+    provider_name,
+    country_code,
+):
+    shared_location = None
+    if provider_id == PROVIDER_ECO_MOVEMENT_BE:
+        assert sample_stations[0].location is not None
+        shared_location = replace(
+            sample_stations[0].location,
+            provider_id="favorite-scaling-site",
+            provider=provider_id,
+            provider_name=provider_name,
+            country_code=country_code,
+            name="Synthetic shared site",
+        )
+
+    stations = tuple(
+        replace(
+            sample_stations[0],
+            provider_id=f"favorite-scaling-{index}",
+            name=f"Synthetic favorite {index}",
+            latitude=52.0,
+            longitude=5.0,
+            distance_m=1000,
+            connectors=(),
+            provider=provider_id,
+            provider_name=provider_name,
+            country_code=country_code,
+            location=shared_location,
+            evse_id=f"BE*FAVORITE*{index}"
+            if provider_id == PROVIDER_ECO_MOVEMENT_BE
+            else None,
+        )
+        for index in range(favorite_count)
+    )
+    provider = FakeProvider([stations])
+    provider.provider_id = provider_id
+    provider.provider_name = provider_name
+    provider.country_code = country_code
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+
+    overrides: dict[str, object] = {CONF_PROVIDER: provider_id}
+    if provider_id == PROVIDER_ECO_MOVEMENT_BE:
+        overrides[CONF_API_TOKEN] = "test-token"
+    entry = _entry(
+        overrides,
+        unique_id=f"favorite-scaling-{provider_id}-{favorite_count}",
+        options={
+            CONF_FAVOURITES: [_favorite_reference(station) for station in stations]
+        },
+    )
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    entity_entries = er.async_entries_for_config_entry(
+        er.async_get(hass), entry.entry_id
+    )
+    station_prefixes = tuple(
+        f"{provider_id}_{station.provider_id}_" for station in stations
+    )
+    favorite_entities = [
+        entity
+        for entity in entity_entries
+        if any(entity.unique_id.startswith(prefix) for prefix in station_prefixes)
+    ]
+    assert len(favorite_entities) == favorite_count * 11
+    assert (
+        sum(
+            entity.unique_id.endswith(f"{entry.entry_id}_favorite_status")
+            for entity in favorite_entities
+        )
+        == favorite_count
+    )
+
+    devices = dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
+    station_identifiers = {
+        station_device_identifier(provider_id, station.provider_id)
+        for station in stations
+    }
+    station_devices = [
+        device
+        for device in devices
+        if any(identifier in device.identifiers for identifier in station_identifiers)
+    ]
+    assert len(station_devices) == favorite_count
+
+    expected_parent_devices = (
+        1 if provider_id == PROVIDER_ECO_MOVEMENT_BE and favorite_count else 0
+    )
+    assert len(devices) == favorite_count + expected_parent_devices
+
+
+@pytest.mark.asyncio
 async def test_station_availability_percentage_is_unavailable_during_provider_failure(
     hass, monkeypatch, sample_stations
 ):
