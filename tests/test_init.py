@@ -15,6 +15,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 import custom_components.curbcharge as curbcharge
 import custom_components.curbcharge.config_flow as config_flow
+import custom_components.curbcharge.entity as curbcharge_entity
 from custom_components.curbcharge.const import (
     CONF_API_TOKEN,
     CONF_CONNECTOR_TYPES,
@@ -317,10 +318,36 @@ async def test_saved_favourite_placeholder_recovers_after_restart(
     await hass.async_block_till_done()
 
 
+def test_dynamic_station_setup_requires_an_active_platform(hass, monkeypatch):
+    entry = _entry()
+    coordinator = CurbChargeCoordinator(
+        hass,
+        FakeProvider(),
+        latitude=52.0,
+        longitude=5.0,
+        radius_m=500,
+        max_stations=10,
+        scan_interval_minutes=30,
+        include_unknown=True,
+        config_entry=entry,
+    )
+    monkeypatch.setattr(curbcharge_entity, "async_get_current_platform", lambda: None)
+
+    with pytest.raises(RuntimeError, match="active platform"):
+        curbcharge_entity.setup_dynamic_station_entities(
+            hass,
+            entry,
+            coordinator,
+            lambda _entities: None,
+            lambda _station: (),
+        )
+
+
 @pytest.mark.asyncio
 async def test_belgium_favourite_placeholder_keeps_parent_device(
     hass, monkeypatch, sample_stations
 ):
+    monkeypatch.delattr(dr, "ChildDeviceInfo", raising=False)
     station = _provider_station(
         sample_stations[0],
         PROVIDER_ECO_MOVEMENT_BE,
@@ -1246,6 +1273,39 @@ async def test_moving_search_adds_and_removes_station_entities_after_three_polls
 
 
 @pytest.mark.asyncio
+async def test_returning_station_is_not_removed_while_cleanup_waits_for_lock(
+    hass, monkeypatch, sample_stations
+):
+    station = sample_stations[0]
+    provider = FakeProvider([(station,), (), (), (), (station,)])
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    entry = _entry()
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator = entry.runtime_data
+    identifier = station_device_identifier(station.provider, station.provider_id)
+    device_registry = dr.async_get(hass)
+    assert _has_device(device_registry, entry.entry_id, identifier)
+
+    async with coordinator.station_removal_lock:
+        for _ in range(3):
+            await coordinator.async_refresh()
+            await asyncio.sleep(0)
+        assert station.provider_id in coordinator.removed_station_ids
+
+        await coordinator.async_refresh()
+        await asyncio.sleep(0)
+        assert station.provider_id in coordinator.data
+
+    await hass.async_block_till_done()
+
+    assert station.provider_id not in coordinator.removed_station_ids
+    assert _has_device(device_registry, entry.entry_id, identifier)
+
+
+@pytest.mark.asyncio
 async def test_stations_with_the_same_address_get_unique_device_names(
     hass, monkeypatch, sample_stations
 ):
@@ -1271,8 +1331,13 @@ async def test_stations_with_the_same_address_get_unique_device_names(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "remove_parent_before_final_cleanup",
+    [False, True],
+    ids=("cleanup-parent", "parent-already-removed"),
+)
 async def test_belgium_evse_devices_are_children_of_location_and_cleanup_parent(
-    hass, monkeypatch, sample_stations
+    hass, monkeypatch, sample_stations, remove_parent_before_final_cleanup
 ):
     sample_station = sample_stations[0]
     assert sample_station.location is not None
@@ -1322,6 +1387,12 @@ async def test_belgium_evse_devices_are_children_of_location_and_cleanup_parent(
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     device_registry = dr.async_get(hass)
+    monkeypatch.setattr(
+        dr.DeviceRegistry,
+        "async_get_child_device_by_identifier",
+        lambda *_args: None,
+        raising=False,
+    )
     parent_identifier = location_device_identifier(
         PROVIDER_ECO_MOVEMENT_BE, location.provider_id
     )
@@ -1369,6 +1440,9 @@ async def test_belgium_evse_devices_are_children_of_location_and_cleanup_parent(
     assert parent_device in dr.async_entries_for_config_entry(
         device_registry, entry.entry_id
     )
+
+    if remove_parent_before_final_cleanup:
+        device_registry.async_remove_device(parent_device.id)
 
     for _ in range(3):
         await entry.runtime_data.async_refresh()

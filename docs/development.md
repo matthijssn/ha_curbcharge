@@ -28,6 +28,10 @@ ruff format --check .
 mypy
 ```
 
+CI also enforces coverage strictly above 95% for each Python module under
+`custom_components/curbcharge`; the package-wide 96% threshold does not replace
+this per-module check.
+
 The frontend test uses Node.js separately:
 
 ```bash
