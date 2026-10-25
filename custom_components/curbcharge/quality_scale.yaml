@@ -37,7 +37,9 @@ rules:
   reauthentication_flow:
     status: done
     comment: Belgium token failures use the tested reauthentication flow; the public NDW API requires no credentials.
-  test_coverage: done
+  test_coverage:
+    status: done
+    comment: CI enforces over 95% coverage per module and 96% overall.
   devices: done
   diagnostics: done
   discovery:
