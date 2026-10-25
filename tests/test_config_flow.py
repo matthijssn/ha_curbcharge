@@ -73,6 +73,17 @@ flow_schema = config_flow.vol
 pytestmark = pytest.mark.usefixtures("enable_custom_integrations")
 
 
+@pytest.fixture(autouse=True)
+def _mock_entry_setup(monkeypatch):
+    async def mock_setup_entry(_hass, _entry):
+        return True
+
+    monkeypatch.setattr(
+        "custom_components.curbcharge.async_setup_entry", mock_setup_entry
+    )
+    monkeypatch.setattr(config_flow, "async_get_clientsession", lambda *_args: None)
+
+
 def test_flow_schema_module_falls_back_to_voluptuous(monkeypatch):
     voluptuous = import_module("voluptuous")
     imports = []
@@ -225,6 +236,7 @@ async def test_config_flow_uses_home_coordinates(hass, monkeypatch):
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], _discovery_filters()
     )
+    await hass.async_block_till_done()
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert provider.validation_calls == [(52.1, 5.1, 500)]

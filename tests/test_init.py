@@ -313,6 +313,9 @@ async def test_saved_favourite_placeholder_recovers_after_restart(
     assert recovered_state.state == "available"
     assert not entry.runtime_data.data[station.provider_id].is_stale
 
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+
 
 @pytest.mark.asyncio
 async def test_belgium_favourite_placeholder_keeps_parent_device(

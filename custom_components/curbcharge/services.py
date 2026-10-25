@@ -32,17 +32,24 @@ _SERVICE_SCHEMA = vol.Schema(
 @callback
 def async_setup_services(hass: HomeAssistant) -> None:
     """Register admin-only favorite management services."""
+
+    async def handle_add_favorite(call: ServiceCall) -> None:
+        await async_add_favorite(hass, call)
+
+    async def handle_remove_favorite(call: ServiceCall) -> None:
+        await async_remove_favorite(hass, call)
+
     async_register_admin_service(
-        hass, DOMAIN, SERVICE_ADD_FAVORITE, async_add_favorite, _SERVICE_SCHEMA
+        hass, DOMAIN, SERVICE_ADD_FAVORITE, handle_add_favorite, _SERVICE_SCHEMA
     )
     async_register_admin_service(
-        hass, DOMAIN, SERVICE_REMOVE_FAVORITE, async_remove_favorite, _SERVICE_SCHEMA
+        hass, DOMAIN, SERVICE_REMOVE_FAVORITE, handle_remove_favorite, _SERVICE_SCHEMA
     )
 
 
-async def async_add_favorite(call: ServiceCall) -> None:
+async def async_add_favorite(hass: HomeAssistant, call: ServiceCall) -> None:
     """Save a fresh, discovered station as a favorite."""
-    entry, coordinator = _get_entry_and_coordinator(call)
+    entry, coordinator = _get_entry_and_coordinator(hass, call)
     station_id = call.data[ATTR_STATION_ID]
     if not station_id.strip():
         raise ServiceValidationError(
@@ -66,15 +73,15 @@ async def async_add_favorite(call: ServiceCall) -> None:
         )
 
     _save_favourites(
-        call.hass,
+        hass,
         entry,
         (*favourites, FavouriteStationReference.from_station(station)),
     )
 
 
-async def async_remove_favorite(call: ServiceCall) -> None:
+async def async_remove_favorite(hass: HomeAssistant, call: ServiceCall) -> None:
     """Remove a saved favorite, including one no longer found upstream."""
-    entry, coordinator = _get_entry_and_coordinator(call)
+    entry, coordinator = _get_entry_and_coordinator(hass, call)
     station_id = call.data[ATTR_STATION_ID]
     if not station_id.strip():
         raise ServiceValidationError(
@@ -87,7 +94,7 @@ async def async_remove_favorite(call: ServiceCall) -> None:
         )
 
     _save_favourites(
-        call.hass,
+        hass,
         entry,
         tuple(
             favourite for favourite in favourites if favourite.provider_id != station_id
@@ -96,9 +103,9 @@ async def async_remove_favorite(call: ServiceCall) -> None:
 
 
 def _get_entry_and_coordinator(
-    call: ServiceCall,
+    hass: HomeAssistant, call: ServiceCall
 ) -> tuple[ConfigEntry[Any], CurbChargeCoordinator]:
-    entry = call.hass.config_entries.async_get_entry(call.data[ATTR_CONFIG_ENTRY_ID])
+    entry = hass.config_entries.async_get_entry(call.data[ATTR_CONFIG_ENTRY_ID])
     coordinator = getattr(entry, "runtime_data", None) if entry is not None else None
     if (
         entry is None

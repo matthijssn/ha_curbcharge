@@ -168,12 +168,14 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
             self.update_interval = max(
                 self._default_update_interval, timedelta(seconds=retry_seconds)
             )
-            raise UpdateFailed(
+            update_failed = UpdateFailed(
                 "NDW DOT-NL rate limit reached",
-                retry_after=retry_seconds,
                 translation_domain=DOMAIN,
                 translation_key="rate_limited",
-            ) from err
+            )
+            # Older Home Assistant releases do not define retry_after on UpdateFailed.
+            update_failed.retry_after = retry_seconds
+            raise update_failed from err
         except ChargingProviderError as err:
             self._log_update_unavailable(type(err).__name__)
             raise UpdateFailed("Could not update charging station data") from err

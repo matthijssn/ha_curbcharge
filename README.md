@@ -14,8 +14,10 @@ the [favorite services and automation guide](docs/dashboards-and-automations.md#
 CurbCharge requires Home Assistant 2024.12.0 or newer; this is the minimum
 declared in `hacs.json`. Core 2024.12.0 provides `ConfigEntry.runtime_data` and
 requires Python 3.12 or newer, matching the integration's APIs and Python
-syntax. CI runs on Python 3.13 with the current Home Assistant test package; it
-does not pin the test suite to Core 2024.12.0.
+syntax. CI tests the minimum with Python 3.12 and
+`pytest-homeassistant-custom-component` 0.13.190 using Core 2024.12.0's
+dependency constraints and `pycares==4.8.0`, then tests the current Home
+Assistant release on Python 3.13.
 
 ## Coverage
 
