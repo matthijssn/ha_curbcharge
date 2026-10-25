@@ -14,6 +14,7 @@ from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 import custom_components.curbcharge as curbcharge
+import custom_components.curbcharge.config_flow as config_flow
 from custom_components.curbcharge.const import (
     CONF_API_TOKEN,
     CONF_CONNECTOR_TYPES,
@@ -1832,6 +1833,89 @@ async def test_location_change_still_reloads_entry(hass, monkeypatch):
 
     await curbcharge._async_options_updated(hass, entry)
 
+    assert reloaded == [entry.entry_id]
+
+
+@pytest.mark.asyncio
+async def test_loaded_reauth_reloads_entry_once(hass, monkeypatch):
+    provider = FakeProvider()
+    provider.provider_id = PROVIDER_ECO_MOVEMENT_BE
+    provider.provider_name = "Eco-Movement Belgium"
+    provider.country_code = "BE"
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
+    entry = _entry(
+        {CONF_PROVIDER: PROVIDER_ECO_MOVEMENT_BE, CONF_API_TOKEN: "old-token"}
+    )
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.update_listeners
+
+    reloaded: list[str] = []
+
+    async def reload_entry(entry_id: str) -> bool:
+        reloaded.append(entry_id)
+        return True
+
+    monkeypatch.setattr(hass.config_entries, "async_reload", reload_entry)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reauth", "entry_id": entry.entry_id},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: "replacement-token"}
+    )
+    await hass.async_block_till_done()
+
+    assert result["reason"] == "reauth_successful"
+    assert entry.data[CONF_API_TOKEN] == "replacement-token"
+    assert reloaded == [entry.entry_id]
+
+
+@pytest.mark.asyncio
+async def test_loaded_reconfigure_reloads_entry_once(hass, monkeypatch):
+    old_location = (52.0, 5.0)
+    new_location = (52.1, 5.1)
+    provider = FakeProvider()
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
+    entry = _entry(
+        unique_id=config_flow._config_unique_id(PROVIDER_NDW_DOT_NL, *old_location, 500)
+    )
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.update_listeners
+
+    reloaded: list[str] = []
+
+    async def reload_entry(entry_id: str) -> bool:
+        reloaded.append(entry_id)
+        return True
+
+    monkeypatch.setattr(hass.config_entries, "async_reload", reload_entry)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reconfigure", "entry_id": entry.entry_id},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_MANUAL}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {CONF_LATITUDE: new_location[0], CONF_LONGITUDE: new_location[1]},
+    )
+    await hass.async_block_till_done()
+
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.data[CONF_LATITUDE] == new_location[0]
+    assert entry.data[CONF_LONGITUDE] == new_location[1]
+    assert entry.unique_id == config_flow._config_unique_id(
+        PROVIDER_NDW_DOT_NL, *new_location, 500
+    )
     assert reloaded == [entry.entry_id]
 
 
