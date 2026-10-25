@@ -49,3 +49,28 @@ such as `v0.1.2`. The workflow validates the tag, updates the manifest on a
 Review and merge that PR before creating the GitHub release from the same tag
 on `main`. When the release is published, the workflow verifies that the tag
 matches the manifest version and points to a commit on `main`.
+
+## Versioning and upgrade compatibility
+
+CurbCharge release tags use `vMAJOR.MINOR.PATCH`; `manifest.json` stores the
+version without the `v`. The [Release version workflow](../.github/workflows/release-version.yml)
+validates stable tags before preparing a manifest update.
+
+While the project is pre-1.0:
+
+- A patch release (`0.y.z`) is for fixes and maintenance and should not
+  intentionally break existing behavior or stored configuration.
+- A minor release (`0.(y+1).0`) is for features and should be additive where
+  possible. Because CurbCharge is still 0.x, SemVer does not promise a stable
+  public API; a minor release may contain a breaking change. Call it out with
+  the existing [`breaking-change` release category](../.github/release.yml),
+  explain its impact, and provide upgrade steps.
+- After 1.0, patch and minor releases are backward-compatible; reserve major
+  version bumps for intentional breaking changes.
+
+Treat config-entry data and options, provider IDs, and station, device, and
+entity unique IDs as persisted interfaces. Do not rename them casually. A
+stored-data format change requires a versioned config-entry migration and
+tests using an existing entry; identity changes need an explicit compatibility
+and migration plan. Include required user actions in both the pull request and
+release notes.
