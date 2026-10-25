@@ -537,6 +537,30 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._scan_interval = DEFAULT_SCAN_INTERVAL_MINUTES
         self._discovery_filters = DiscoveryFilterSettings()
 
+    def _update_entry_and_abort(
+        self,
+        entry: ConfigEntry,
+        *,
+        data: dict[str, Any],
+        reason: str,
+        unique_id: str | None = None,
+    ) -> FlowResult:
+        """Let an installed update listener reload an already-loaded entry."""
+        if entry.update_listeners:
+            if unique_id is None:
+                self.hass.config_entries.async_update_entry(entry, data=data)
+            else:
+                self.hass.config_entries.async_update_entry(
+                    entry, data=data, unique_id=unique_id
+                )
+            return self.async_abort(reason=reason)
+
+        if unique_id is None:
+            return self.async_update_reload_and_abort(entry, data=data, reason=reason)
+        return self.async_update_reload_and_abort(
+            entry, data=data, unique_id=unique_id, reason=reason
+        )
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
@@ -652,7 +676,7 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         data = dict(entry.data)
         data[CONF_API_TOKEN] = token
-        return self.async_update_reload_and_abort(
+        return self._update_entry_and_abort(
             entry,
             data=data,
             reason="reauth_successful",
@@ -835,7 +859,7 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data[CONF_LOCATION_ENTITY] = self._location_entity_id
         else:
             data.pop(CONF_LOCATION_ENTITY, None)
-        return self.async_update_reload_and_abort(
+        return self._update_entry_and_abort(
             entry,
             unique_id=new_unique_id,
             data=data,
