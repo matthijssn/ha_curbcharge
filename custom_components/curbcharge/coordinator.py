@@ -169,7 +169,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
                 self._default_update_interval, timedelta(seconds=retry_seconds)
             )
             update_failed = UpdateFailed(
-                "NDW DOT-NL rate limit reached",
+                "Provider rate limit reached",
                 translation_domain=DOMAIN,
                 translation_key="rate_limited",
             )
