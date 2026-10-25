@@ -8,8 +8,10 @@ validator can block merges independently.
 
 The `test` workflow checks the minimum Home Assistant 2024.12.0 release with
 Python 3.12, `pytest-homeassistant-custom-component` 0.13.190, and Core's
-2024.12.0 package constraints. It then runs the current Home Assistant test
-package on Python 3.13.
+2024.12.0 package constraints. It pins `pycares==4.8.0` because newer resolver
+versions start a shutdown-loop thread that this older test plugin reports as a
+teardown leak. It then runs the current Home Assistant test package on Python
+3.13.
 
 Install the Python test tools:
 
