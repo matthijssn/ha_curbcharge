@@ -489,6 +489,64 @@ async def test_belgium_unmatched_status_keeps_availability_unknown():
 
 
 @pytest.mark.asyncio
+async def test_belgium_skips_unknown_candidates_before_station_cap():
+    document = _locations_document()
+    table = document["payload"]["aegiEnergyInfrastructureTablePublication"][
+        "energyInfrastructureTable"
+    ][0]
+    second_site = copy.deepcopy(table["energyInfrastructureSite"][0])
+    second_site["idG"] = "site-2"
+    second_station = second_site["energyInfrastructureStation"][0]
+    second_station["idG"] = "station-2"
+    second_station["locationReference"]["locPointLocation"]["coordinatesForDisplay"][
+        "latitude"
+    ] = 51.0
+    second_point = second_station["refillPoint"][0]["aegiElectricChargingPoint"]
+    second_point["idG"] = "evse-internal-2"
+    second_point["externalIdentifier"][0]["identifier"] = "BE*EXAMPLE*2"
+    table["energyInfrastructureSite"].append(second_site)
+    third_site = copy.deepcopy(table["energyInfrastructureSite"][0])
+    third_site["idG"] = "site-3"
+    third_station = third_site["energyInfrastructureStation"][0]
+    third_station["idG"] = "station-3"
+    third_station["locationReference"]["locPointLocation"]["coordinatesForDisplay"][
+        "latitude"
+    ] = 51.02
+    third_point = third_station["refillPoint"][0]["aegiElectricChargingPoint"]
+    third_point["idG"] = "evse-internal-3"
+    third_point["externalIdentifier"][0]["identifier"] = "BE*EXAMPLE*3"
+    table["energyInfrastructureSite"].append(third_site)
+    session = FakeSession(
+        [
+            FakeResponse(document),
+            FakeResponse(_status_document(evse_id="different-evse", price=None)),
+            FakeResponse(_status_document(evse_id="evse-internal-2", price=None)),
+            FakeResponse(_status_document(evse_id="evse-internal-3", price=None)),
+        ]
+    )
+    provider = BelgiumChargingProvider(
+        BelgiumDatexClient(session, "token", NoWaitLimiter())
+    )
+    favourite = FavouriteStationReference(
+        provider=provider.provider_id,
+        provider_id="evse-internal-3",
+        name="Saved favourite",
+        latitude=51.02,
+        longitude=4.35,
+    )
+
+    result = await provider.async_get_stations(
+        50.85, 4.35, 20_000, 1, (favourite,), include_unknown=False
+    )
+
+    assert [station.provider_id for station in result.nearby] == ["evse-internal-2"]
+    assert result.nearby[0].availability_reported
+    assert [station.provider_id for station in result.favourites] == ["evse-internal-3"]
+    assert result.favourites[0].availability_reported
+    assert len(session.requests) == 4
+
+
+@pytest.mark.asyncio
 async def test_belgium_provider_uses_only_unambiguous_ad_hoc_static_price():
     document = _locations_document()
     evse = document["payload"]["aegiEnergyInfrastructureTablePublication"][
