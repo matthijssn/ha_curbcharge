@@ -374,6 +374,61 @@ async def test_favourite_already_in_nearby_results_is_not_duplicated(sample_geoj
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("favorite_count", [0, 1, 10, 50])
+async def test_ndw_remote_favorite_request_count_and_spacing(
+    sample_geojson, monkeypatch, favorite_count
+):
+    current_time = [0.0]
+    waits: list[float] = []
+
+    def monotonic() -> float:
+        return current_time[0]
+
+    async def sleep(delay: float) -> None:
+        waits.append(delay)
+        current_time[0] += delay
+
+    monkeypatch.setattr(api.time, "monotonic", monotonic)
+    monkeypatch.setattr(api.asyncio, "sleep", sleep)
+
+    template = _without_tariffs(
+        {"type": "FeatureCollection", "features": [sample_geojson["features"][0]]}
+    )["features"][0]
+    responses = [FakeResponse({"type": "FeatureCollection", "features": []})]
+    favourites: list[FavouriteStationReference] = []
+    for index in range(favorite_count):
+        station_id = f"NL-FAVORITE-{index}"
+        longitude = 5.1 + index / 1000
+        latitude = 52.1
+        feature = copy.deepcopy(template)
+        feature["id"] = station_id
+        feature["geometry"]["coordinates"] = [longitude, latitude]
+        feature["properties"]["address"] = f"Favorite {index}"
+        responses.append(
+            FakeResponse({"type": "FeatureCollection", "features": [feature]})
+        )
+        favourites.append(
+            FavouriteStationReference(
+                provider=PROVIDER_NDW_DOT_NL,
+                provider_id=station_id,
+                name=station_id,
+                latitude=latitude,
+                longitude=longitude,
+            )
+        )
+
+    session = FakeSession(responses)
+    provider = NdwDotNlProvider(session, api.NdwRequestLimiter())
+    result = await provider.async_get_stations(52.0, 5.0, 500, 10, tuple(favourites))
+
+    assert result.nearby == ()
+    assert len(result.favourites) == favorite_count
+    assert len(session.requests) == 1 + favorite_count
+    assert current_time[0] == pytest.approx(api._NDW_REQUEST_INTERVAL * favorite_count)
+    assert waits == pytest.approx([api._NDW_REQUEST_INTERVAL] * favorite_count)
+
+
+@pytest.mark.asyncio
 async def test_provider_rejects_favourite_from_a_different_provider(sample_geojson):
     provider = NdwDotNlProvider(
         FakeSession([FakeResponse(_without_tariffs(sample_geojson))])

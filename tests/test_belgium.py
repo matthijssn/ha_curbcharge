@@ -18,6 +18,7 @@ from custom_components.curbcharge.belgium import (
     BelgiumDatexClient,
     BelgiumRequestLimiter,
 )
+from custom_components.curbcharge.const import PROVIDER_ECO_MOVEMENT_BE
 from custom_components.curbcharge.models import (
     ConnectorStatus,
     ConnectorTypeId,
@@ -118,6 +119,23 @@ def _locations_document(
         ]
     else:
         point.pop("externalIdentifier", None)
+    return document
+
+
+def _locations_document_with_evse_count(evse_count: int) -> dict[str, Any]:
+    document = _locations_document(number_of_connectors=0)
+    station = document["payload"]["aegiEnergyInfrastructureTablePublication"][
+        "energyInfrastructureTable"
+    ][0]["energyInfrastructureSite"][0]["energyInfrastructureStation"][0]
+    refill_point = station["refillPoint"][0]
+    template = copy.deepcopy(refill_point)
+    station["refillPoint"] = []
+    for index in range(evse_count):
+        refill = copy.deepcopy(template)
+        evse = refill["aegiElectricChargingPoint"]
+        evse["idG"] = f"evse-internal-{index}"
+        evse["externalIdentifier"][0]["identifier"] = f"BE*EXAMPLE*{index}"
+        station["refillPoint"].append(refill)
     return document
 
 
@@ -341,6 +359,40 @@ async def test_belgium_favourite_outside_radius_uses_cached_location_and_status(
     assert result.favourites[0].distance_m > 100
     assert result.favourites[0].evse_status is EVSEStatus.AVAILABLE
     assert len(session.requests) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("favorite_count", [0, 1, 10, 50])
+async def test_belgium_favorite_request_count_scales_with_favorites(favorite_count):
+    evse_ids = [f"evse-internal-{index}" for index in range(favorite_count)]
+    favourites = tuple(
+        FavouriteStationReference(
+            provider=PROVIDER_ECO_MOVEMENT_BE,
+            provider_id=evse_id,
+            name=f"BE*EXAMPLE*{index}",
+            latitude=50.85,
+            longitude=4.35,
+        )
+        for index, evse_id in enumerate(evse_ids)
+    )
+    responses = [FakeResponse(_locations_document_with_evse_count(favorite_count))]
+    for _ in range(2):
+        responses.extend(
+            FakeResponse(_status_document(evse_id=evse_id)) for evse_id in evse_ids
+        )
+    session = FakeSession(responses)
+    provider = BelgiumChargingProvider(
+        BelgiumDatexClient(session, "test-token", NoWaitLimiter())
+    )
+
+    cold_result = await provider.async_get_stations(51.0, 4.5, 100, 1, favourites)
+    warm_result = await provider.async_get_stations(51.0, 4.5, 100, 1, favourites)
+
+    assert len(cold_result.favourites) == favorite_count
+    assert len(warm_result.favourites) == favorite_count
+    assert sum(url.endswith("/locations") for url, _ in session.requests) == 1
+    assert sum("/status/" in url for url, _ in session.requests) == 2 * favorite_count
+    assert len(session.requests) == 1 + 2 * favorite_count
 
 
 @pytest.mark.asyncio
@@ -610,6 +662,46 @@ async def test_request_limiter_enforces_ip_location_and_per_evse_limits(monkeypa
     await limiter.async_wait("token")
     assert current_time[0] == 170
     assert waits == [30, 10, 10, 120]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("favorite_count", [1, 10, 50])
+async def test_belgium_favorite_status_spacing_scales_with_count(
+    monkeypatch, favorite_count
+):
+    current_time = [0.0]
+    waits: list[float] = []
+
+    def monotonic() -> float:
+        return current_time[0]
+
+    async def sleep(delay: float) -> None:
+        waits.append(delay)
+        current_time[0] += delay
+
+    monkeypatch.setattr(belgium.time, "monotonic", monotonic)
+    monkeypatch.setattr(belgium.asyncio, "sleep", sleep)
+    limiter = BelgiumRequestLimiter()
+
+    await limiter.async_wait("token")
+    for index in range(favorite_count):
+        await limiter.async_wait("token", f"evse-{index}")
+
+    assert current_time[0] == pytest.approx(
+        belgium._IP_REQUEST_INTERVAL * favorite_count
+    )
+    assert waits == pytest.approx([belgium._IP_REQUEST_INTERVAL] * favorite_count)
+
+    warm_start = current_time[0] + 300
+    current_time[0] = warm_start
+    waits.clear()
+    for index in range(favorite_count):
+        await limiter.async_wait("token", f"evse-{index}")
+
+    assert current_time[0] - warm_start == pytest.approx(
+        belgium._IP_REQUEST_INTERVAL * (favorite_count - 1)
+    )
+    assert waits == pytest.approx([belgium._IP_REQUEST_INTERVAL] * (favorite_count - 1))
 
 
 @pytest.mark.asyncio
