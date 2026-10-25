@@ -17,7 +17,10 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install minimum Home Assistant test environment
-        run: pip install pytest-homeassistant-custom-component==0.13.190
+        run: >
+          pip install
+          --constraint https://raw.githubusercontent.com/home-assistant/core/2024.12.0/homeassistant/package_constraints.txt
+          pytest-homeassistant-custom-component==0.13.190
       - name: Test minimum Home Assistant version
         run: pytest
       - uses: actions/setup-python@v7.0.0

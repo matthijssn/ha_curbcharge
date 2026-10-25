@@ -15,8 +15,9 @@ CurbCharge requires Home Assistant 2024.12.0 or newer; this is the minimum
 declared in `hacs.json`. Core 2024.12.0 provides `ConfigEntry.runtime_data` and
 requires Python 3.12 or newer, matching the integration's APIs and Python
 syntax. CI tests the minimum with Python 3.12 and
-`pytest-homeassistant-custom-component` 0.13.190, then tests the current
-Home Assistant release on Python 3.13.
+`pytest-homeassistant-custom-component` 0.13.190 using Core 2024.12.0's
+dependency constraints, then tests the current Home Assistant release on
+Python 3.13.
 
 ## Coverage
 
