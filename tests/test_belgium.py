@@ -123,7 +123,7 @@ def _locations_document(
 
 
 def _locations_document_with_evse_count(evse_count: int) -> dict[str, Any]:
-    document = _locations_document(number_of_connectors=0)
+    document = _locations_document()
     station = document["payload"]["aegiEnergyInfrastructureTablePublication"][
         "energyInfrastructureTable"
     ][0]["energyInfrastructureSite"][0]["energyInfrastructureStation"][0]
