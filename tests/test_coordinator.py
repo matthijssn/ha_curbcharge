@@ -349,17 +349,43 @@ async def test_provider_failure_preserves_favourite_station_data(hass, sample_st
 
 
 @pytest.mark.asyncio
-async def test_rate_limit_retry_after_extends_update_interval(hass):
-    provider = FakeProvider([ProviderRateLimitError("limited", retry_after=600)])
+@pytest.mark.parametrize(
+    ("provider_id", "provider_name"),
+    (
+        ("ndw_dot_nl", "NDW DOT-NL"),
+        ("eco_movement_be", "Eco-Movement Belgium"),
+    ),
+    ids=("ndw", "belgium"),
+)
+async def test_rate_limit_error_is_provider_neutral_and_preserves_retry_after(
+    hass, caplog, provider_id, provider_name
+):
+    provider = FakeProvider(
+        [ProviderRateLimitError("upstream response detail", retry_after=600)]
+    )
+    provider.provider_id = provider_id
+    provider.provider_name = provider_name
     coordinator = _coordinator(hass, provider)
 
-    with pytest.raises(UpdateFailed) as error:
-        await coordinator._async_update_data()
+    with caplog.at_level(logging.WARNING, logger=coordinator_module.__name__):
+        with pytest.raises(UpdateFailed) as error:
+            await coordinator._async_update_data()
 
     assert coordinator.update_interval >= timedelta(seconds=600)
     assert error.value.retry_after == 600
     assert error.value.translation_domain == DOMAIN
     assert error.value.translation_key == "rate_limited"
+    assert str(error.value) == "Provider rate limit reached"
+    assert "upstream response detail" not in str(error.value)
+    coordinator_logs = [
+        record.message
+        for record in caplog.records
+        if record.name == coordinator_module.__name__
+    ]
+    assert coordinator_logs == [
+        "CurbCharge data update failed (ProviderRateLimitError)"
+    ]
+    assert provider_name not in " ".join(coordinator_logs)
 
 
 @pytest.mark.asyncio
