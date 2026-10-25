@@ -1,0 +1,75 @@
+name: Provider request
+description: Propose support for an authorized public EV charging data provider.
+title: "[Provider]: "
+labels:
+  - enhancement
+  - provider
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include credentials, API tokens, exact home coordinates, personal information, or unredacted provider responses. Link to official public documentation instead.
+  - type: input
+    id: country_provider
+    attributes:
+      label: Country and provider
+      description: Name the country and the public charging-data provider.
+      placeholder: NL - Example provider
+    validations:
+      required: true
+  - type: input
+    id: official_documentation
+    attributes:
+      label: Official API or provider documentation
+      description: Link to official documentation describing the data source or API.
+      placeholder: https://example.org/api-docs
+    validations:
+      required: true
+  - type: textarea
+    id: authentication
+    attributes:
+      label: Authentication and access
+      description: Describe the documented authentication method and how access is obtained. Do not paste a token, credential, or account-specific information.
+    validations:
+      required: true
+  - type: textarea
+    id: licensing
+    attributes:
+      label: Licensing and terms of use
+      description: Link to the license or terms and summarize any restrictions on access, use, or redistribution.
+    validations:
+      required: true
+  - type: textarea
+    id: rate_limits
+    attributes:
+      label: Rate limits and quotas
+      description: Describe documented limits, quotas, and reset periods, or say if they are unknown.
+    validations:
+      required: false
+  - type: textarea
+    id: available_data
+    attributes:
+      label: Available charging-point data
+      description: Note which fields are available, such as availability, connectors, power, and tariffs. Say when a field is unknown.
+    validations:
+      required: true
+  - type: textarea
+    id: freshness
+    attributes:
+      label: Data freshness
+      description: Describe update frequency, timestamps, or known freshness limits.
+    validations:
+      required: false
+  - type: textarea
+    id: geographic_coverage
+    attributes:
+      label: Geographic coverage
+      description: Describe country, region, or city coverage. Do not provide exact home coordinates.
+    validations:
+      required: true
+  - type: textarea
+    id: additional_context
+    attributes:
+      label: Additional context
+    validations:
+      required: false
