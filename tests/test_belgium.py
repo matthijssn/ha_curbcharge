@@ -134,6 +134,8 @@ def _locations_document_with_evse_count(evse_count: int) -> dict[str, Any]:
         refill = copy.deepcopy(template)
         evse = refill["aegiElectricChargingPoint"]
         evse["idG"] = f"evse-internal-{index}"
+        evse["numberOfConnectors"] = 0
+        evse["connector"] = []
         evse["externalIdentifier"][0]["identifier"] = f"BE*EXAMPLE*{index}"
         station["refillPoint"].append(refill)
     return document
