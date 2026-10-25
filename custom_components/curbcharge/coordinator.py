@@ -173,8 +173,8 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
                 translation_domain=DOMAIN,
                 translation_key="rate_limited",
             )
-            if hasattr(update_failed, "retry_after"):
-                update_failed.retry_after = retry_seconds
+            # Older Home Assistant releases do not define retry_after on UpdateFailed.
+            update_failed.retry_after = retry_seconds
             raise update_failed from err
         except ChargingProviderError as err:
             self._log_update_unavailable(type(err).__name__)
