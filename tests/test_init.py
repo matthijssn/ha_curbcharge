@@ -105,12 +105,21 @@ def _entity_entry(
 
 
 def _has_device(device_registry, entry_id: str, identifier: tuple[str, str]) -> bool:
+    return _device_for_identifier(device_registry, entry_id, identifier) is not None
+
+
+def _device_for_identifier(device_registry, entry_id: str, identifier: tuple[str, str]):
     get_child = getattr(device_registry, "async_get_child_device_by_identifier", None)
-    if get_child is not None and get_child(identifier, entry_id) is not None:
-        return True
-    return any(
-        identifier in device.identifiers
-        for device in dr.async_entries_for_config_entry(device_registry, entry_id)
+    child = get_child(identifier, entry_id) if get_child is not None else None
+    if child is not None:
+        return child
+    return next(
+        (
+            device
+            for device in dr.async_entries_for_config_entry(device_registry, entry_id)
+            if identifier in device.identifiers
+        ),
+        None,
     )
 
 
@@ -347,7 +356,6 @@ def test_dynamic_station_setup_requires_an_active_platform(hass, monkeypatch):
 async def test_belgium_favourite_placeholder_keeps_parent_device(
     hass, monkeypatch, sample_stations
 ):
-    monkeypatch.delattr(dr, "ChildDeviceInfo", raising=False)
     station = _provider_station(
         sample_stations[0],
         PROVIDER_ECO_MOVEMENT_BE,
@@ -596,11 +604,10 @@ async def test_favorite_sensors_follow_coordinator_changes_without_provider_call
     station_identifier = station_device_identifier(
         station.provider, station.provider_id
     )
-    station_device = next(
-        device
-        for device in dr.async_entries_for_config_entry(device_registry, entry.entry_id)
-        if station_identifier in device.identifiers
+    station_device = _device_for_identifier(
+        device_registry, entry.entry_id, station_identifier
     )
+    assert station_device is not None
     parent_identifier = location_device_identifier(
         station.provider, station.location.provider_id
     )
@@ -869,22 +876,35 @@ async def test_favorite_entity_and_device_growth_is_linear(
         == favorite_count
     )
 
-    devices = dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
+    device_registry = dr.async_get(hass)
+    devices = dr.async_entries_for_config_entry(device_registry, entry.entry_id)
     station_identifiers = {
         station_device_identifier(provider_id, station.provider_id)
         for station in stations
     }
-    station_devices = [
-        device
-        for device in devices
-        if any(identifier in device.identifiers for identifier in station_identifiers)
-    ]
-    assert len(station_devices) == favorite_count
+    assert (
+        sum(
+            _has_device(device_registry, entry.entry_id, identifier)
+            for identifier in station_identifiers
+        )
+        == favorite_count
+    )
+    get_child_device = getattr(
+        device_registry, "async_get_child_device_by_identifier", None
+    )
+    child_device_count = (
+        sum(
+            get_child_device(identifier, entry.entry_id) is not None
+            for identifier in station_identifiers
+        )
+        if get_child_device is not None
+        else 0
+    )
 
     expected_parent_devices = (
         1 if provider_id == PROVIDER_ECO_MOVEMENT_BE and favorite_count else 0
     )
-    assert len(devices) == favorite_count + expected_parent_devices
+    assert len(devices) + child_device_count == favorite_count + expected_parent_devices
 
 
 @pytest.mark.asyncio
@@ -1495,12 +1515,6 @@ async def test_belgium_evse_devices_are_children_of_location_and_cleanup_parent(
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     device_registry = dr.async_get(hass)
-    monkeypatch.setattr(
-        dr.DeviceRegistry,
-        "async_get_child_device_by_identifier",
-        lambda *_args: None,
-        raising=False,
-    )
     parent_identifier = location_device_identifier(
         PROVIDER_ECO_MOVEMENT_BE, location.provider_id
     )
