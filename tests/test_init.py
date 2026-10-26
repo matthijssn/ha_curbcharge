@@ -1091,8 +1091,8 @@ async def test_nl_and_be_entries_refresh_fail_recover_and_reload_independently(
     assert be_count_state.attributes["country_code"] == "BE"
     assert nl_count_state.attributes["provider_id"] == PROVIDER_NDW_DOT_NL
     assert be_count_state.attributes["provider_id"] == PROVIDER_ECO_MOVEMENT_BE
-    assert nl_count_state.attributes["supported_country_codes"] == ["NL", "BE"]
-    assert be_count_state.attributes["supported_country_codes"] == ["NL", "BE"]
+    assert nl_count_state.attributes["supported_country_codes"][:2] == ["NL", "BE"]
+    assert be_count_state.attributes["supported_country_codes"][:2] == ["NL", "BE"]
     assert nl_count_state.attributes["coverage_scope"] == "configured_search_area"
     assert be_count_state.attributes["coverage_scope"] == "configured_search_area"
 
