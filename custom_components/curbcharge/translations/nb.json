@@ -1,0 +1,419 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Sett opp CurbCharge",
+        "description": "Velg om CurbCharge skal bruke hjemmeposisjonen i Home Assistant, manuelle koordinater eller en entitet.",
+        "data": {
+          "location_source": "Posisjonskilde"
+        },
+        "data_description": {
+          "location_source": "Bruk hjemmekoordinatene i Home Assistant, skriv inn koordinater eller velg en entitet som rapporterer en posisjon."
+        }
+      },
+      "entity_location": {
+        "title": "Velg en posisjonsentitet",
+        "description": "Velg en entitet som nå rapporterer gyldige bredde- og lengdegradsattributter. Bare entitets-ID-en lagres.",
+        "data": {
+          "location_entity": "Posisjonsentitet"
+        },
+        "data_description": {
+          "location_entity": "Entiteten må nå rapportere gyldige bredde- og lengdegrader."
+        }
+      },
+      "reconfigure": {
+        "title": "Endre søkeposisjonen",
+        "description": "Velg om du vil bruke hjemmeposisjonen i Home Assistant, manuelle koordinater eller en entitet.",
+        "data": {
+          "location_source": "Posisjonskilde"
+        },
+        "data_description": {
+          "location_source": "Hvis du endrer søkeområdet, kan det endre hvilke stasjoner i nærheten som tas med."
+        }
+      },
+      "reconfigure_entity_location": {
+        "title": "Velg en ny posisjonsentitet",
+        "description": "Velg en entitet som nå rapporterer gyldige posisjonskoordinater. CurbCharge lagrer entitets-ID-en, ikke koordinatene.",
+        "data": {
+          "location_entity": "Posisjonsentitet"
+        },
+        "data_description": {
+          "location_entity": "Velg en erstatning hvis den forrige entiteten er utilgjengelig eller har blitt fjernet."
+        }
+      },
+      "reconfigure_manual_location": {
+        "title": "Skriv inn en ny søkeposisjon",
+        "description": "CurbCharge kontrollerer leverandøren før denne posisjonen lagres.",
+        "data": {
+          "latitude": "Breddegrad",
+          "longitude": "Lengdegrad"
+        },
+        "data_description": {
+          "latitude": "Breddegrad for midten av søkeområdet for ladestasjoner.",
+          "longitude": "Lengdegrad for midten av søkeområdet for ladestasjoner."
+        }
+      },
+      "manual_location": {
+        "title": "Skriv inn en søkeposisjon",
+        "description": "Koordinatene lagres bare når du velger en manuell posisjon.",
+        "data": {
+          "latitude": "Breddegrad",
+          "longitude": "Lengdegrad"
+        },
+        "data_description": {
+          "latitude": "Breddegrad for midten av søkeområdet for ladestasjoner.",
+          "longitude": "Lengdegrad for midten av søkeområdet for ladestasjoner."
+        }
+      },
+      "station_options": {
+        "title": "Velg stasjoner i nærheten",
+        "description": "CurbCharge kontrollerer forbindelsen til leverandøren før konfigurasjonsoppføringen opprettes.",
+        "data": {
+          "search_radius": "Søkeradius (m)",
+          "max_stations": "Maksimalt antall stasjoner",
+          "scan_interval": "Oppdateringsintervall (minutter)",
+          "provider": "Leverandør"
+        },
+        "data_description": {
+          "search_radius": "Bare offentlige ladestasjoner innenfor denne avstanden tas med.",
+          "max_stations": "Begrens antall stasjoner og tilhørende entiteter.",
+          "scan_interval": "Hvor ofte Home Assistant oppdaterer ladestasjonsdata.",
+          "provider": "Dataleverandøren som brukes til å finne stasjoner og tilgjengelighet."
+        }
+      },
+      "discovery_filters": {
+        "title": "Filtrer stasjoner i nærheten",
+        "description": "Filtrer eventuelt NDW-stasjoner etter kontaktgruppene deres. Filtrene brukes før grensen for antall stasjoner.",
+        "data": {
+          "connector_types": "Kontakttyper",
+          "min_power_kw": "Minste effekt (kW)",
+          "require_available": "Krev en ledig ladekontakt"
+        },
+        "data_description": {
+          "connector_types": "La feltet stå tomt for alle typer. En kontaktgruppe med en av de valgte typene må også oppfylle de andre filtrene.",
+          "min_power_kw": "Valgfritt. En passende kontaktgruppe må rapportere minst denne effekten.",
+          "require_available": "Ta bare med stasjoner der en passende kontaktgruppe rapporterer ledige ladekontakter."
+        }
+      },
+      "belgium_credentials": {
+        "title": "Koble til Eco-Movement Belgia",
+        "description": "Skriv inn API-tokenet du har fått fra Eco-Movement. Tokenet lagres i denne konfigurasjonsoppføringen og skjules i diagnostikken.",
+        "data": {
+          "api_token": "API-token fra Eco-Movement"
+        },
+        "data_description": {
+          "api_token": "Bruk bare et token du har tillatelse til å bruke. Ikke del det i feilrapporter."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Oppdater påloggingsinformasjonen for Eco-Movement",
+        "description": "Skriv inn et nytt API-token du har fått fra Eco-Movement.",
+        "data": {
+          "api_token": "API-token fra Eco-Movement"
+        },
+        "data_description": {
+          "api_token": "Tokenet lagres i denne konfigurasjonsoppføringen og skjules i diagnostikken."
+        }
+      },
+      "nobil_credentials": {
+        "title": "Koble til NOBIL",
+        "description": "Skriv inn din egen API-nøkkel fra NOBIL. Den lagres bare i denne konfigurasjonsoppføringen og skjules i diagnostikken.",
+        "data": {
+          "api_token": "API-nøkkel fra NOBIL"
+        },
+        "data_description": {
+          "api_token": "Bruk bare en nøkkel du har tillatelse til å bruke. Ikke del den i feilrapporter."
+        }
+      },
+      "nobil_reauth_confirm": {
+        "title": "Oppdater påloggingsinformasjonen for NOBIL",
+        "description": "Skriv inn en ny API-nøkkel fra NOBIL.",
+        "data": {
+          "api_token": "API-nøkkel fra NOBIL"
+        },
+        "data_description": {
+          "api_token": "Nøkkelen lagres i denne konfigurasjonsoppføringen og skjules i diagnostikken."
+        }
+      }
+    },
+    "error": {
+      "auth": "Leverandøren avviste autentiseringen.",
+      "cannot_connect": "Kunne ikke koble til leverandøren av ladestasjonsdata.",
+      "invalid_location": "Skriv inn gyldige koordinater og et støttet søkeområde.",
+      "invalid_entity_location": "Velg en entitet som nå rapporterer gyldige bredde- og lengdegrader.",
+      "invalid_api_token": "Skriv inn et ikke-tomt API-token med bare utskrivbare ASCII-tegn.",
+      "invalid_nobil_api_key": "Skriv inn en ikke-tom API-nøkkel fra NOBIL med bare utskrivbare tegn.",
+      "invalid_discovery_filters": "Skriv inn gyldige filtre. Minste effekt må være et endelig, positivt tall.",
+      "invalid_response": "Leverandøren returnerte data i et uventet format.",
+      "location_not_configured": "Hjemmekoordinatene er ikke konfigurert i Home Assistant.",
+      "rate_limited": "Leverandøren begrenser antall forespørsler. Prøv igjen senere.",
+      "unsupported_provider": "Den valgte leverandøren støttes ikke."
+    },
+    "abort": {
+      "already_configured": "Denne leverandøren og dette søkeområdet er allerede konfigurert.",
+      "location_not_configured": "Søkeposisjonen er ikke konfigurert.",
+      "reconfigure_successful": "Søkeposisjonen er oppdatert.",
+      "reauth_successful": "Påloggingsinformasjonen for Eco-Movement er oppdatert.",
+      "nobil_reauth_successful": "API-nøkkelen fra NOBIL er oppdatert."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Innstillinger for CurbCharge"
+      },
+      "general": {
+        "title": "Generelle innstillinger",
+        "data": {
+          "scan_interval": "Oppdateringsintervall (minutter)",
+          "search_radius": "Søkeradius (m)",
+          "max_stations": "Maksimalt antall stasjoner",
+          "provider": "Leverandør",
+          "include_unknown": "Ta med stasjoner uten tilgjengelighetsdata",
+          "connector_types": "Kontakttyper",
+          "min_power_kw": "Minste effekt (kW)",
+          "require_available": "Krev en ledig ladekontakt",
+          "favourites": "Favorittladepunkter",
+          "location_movement_threshold": "Bevegelsesterskel for posisjon (m)"
+        },
+        "data_description": {
+          "scan_interval": "Hvor ofte Home Assistant oppdaterer ladestasjonsdata.",
+          "search_radius": "Bare offentlige ladestasjoner innenfor denne avstanden tas med.",
+          "max_stations": "Begrens antall stasjoner og tilhørende entiteter.",
+          "provider": "Dataleverandøren som brukes til å finne stasjoner og tilgjengelighet.",
+          "include_unknown": "Ta med stasjoner når leverandøren ikke rapporterer tilgjengelighet for ladekontaktene.",
+          "connector_types": "La feltet stå tomt for alle typer. En kontaktgruppe med en av de valgte typene må også oppfylle de andre filtrene.",
+          "min_power_kw": "Valgfritt. En passende kontaktgruppe må rapportere minst denne effekten.",
+          "require_available": "Ta bare med stasjoner der en passende kontaktgruppe rapporterer ledige ladekontakter.",
+          "favourites": "Velg ladepunkter etter navn. Favoritter beholdes også utenfor søkeradiusen og legges til utover grensen for stasjoner i nærheten.",
+          "location_movement_threshold": "Minste avstand den valgte entiteten må flytte seg før søkeposisjonen oppdateres. Sett til 0 for å deaktivere terskelen."
+        }
+      },
+      "personalization": {
+        "title": "Personlige tilpasninger",
+        "data": {
+          "enabled": "Aktiver personlige tilpasninger",
+          "connector_type_ids": "Kompatible kontakttyper",
+          "minimum_power_kw": "Minste kontakteffekt (kW)",
+          "preferred_operators": "Foretrukne operatører",
+          "excluded_operators": "Utelukkede operatører",
+          "maximum_price": "Høyeste pris per kWh",
+          "maximum_price_currency": "Valuta for høyeste pris",
+          "ranking_preset": "Rangeringsvalg",
+          "allow_fallback": "Tillat reservevalg",
+          "unknown_data_policy": "Håndtering av ukjente data"
+        },
+        "data_description": {
+          "enabled": "Aktiver denne lagrede profilen for personlige anbefalinger. Eksisterende anbefalinger forblir uendret inntil vurdering av personlige tilpasninger er tilgjengelig.",
+          "connector_type_ids": "Velg standardiserte kontakttyper. La feltet stå tomt for å godta alle kontakttyper.",
+          "minimum_power_kw": "Valgfri minsteeffekt for en passende kontaktgruppe. Bruk en endelig, ikke-negativ verdi.",
+          "preferred_operators": "Skriv inn én leverandørkvalifisert referanse per linje, for eksempel ndw_dot_nl:NLX, eco_movement_be:Example CPO eller nobil_no:Synthetic CPO. NDW-ID-er og NOBIL-navn må samsvare nøyaktig. For belgiske navn fjernes innledende og avsluttende mellomrom, flere mellomrom slås sammen, og store og små bokstaver behandles likt. Lagrede valg beholdes når de ikke er i nærheten.",
+          "excluded_operators": "Skriv inn én leverandørkvalifisert referanse per linje i samme format som for foretrukne operatører. Utelukkelser omgås aldri ved reservevalg.",
+          "maximum_price": "Valgfritt, ikke-negativt desimaltall. La feltet stå tomt for ingen prisgrense.",
+          "maximum_price_currency": "Påkrevd når en høyeste pris er angitt. Skriv inn en valutakode med tre bokstaver, for eksempel EUR.",
+          "ranking_preset": "Velg et fast rangeringsmål. Egendefinerte vekter støttes ikke.",
+          "allow_fallback": "Tillat kvalifiserte kandidater som ikke er foretrukket, bare når det ikke finnes noen fullstendige treff.",
+          "unknown_data_policy": "Velg om ukjente verdier for kontakt, effekt eller operatør kan tas med som reservevalg. Krav til kjent tilgjengelighet og kjente brudd på absolutte begrensninger lempes aldri."
+        }
+      }
+    },
+    "error": {
+      "invalid_discovery_filters": "Skriv inn gyldige filtre. Minste effekt må være et endelig, positivt tall.",
+      "invalid_favourites": "Én eller flere valgte favoritter er ikke lenger tilgjengelige. Oppdater innstillingene og prøv igjen.",
+      "invalid_personalization_profile": "Skriv inn en gyldig profil. Effekt og pris må være endelige og ikke-negative. En høyeste pris krever en valutakode med tre bokstaver, operatørreferanser krever et støttet leverandørprefiks, og en operatør kan ikke være både foretrukket og utelukket.",
+      "invalid_saved_personalization_profile": "Den lagrede profilen for personlige tilpasninger er feilformatert eller bruker en skjemaversjon som ikke støttes. Kontroller feltene og lagre en gyldig profil for å erstatte den."
+    }
+  },
+  "services": {
+    "add_favorite": {
+      "name": "Legg til favoritt",
+      "description": "Lagre en nylig funnet ladestasjon som favoritt.",
+      "fields": {
+        "config_entry_id": {
+          "name": "CurbCharge-konfigurasjonsoppføring",
+          "description": "Velg den innlastede CurbCharge-oppføringen som skal oppdateres."
+        },
+        "station_id": {
+          "name": "Stasjons-ID",
+          "description": "Leverandørens lokale ID for en stasjon fra det siste vellykkede søket i nærheten."
+        }
+      }
+    },
+    "remove_favorite": {
+      "name": "Fjern favoritt",
+      "description": "Fjern en lagret favoritt fra en CurbCharge-konfigurasjonsoppføring.",
+      "fields": {
+        "config_entry_id": {
+          "name": "CurbCharge-konfigurasjonsoppføring",
+          "description": "Velg den innlastede CurbCharge-oppføringen som inneholder favoritten."
+        },
+        "station_id": {
+          "name": "Stasjons-ID",
+          "description": "Leverandørens lokale ID for den lagrede favoritten som skal fjernes. Dataene kan være utdaterte, eller favoritten kan mangle hos leverandøren."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "authentication_failed": {
+      "message": "Autentisering hos leverandøren av ladestasjonsdata mislyktes."
+    },
+    "invalid_config": {
+      "message": "CurbCharge-konfigurasjonen er ugyldig."
+    },
+    "location_not_configured": {
+      "message": "Den konfigurerte søkeposisjonen for ladestasjoner er utilgjengelig."
+    },
+    "rate_limited": {
+      "message": "Leverandøren av ladestasjonsdata begrenser antall forespørsler. Vent til begrensningen er opphevet, og prøv igjen."
+    },
+    "unsupported_provider": {
+      "message": "Den konfigurerte leverandøren av ladestasjonsdata støttes ikke."
+    },
+    "config_entry_not_loaded": {
+      "message": "Velg en innlastet CurbCharge-konfigurasjonsoppføring."
+    },
+    "favorite_not_found": {
+      "message": "Stasjons-ID-en er ikke en lagret favoritt i denne konfigurasjonsoppføringen."
+    },
+    "invalid_station_id": {
+      "message": "Skriv inn en stasjons-ID som ikke er tom."
+    },
+    "station_not_discovered": {
+      "message": "Stasjonen må være nylig funnet av denne konfigurasjonsoppføringen før den kan legges til som favoritt."
+    }
+  },
+  "selector": {
+    "location_source": {
+      "options": {
+        "home": "Hjemmekoordinater i Home Assistant",
+        "manual": "Manuell bredde- og lengdegrad",
+        "entity": "Home Assistant-entitet"
+      }
+    },
+    "ndw_connector_type": {
+      "options": {
+        "type-2": "Type 2 (Mennekes)",
+        "ccs-combo-2": "CCS (Combo 2)",
+        "chademo": "CHAdeMO",
+        "cee-16a-single-phase": "CEE 16 A (enfase)",
+        "cee-16a-three-phase": "CEE 16 A (trefase)",
+        "cee-32a-three-phase": "CEE 32 A (trefase)",
+        "domestic-a": "Husholdningskontakt A (NEMA 1-15)"
+      }
+    },
+    "personalization_connector_type": {
+      "options": {
+        "iec_62196_t2": "Type 2 (Mennekes)",
+        "iec_62196_t2_combo": "CCS Combo 2",
+        "chademo": "CHAdeMO",
+        "iec_60309_2_single_16": "CEE 16 A (enfase)",
+        "iec_60309_2_three_16": "CEE 16 A (trefase)",
+        "iec_60309_2_three_32": "CEE 32 A (trefase)",
+        "domestic_a": "Husholdningskontakt A (NEMA 1-15)"
+      }
+    },
+    "personalization_ranking_preset": {
+      "options": {
+        "balanced": "Balansert",
+        "lowest_price": "Lavest pris",
+        "shortest_distance": "Kortest avstand",
+        "highest_availability": "Flest ledige ladekontakter",
+        "highest_power": "Høyest kontakteffekt"
+      }
+    },
+    "personalization_unknown_data_policy": {
+      "options": {
+        "exclude": "Utelukk ukjente preferanseverdier (anbefalt)",
+        "allow_fallback": "Tillat ukjente verdier bare som reservevalg"
+      }
+    },
+    "provider": {
+      "options": {
+        "ndw_dot_nl": "NDW DOT-NL",
+        "eco_movement_be": "Eco-Movement Belgia (forhåndsvisning)",
+        "nobil_no": "NOBIL Norge",
+        "nobil_se": "NOBIL Sverige"
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "available": {
+        "name": "Ledig"
+      }
+    },
+    "sensor": {
+      "available_connectors": {
+        "name": "Ledige ladekontakter"
+      },
+      "availability_percentage": {
+        "name": "Andel ledige ladekontakter"
+      },
+      "occupied_connectors": {
+        "name": "Opptatte ladekontakter"
+      },
+      "unavailable_connectors": {
+        "name": "Utilgjengelige ladekontakter"
+      },
+      "total_connectors": {
+        "name": "Ladekontakter totalt"
+      },
+      "connector_group": {
+        "name": "{connector_type}-kontakter"
+      },
+      "maximum_charging_power": {
+        "name": "Maksimal ladeeffekt"
+      },
+      "price_per_kwh": {
+        "name": "Pris per kWh"
+      },
+      "distance": {
+        "name": "Avstand"
+      },
+      "status_summary": {
+        "name": "Statusoversikt",
+        "state": {
+          "available": "Ledig",
+          "none_available": "Ingen ledige",
+          "unknown": "Ukjent"
+        }
+      },
+      "favorite_status": {
+        "name": "Favorittstatus",
+        "state": {
+          "available": "Ledig",
+          "none_available": "Ingen ledige",
+          "unknown": "Ukjent"
+        }
+      },
+      "favorite_summary": {
+        "name": "Favorittoversikt"
+      },
+      "best_nearby_charger": {
+        "name": "Beste lader i nærheten"
+      },
+      "nearest_available_charger": {
+        "name": "Nærmeste ledige lader"
+      },
+      "cheapest_available_charger": {
+        "name": "Billigste ledige lader"
+      },
+      "fastest_available_charger": {
+        "name": "Raskeste ledige lader"
+      },
+      "top_nearby_chargers": {
+        "name": "Topprangerte ladere i nærheten"
+      },
+      "nearby_charging_units": {
+        "name": "Ladeenheter i nærheten"
+      },
+      "nearby_available_connectors": {
+        "name": "Ledige ladekontakter i nærheten"
+      },
+      "nearby_availability_percentage": {
+        "name": "Tilgjengelighet for ladekontakter i nærheten"
+      }
+    }
+  }
+}
