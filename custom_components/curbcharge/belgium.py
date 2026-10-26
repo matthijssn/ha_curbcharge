@@ -295,14 +295,16 @@ class BelgiumChargingProvider(BaseChargingProvider):
     ) -> StationDiscoveryResult:
         """Fetch nearby EVSEs and separately selected favourites."""
         document = await self._client.async_get_locations()
-        nearby, favourite_stations = await asyncio.get_running_loop().run_in_executor(
+        (
+            nearby_candidates,
+            favourite_stations,
+        ) = await asyncio.get_running_loop().run_in_executor(
             None,
             _select_static_stations,
             document,
             latitude,
             longitude,
             radius_m,
-            max_stations,
             favourites,
             self.provider_id,
         )
@@ -352,9 +354,34 @@ class BelgiumChargingProvider(BaseChargingProvider):
                 )
             return tuple(updated)
 
+        checked_ids: set[str] = set()
+        favourite_ids = {favourite.provider_id for favourite in favourites}
+        if include_unknown:
+            selected_candidates = nearby_candidates[:max_stations]
+            checked_ids.update(station.provider_id for station in selected_candidates)
+            nearby = await update_status(selected_candidates)
+        else:
+            selected: list[ChargingStation] = []
+            for station in nearby_candidates:
+                if len(selected) >= max_stations:
+                    break
+                checked_ids.add(station.provider_id)
+                updated = await update_status([station])
+                selected.extend(
+                    item
+                    for item in updated
+                    if item.availability_reported or item.provider_id in favourite_ids
+                )
+            nearby = tuple(selected)
+
+        favourites_to_update = [
+            station
+            for station_id, station in favourite_stations.items()
+            if station_id not in checked_ids
+        ]
         return StationDiscoveryResult(
-            nearby=await update_status(nearby),
-            favourites=await update_status(list(favourite_stations.values())),
+            nearby=nearby,
+            favourites=await update_status(favourites_to_update),
         )
 
 
@@ -452,7 +479,6 @@ def _select_static_stations(
     latitude: float,
     longitude: float,
     radius_m: int,
-    max_stations: int,
     favourites: tuple[FavouriteStationReference, ...],
     provider_id: str,
 ) -> tuple[list[ChargingStation], dict[str, ChargingStation]]:
@@ -471,8 +497,6 @@ def _select_static_stations(
             station.provider_id,
         )
     )
-    nearby = nearby[:max_stations]
-    nearby_ids = {station.provider_id for station in nearby}
 
     favourite_stations: dict[str, ChargingStation] = {}
     for favourite in favourites:
@@ -480,8 +504,6 @@ def _select_static_stations(
             raise InvalidProviderResponseError(
                 "A saved favourite belongs to a different provider"
             )
-        if favourite.provider_id in nearby_ids:
-            continue
         station = stations_by_id.get(favourite.provider_id)
         if station is not None:
             favourite_stations[favourite.provider_id] = station

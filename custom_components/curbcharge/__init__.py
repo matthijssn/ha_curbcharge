@@ -3,9 +3,8 @@
 import logging
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
@@ -13,6 +12,12 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import UpdateFailed
+
+# HA 2024.12 exports at http; current Core types it in http.server.
+if TYPE_CHECKING:
+    from homeassistant.components.http.server import StaticPathConfig
+else:
+    from homeassistant.components.http import StaticPathConfig
 
 from .api import create_provider
 from .const import (

@@ -10,8 +10,9 @@ The `test` workflow checks the minimum Home Assistant 2024.12.0 release with
 Python 3.12, `pytest-homeassistant-custom-component` 0.13.190, and Core's
 2024.12.0 package constraints. It pins `pycares==4.8.0` because newer resolver
 versions start a shutdown-loop thread that this older test plugin reports as a
-teardown leak. It then runs the current Home Assistant test package on Python
-3.13.
+teardown leak. The current-version job runs Home Assistant 2026.10.4 on
+Python 3.14.2; Dependabot keeps that pin reviewable. The current-version test
+run exposes `DeprecationWarning` messages.
 
 Install the Python test tools:
 
@@ -30,13 +31,31 @@ mypy
 
 CI also enforces coverage strictly above 95% for each Python module under
 `custom_components/curbcharge`; the package-wide 96% threshold does not replace
-this per-module check.
+this per-module check. The no-decrease comparison uses the current lifecycle
+tests in its detached base worktree so both revisions are measured against the
+current Home Assistant child-device registry API.
 
 The frontend test uses Node.js separately:
 
 ```bash
 node --test tests/curbcharge-card.test.mjs
 ```
+
+## HACS release smoke checklist
+
+Run this on a clean Home Assistant instance for a full published release:
+
+- [ ] Install the previous full release from the HACS default catalog, restart,
+  and verify the integration sets up with the expected entities.
+- [ ] Upgrade to the target full release through HACS, restart, and verify the
+  config entry, options, devices, and entity IDs are preserved without
+  duplicates.
+- [ ] Record the Home Assistant version, source and target release tags, date,
+  result, and any relevant logs in the release PR or issue. Remove credentials,
+  coordinates, and personal data before attaching evidence.
+
+HACS and Hassfest CI validate repository layout and metadata; they do not
+replace this install/upgrade smoke test.
 
 ## Preparing a release
 

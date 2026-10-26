@@ -3,3 +3,4 @@ pytest-homeassistant-custom-component
 pytest-cov
 ruff
 mypy
+homeassistant==2026.10.4
