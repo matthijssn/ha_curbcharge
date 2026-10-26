@@ -13,14 +13,11 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
-# StaticPathConfig moved into http.server after the 2024.12 minimum.
+# HA 2024.12 exports at http; current Core types it in http.server.
 if TYPE_CHECKING:
     from homeassistant.components.http.server import StaticPathConfig
 else:
-    try:
-        from homeassistant.components.http.server import StaticPathConfig
-    except ImportError:
-        from homeassistant.components.http import StaticPathConfig
+    from homeassistant.components.http import StaticPathConfig
 
 from .api import create_provider
 from .const import (
