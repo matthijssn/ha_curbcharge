@@ -44,31 +44,29 @@ license link.
 ## Request limits and retries
 
 The current public API v3 documentation does not publish a requests-per-time
-quota, reset period, or recommended polling interval. Its maximum of 2,000
-returned station records is a per-response result cap, not a request-rate
-quota. No numerical rate limit should be inferred from that cap.
+quota, reset period, or recommended polling interval. The documented nearby
+station search returns at most 2,000 station records per response; this cap is
+not a request-rate quota. Do not invent a time-based quota or polling interval
+when the source does not specify one.
 
-The selected country-specific provider must enforce any limit NOBIL publishes
-at its documented scope (such as API key, account, or IP). Its request budget
-must include normal polls, pagination, concurrent calls, and retries. It must
-honor `429` and `Retry-After`, use bounded backoff for transient failures, and
-avoid rapid retry loops for authentication or invalid-payload errors. Tests
-must verify that polling and retries do not exceed the documented budget. If
-NOBIL publishes no request quota, record that limitation and do not claim that
-a chosen interval is provider-approved.
+The selected country-specific provider must enforce the published response
+cap, honor server-issued `429` and `Retry-After` responses, use bounded backoff
+for transient failures, and avoid rapid retry loops for authentication or
+invalid-payload errors. Tests should verify these explicit behaviors without
+asserting an undocumented requests-per-time budget.
 
 ## Country coverage and freshness
 
 NOBIL describes its database as covering most public charging stations in
 both Norway and Sweden and documents country codes `NOR` and `SWE`. The public
-documentation does not provide numeric country-level counts. It documents
-country-specific statistics functions, including
+documentation does not provide numeric country-level counts. Numeric totals
+are not a requirement when they are not published. The API documentation
+lists country-specific statistics functions, including
 `stats_GetSumChargerstations`, `stats_GetCountChargerConnectors`, and
 `stats_GetCountPublicChargerConnectors`, which accept `countrycode=NOR` or
-`countrycode=SWE`. These describe how to query statistics, not the results;
-the country totals have not been queried for this research. The Swedish
-catalogue lists a daily frequency; this is catalogue metadata, not a guarantee
-that every NOBIL field or status is refreshed daily.
+`countrycode=SWE`; these document query methods, not required numeric results.
+The Swedish catalogue lists a daily frequency; this is catalogue metadata,
+not a guarantee that every NOBIL field or status is refreshed daily.
 
 NOBIL includes availability only where it is reported. Its real-time status
 feed is a separate Enova WebSocket product, and the documented test
@@ -80,11 +78,10 @@ semantics are verified.
 ## Release status
 
 The source-specific conditions above must be implemented and tested in the
-selected country provider, not in a new generic provider framework. Quota
-scope, country-level coverage, and live-payload compatibility are not
-established by the current public documentation. Keep [#246](https://github.com/matthijssn/ha_curbcharge/issues/246)
-blocked on those items; do not make a release-readiness claim until they are
-verified.
+Norway and Sweden providers, not in a new generic provider framework. Numeric
+per-time quotas and country totals that NOBIL does not publish are not
+requirements. The providers must honor the published response cap and server
+rate-limit responses while preserving unknown data semantics.
 
 ## Sources
 
