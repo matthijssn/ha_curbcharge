@@ -38,8 +38,6 @@ from custom_components.curbcharge.const import (
     LOCATION_MANUAL,
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NDW_DOT_NL,
-    PROVIDER_NOBIL_NO,
-    PROVIDER_NOBIL_SE,
 )
 from custom_components.curbcharge.coordinator import CurbChargeCoordinator
 from custom_components.curbcharge.entity import (
@@ -649,8 +647,6 @@ async def test_favorite_sensors_follow_coordinator_changes_without_provider_call
     [
         (PROVIDER_NDW_DOT_NL, "NDW DOT-NL", "NL"),
         (PROVIDER_ECO_MOVEMENT_BE, "Eco-Movement Belgium", "BE"),
-        (PROVIDER_NOBIL_NO, "NOBIL Norway", "NO"),
-        (PROVIDER_NOBIL_SE, "NOBIL Sweden", "SE"),
     ],
 )
 async def test_setup_unload_and_reload_keep_stable_entities(
@@ -666,11 +662,7 @@ async def test_setup_unload_and_reload_keep_stable_entities(
     provider.country_code = country_code
     monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
     overrides: dict[str, object] = {CONF_PROVIDER: provider_id}
-    if provider_id in (
-        PROVIDER_ECO_MOVEMENT_BE,
-        PROVIDER_NOBIL_NO,
-        PROVIDER_NOBIL_SE,
-    ):
+    if provider_id == PROVIDER_ECO_MOVEMENT_BE:
         overrides[CONF_API_TOKEN] = "test-token"
     entry = _entry(
         overrides,
@@ -850,11 +842,7 @@ async def test_favorite_entity_and_device_growth_is_linear(
     monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
 
     overrides: dict[str, object] = {CONF_PROVIDER: provider_id}
-    if provider_id in (
-        PROVIDER_ECO_MOVEMENT_BE,
-        PROVIDER_NOBIL_NO,
-        PROVIDER_NOBIL_SE,
-    ):
+    if provider_id == PROVIDER_ECO_MOVEMENT_BE:
         overrides[CONF_API_TOKEN] = "test-token"
     entry = _entry(
         overrides,
@@ -1103,18 +1091,8 @@ async def test_nl_and_be_entries_refresh_fail_recover_and_reload_independently(
     assert be_count_state.attributes["country_code"] == "BE"
     assert nl_count_state.attributes["provider_id"] == PROVIDER_NDW_DOT_NL
     assert be_count_state.attributes["provider_id"] == PROVIDER_ECO_MOVEMENT_BE
-    assert nl_count_state.attributes["supported_country_codes"] == [
-        "NL",
-        "BE",
-        "NO",
-        "SE",
-    ]
-    assert be_count_state.attributes["supported_country_codes"] == [
-        "NL",
-        "BE",
-        "NO",
-        "SE",
-    ]
+    assert nl_count_state.attributes["supported_country_codes"] == ["NL", "BE"]
+    assert be_count_state.attributes["supported_country_codes"] == ["NL", "BE"]
     assert nl_count_state.attributes["coverage_scope"] == "configured_search_area"
     assert be_count_state.attributes["coverage_scope"] == "configured_search_area"
 

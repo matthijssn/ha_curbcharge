@@ -9,11 +9,21 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
 from homeassistant.core import HomeAssistant
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+import custom_components.curbcharge as curbcharge
 import custom_components.curbcharge.nobil as nobil
 from custom_components.curbcharge.api import create_provider
 from custom_components.curbcharge.const import (
+    CONF_API_TOKEN,
+    CONF_LOCATION_SOURCE,
+    CONF_MAX_STATIONS,
+    CONF_PROVIDER,
+    CONF_SEARCH_RADIUS,
+    DOMAIN,
+    LOCATION_MANUAL,
     PROVIDER_NOBIL_NO,
     PROVIDER_NOBIL_SE,
 )
@@ -31,6 +41,7 @@ from custom_components.curbcharge.provider import (
     ProviderRateLimitError,
     UnsupportedProviderError,
 )
+from tests.conftest import FakeProvider
 
 
 class FakeResponse:
@@ -725,3 +736,42 @@ def test_nobil_factory_validates_provider_key_and_shared_limiter(hass):
     hass.data.setdefault(nobil.DOMAIN, {})[nobil._REQUEST_LIMITER_DATA_KEY] = object()
     with pytest.raises(RuntimeError, match="NOBIL request limiter"):
         create_provider(PROVIDER_NOBIL_NO, FakeSession([]), hass, "valid-key")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("provider_id", "provider_name", "country_code"),
+    [
+        (PROVIDER_NOBIL_NO, "NOBIL Norway", "NO"),
+        (PROVIDER_NOBIL_SE, "NOBIL Sweden", "SE"),
+    ],
+)
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_nobil_country_entry_setup(
+    hass, monkeypatch, provider_id, provider_name, country_code
+):
+    provider = FakeProvider()
+    provider.provider_id = provider_id
+    provider.provider_name = provider_name
+    provider.country_code = country_code
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=f"nobil-setup-{provider_id}",
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_MANUAL,
+            CONF_LATITUDE: 61.12345,
+            CONF_LONGITUDE: 10.98765,
+            CONF_PROVIDER: provider_id,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+            CONF_API_TOKEN: "synthetic-test-key",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    assert entry.runtime_data.provider_id == provider_id
+    assert entry.runtime_data.country_code == country_code
+    assert provider.station_calls[0][:3] == (61.12345, 10.98765, 500)
+    assert await hass.config_entries.async_unload(entry.entry_id)
