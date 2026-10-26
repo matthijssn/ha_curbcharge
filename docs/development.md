@@ -31,7 +31,9 @@ mypy
 
 CI also enforces coverage strictly above 95% for each Python module under
 `custom_components/curbcharge`; the package-wide 96% threshold does not replace
-this per-module check.
+this per-module check. The no-decrease comparison uses the current lifecycle
+tests in its detached base worktree so both revisions are measured against the
+current Home Assistant child-device registry API.
 
 The frontend test uses Node.js separately:
 
