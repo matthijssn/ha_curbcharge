@@ -338,7 +338,7 @@ async def test_nobil_honors_retry_after_and_shares_cooldown_by_api_key(
             )
         ]
     )
-    second_session = FakeSession([])
+    second_session = FakeSession([FakeResponse({"chargerstations": []})])
     first = _provider(PROVIDER_NOBIL_NO, first_session, hass)
     second = _provider(PROVIDER_NOBIL_SE, second_session, hass)
 

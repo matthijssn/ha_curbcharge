@@ -155,7 +155,7 @@ def test_nearby_charging_units_counts_current_records_and_reports_scope(
         "provider": "NDW DOT-NL",
         "provider_id": "ndw_dot_nl",
         "country_code": "NL",
-        "supported_country_codes": ["NL", "BE"],
+        "supported_country_codes": ["NL", "BE", "NO", "SE"],
         "coverage_scope": "configured_search_area",
         "search_radius_m": 500,
         "max_stations": 2,

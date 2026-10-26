@@ -666,7 +666,11 @@ async def test_setup_unload_and_reload_keep_stable_entities(
     provider.country_code = country_code
     monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
     overrides: dict[str, object] = {CONF_PROVIDER: provider_id}
-    if provider_id == PROVIDER_ECO_MOVEMENT_BE:
+    if provider_id in (
+        PROVIDER_ECO_MOVEMENT_BE,
+        PROVIDER_NOBIL_NO,
+        PROVIDER_NOBIL_SE,
+    ):
         overrides[CONF_API_TOKEN] = "test-token"
     entry = _entry(
         overrides,
