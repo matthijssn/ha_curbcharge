@@ -1,4 +1,4 @@
-"""NDW DOT-NL client and provider factory."""
+"""Charging provider factory and NDW DOT-NL API client."""
 
 import asyncio
 import gzip
@@ -26,6 +26,7 @@ from .const import (
     GEOJSON_REQUEST_TIMEOUT,
     MAX_BBOX_AREA_DEG2,
     MIN_SEARCH_RADIUS_M,
+    NOBIL_PROVIDER_IDS,
     PROVIDER_API_URL,
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NAME,
@@ -48,6 +49,7 @@ from .models import (
     StationDiscoveryResult,
     TariffStatus,
 )
+from .nobil import create_nobil_provider
 from .provider import (
     AuthenticationError,
     BaseChargingProvider,
@@ -423,6 +425,10 @@ def create_provider(
         return NdwDotNlProvider(session, limiter)
     if provider_id == PROVIDER_ECO_MOVEMENT_BE and hass is not None and token:
         return create_belgium_provider(hass, session, token)
+    if provider_id in NOBIL_PROVIDER_IDS:
+        if not token:
+            raise AuthenticationError("A NOBIL API key is required")
+        return create_nobil_provider(session, provider_id, token, hass)
     raise UnsupportedProviderError("The configured charging provider is unsupported")
 
 

@@ -1,0 +1,63 @@
+{
+  "Provider": "NOBIL.no",
+  "Rights": "Creative Commons Attribution 4.0",
+  "apiver": "3",
+  "chargerstations": [
+    {
+      "csmd": {
+        "International_id": "NOR_99991",
+        "Land_code": "nor",
+        "name": "Synthetic Norway station",
+        "Position": "(61.12345,10.98765)",
+        "Street": "Syntheticgata",
+        "House_number": "1",
+        "Zipcode": "0001",
+        "City": "TESTBY",
+        "Owned_by": "Synthetic CPO",
+        "Number_charging_points": 4,
+        "Available_charging_points": 2,
+        "Updated": "2026-08-16 13:00:00"
+      },
+      "attr": {
+        "st": {}
+      },
+      "conn": {
+        "4": {
+          "attrtypeid": "4",
+          "attrname": "Connector",
+          "attrvalid": "1",
+          "trans": "Type 2",
+          "attrval": ""
+        }
+      }
+    },
+    {
+      "csmd": {
+        "International_id": "SWE_99991",
+        "Land_code": "swe",
+        "name": "Synthetic Sweden station",
+        "Position": "(59.98765,18.76543)",
+        "Street": "Provvagen",
+        "House_number": "2",
+        "Zipcode": "10001",
+        "City": "TESTSTAD",
+        "Owned_by": "Synthetic CPO",
+        "Number_charging_points": 2,
+        "Available_charging_points": 1,
+        "Updated": "2026-08-16T14:00:00+02:00"
+      },
+      "attr": {
+        "st": {}
+      },
+      "conn": {
+        "4": {
+          "attrtypeid": "4",
+          "attrname": "Connector",
+          "attrvalid": "2",
+          "trans": "CCS Combo 2",
+          "attrval": ""
+        }
+      }
+    }
+  ]
+}

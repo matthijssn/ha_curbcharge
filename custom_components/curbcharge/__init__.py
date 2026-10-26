@@ -43,8 +43,9 @@ from .const import (
     MIN_SCAN_INTERVAL_MINUTES,
     MIN_SEARCH_RADIUS_M,
     PLATFORMS,
-    PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NDW_DOT_NL,
+    PROVIDERS_REQUIRING_API_TOKEN,
+    SUPPORTED_PROVIDER_IDS,
 )
 from .const import (
     DOMAIN as DOMAIN,
@@ -154,9 +155,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
             translation_key="invalid_config",
         ) from err
     if (
-        provider_id not in (PROVIDER_NDW_DOT_NL, PROVIDER_ECO_MOVEMENT_BE)
+        provider_id not in SUPPORTED_PROVIDER_IDS
         or (
-            provider_id == PROVIDER_ECO_MOVEMENT_BE
+            provider_id in PROVIDERS_REQUIRING_API_TOKEN
             and (not isinstance(api_token, str) or not api_token)
         )
         or not isinstance(radius_m, int)

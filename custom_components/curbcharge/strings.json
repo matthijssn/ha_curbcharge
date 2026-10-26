@@ -114,6 +114,26 @@
         "data_description": {
           "api_token": "The token is stored in this config entry and redacted from diagnostics."
         }
+      },
+      "nobil_credentials": {
+        "title": "Connect to NOBIL",
+        "description": "Enter your own NOBIL API key. It is stored only in this config entry and redacted from diagnostics.",
+        "data": {
+          "api_token": "NOBIL API key"
+        },
+        "data_description": {
+          "api_token": "Use only a key you are authorized to use. Do not share it in issue reports."
+        }
+      },
+      "nobil_reauth_confirm": {
+        "title": "Update NOBIL credentials",
+        "description": "Enter a replacement NOBIL API key.",
+        "data": {
+          "api_token": "NOBIL API key"
+        },
+        "data_description": {
+          "api_token": "The key is stored in this config entry and redacted from diagnostics."
+        }
       }
     },
     "error": {
@@ -122,6 +142,7 @@
       "invalid_location": "Enter valid coordinates and a supported search area.",
       "invalid_entity_location": "Select an entity that currently reports valid latitude and longitude coordinates.",
       "invalid_api_token": "Enter a non-empty printable ASCII API token.",
+      "invalid_nobil_api_key": "Enter a non-empty printable NOBIL API key.",
       "invalid_discovery_filters": "Enter valid discovery filters. Minimum power must be a finite positive number.",
       "invalid_response": "The provider returned data in an unexpected format.",
       "location_not_configured": "Home coordinates are not configured in Home Assistant.",
@@ -132,7 +153,8 @@
       "already_configured": "This provider and search area are already configured.",
       "location_not_configured": "The search location is not configured.",
       "reconfigure_successful": "Search location updated.",
-      "reauth_successful": "Eco-Movement credentials updated."
+      "reauth_successful": "Eco-Movement credentials updated.",
+      "nobil_reauth_successful": "NOBIL API key updated."
     }
   },
   "options": {
@@ -185,7 +207,7 @@
           "enabled": "Enable this saved profile for personalized recommendations. Until personalization evaluation is available, existing recommendations remain unchanged.",
           "connector_type_ids": "Choose canonical connector standards. Leave empty to accept any connector type.",
           "minimum_power_kw": "Optional minimum for a matching connector group; use a finite nonnegative value.",
-          "preferred_operators": "Enter one provider-qualified reference per line, for example ndw_dot_nl:NLX or eco_movement_be:Example CPO. NDW IDs match exactly; Belgium names are trimmed, whitespace-collapsed, and case-insensitive. Saved choices are retained when not nearby.",
+          "preferred_operators": "Enter one provider-qualified reference per line, for example ndw_dot_nl:NLX, eco_movement_be:Example CPO, or nobil_no:Synthetic CPO. NDW IDs and NOBIL names match exactly; Belgium names are trimmed, whitespace-collapsed, and case-insensitive. Saved choices are retained when not nearby.",
           "excluded_operators": "Enter one provider-qualified reference per line using the same format as preferred operators. Matching exclusions are never bypassed by fallback.",
           "maximum_price": "Optional nonnegative decimal amount. Leave blank for no price cap.",
           "maximum_price_currency": "Required with a maximum price; enter a three-letter currency code such as EUR.",
@@ -309,7 +331,9 @@
     "provider": {
       "options": {
         "ndw_dot_nl": "NDW DOT-NL",
-        "eco_movement_be": "Eco-Movement Belgium (preview)"
+        "eco_movement_be": "Eco-Movement Belgium (preview)",
+        "nobil_no": "NOBIL Norway",
+        "nobil_se": "NOBIL Sweden"
       }
     }
   },

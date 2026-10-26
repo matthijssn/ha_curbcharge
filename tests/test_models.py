@@ -23,6 +23,7 @@ from custom_components.curbcharge.const import (
     PERSONALIZATION_PROFILE_VERSION,
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NDW_DOT_NL,
+    PROVIDER_NOBIL_NO,
 )
 from custom_components.curbcharge.models import (
     ChargingConnector,
@@ -87,6 +88,7 @@ def test_personalization_profile_round_trips_and_deduplicates_values():
                 {"provider": PROVIDER_NDW_DOT_NL, "key": "NLX"},
                 {"provider": PROVIDER_ECO_MOVEMENT_BE, "key": "Example   CPO"},
                 {"provider": PROVIDER_ECO_MOVEMENT_BE, "key": " EXAMPLE CPO "},
+                {"provider": PROVIDER_NOBIL_NO, "key": "Synthetic CPO"},
             ],
             CONF_EXCLUDED_OPERATORS: [
                 {"provider": PROVIDER_NDW_DOT_NL, "key": "OTHER"}
@@ -109,6 +111,7 @@ def test_personalization_profile_round_trips_and_deduplicates_values():
     assert profile.preferred_operators == (
         OperatorReference(PROVIDER_NDW_DOT_NL, "NLX"),
         OperatorReference(PROVIDER_ECO_MOVEMENT_BE, "example cpo"),
+        OperatorReference(PROVIDER_NOBIL_NO, "Synthetic CPO"),
     )
     assert profile.maximum_price == Decimal("0.012300")
     assert profile.maximum_price_currency == "EUR"
@@ -124,10 +127,11 @@ def test_personalization_profile_round_trips_and_deduplicates_values():
 def test_operator_reference_lines_use_provider_scoped_exact_keys():
     assert parse_operator_reference_lines(
         "\nndw_dot_nl:NLX\n\neco_movement_be: Example   CPO \n"
-        "eco_movement_be:example cpo\n"
+        "eco_movement_be:example cpo\nnobil_no:Synthetic CPO\n"
     ) == (
         OperatorReference(PROVIDER_NDW_DOT_NL, "NLX"),
         OperatorReference(PROVIDER_ECO_MOVEMENT_BE, "example cpo"),
+        OperatorReference(PROVIDER_NOBIL_NO, "Synthetic CPO"),
     )
 
 
@@ -317,6 +321,13 @@ def test_provider_data_age_uses_utc_and_returns_zero_at_current_time(sample_stat
             last_updated=now.astimezone(provider_timezone),
         ).provider_data_age_seconds(now)
         == 0
+    )
+    assert (
+        replace(
+            station,
+            last_updated_source=ProviderTimestampSource.NOBIL,
+        ).provider_data_age_seconds(now)
+        == 65
     )
 
 
