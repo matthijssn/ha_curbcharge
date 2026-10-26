@@ -61,11 +61,14 @@ a chosen interval is provider-approved.
 
 NOBIL describes its database as covering most public charging stations in
 both Norway and Sweden and documents country codes `NOR` and `SWE`. The public
-documentation does not provide comparable country-level counts. It documents
-country-specific statistics queries, but their results have not been queried
-for this research. The Swedish catalogue lists a daily frequency; this is
-catalogue metadata, not a guarantee that every NOBIL field or status is
-refreshed daily.
+documentation does not provide numeric country-level counts. It documents
+country-specific statistics functions, including
+`stats_GetSumChargerstations`, `stats_GetCountChargerConnectors`, and
+`stats_GetCountPublicChargerConnectors`, which accept `countrycode=NOR` or
+`countrycode=SWE`. These describe how to query statistics, not the results;
+the country totals have not been queried for this research. The Swedish
+catalogue lists a daily frequency; this is catalogue metadata, not a guarantee
+that every NOBIL field or status is refreshed daily.
 
 NOBIL includes availability only where it is reported. Its real-time status
 feed is a separate Enova WebSocket product, and the documented test
