@@ -114,7 +114,9 @@ The card reads only the selected Home Assistant entity; it makes no provider
 requests. It displays the station name and operator when available, address,
 availability, connector counts, maximum power, distance, price/currency when
 known, and update times. Labels follow the Home Assistant language in English,
-Dutch, French, or German.
+Dutch, French, German, Norwegian Bokmål (`nb`), or Swedish (`sv`). Language is
+independent of the selected provider country; station names and reported
+currencies are preserved, and prices are not converted.
 When configured with **Top nearby chargers**, it renders the backend-ordered
 recommendations as one ordered list, including each station's rank, score,
 ranking explanation, availability, and available price, power, and distance.
@@ -135,6 +137,24 @@ the bundled card does not show old measurements as current. The Status summary
 and Best nearby also expose `provider_timestamp_source` and
 `provider_data_age_seconds`; see [Data updates](usage.md#data-updates) for their
 semantics.
+
+### Norwegian Bokmål and Swedish release smoke check
+
+Owner-run Home Assistant UI validation for `nb` and `sv` remains an outstanding
+release gate tracked in [#257](https://github.com/matthijssn/ha_curbcharge/issues/257);
+automated translation and card tests do not replace it. On a safe instance,
+switch between both profile languages and inspect setup, options, both NOBIL
+country/key prompts, entity/state/action labels, card details/navigation, and
+the visual editor. Also check Norwegian-provider data in Swedish and
+Swedish-provider data in Norwegian, including a language switch on an existing
+card/editor without changing saved IDs or customized names.
+
+Use safe positive, zero, unknown, and unavailable data, and inspect
+`{connector_type}` substitution, accented characters, and longer labels. Record
+the HA version, target release/commit and bundled-card version, locale,
+surface/scenario, date, and pass/fail/blocked result with sanitized evidence in
+the issue or release PR. Use mocks for rejected/replacement credentials; do not
+trigger live authentication failures or quotas for this check.
 
 ### Optional: dynamic station list with Auto-Entities
 

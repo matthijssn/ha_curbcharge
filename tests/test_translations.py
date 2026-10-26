@@ -2,17 +2,28 @@
 
 import json
 from pathlib import Path
+from string import Formatter
 from typing import Any
 
+import pytest
 
-def _leaf_paths(value: Any, prefix: tuple[str, ...] = ()) -> set[tuple[str, ...]]:
+SUPPORTED_LANGUAGES = ("en", "nl", "fr", "de", "nb", "sv")
+
+
+def _leaf_values(
+    value: Any, prefix: tuple[str, ...] = ()
+) -> dict[tuple[str, ...], Any]:
     if not isinstance(value, dict):
-        return {prefix}
+        return {prefix: value}
     return {
-        leaf
+        path: leaf
         for key, child in value.items()
-        for leaf in _leaf_paths(child, (*prefix, key))
+        for path, leaf in _leaf_values(child, (*prefix, key)).items()
     }
+
+
+def _placeholder_names(value: str) -> set[str]:
+    return {name for _, name, _, _ in Formatter().parse(value) if name is not None}
 
 
 def test_english_translation_matches_strings():
@@ -25,15 +36,25 @@ def test_english_translation_matches_strings():
     assert source == english
 
 
-def test_translations_have_the_same_keys_as_english():
+@pytest.mark.parametrize("language", SUPPORTED_LANGUAGES)
+def test_translations_match_english_keys_values_and_placeholders(language):
     integration = Path(__file__).parent.parent / "custom_components" / "curbcharge"
-    english = json.loads(
-        (integration / "translations" / "en.json").read_text(encoding="utf-8")
+    english = _leaf_values(
+        json.loads(
+            (integration / "translations" / "en.json").read_text(encoding="utf-8")
+        )
     )
-    for language in ("nl", "fr", "de"):
-        translated = json.loads(
+    translated = _leaf_values(
+        json.loads(
             (integration / "translations" / f"{language}.json").read_text(
                 encoding="utf-8"
             )
         )
-        assert _leaf_paths(english) == _leaf_paths(translated)
+    )
+    assert english.keys() == translated.keys()
+    for path, value in translated.items():
+        assert isinstance(value, str) and value.strip(), (language, path)
+        assert _placeholder_names(english[path]) == _placeholder_names(value), (
+            language,
+            path,
+        )

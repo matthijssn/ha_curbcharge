@@ -66,13 +66,27 @@ const cardSource = await readFile(
   "utf8",
 );
 const cardModule = await import(
-  `data:text/javascript;base64,${Buffer.from(cardSource).toString("base64")}`
+  `data:text/javascript;base64,${Buffer.from(`${cardSource}\nexport { TEXT };`).toString("base64")}`
 );
+const SUPPORTED_LANGUAGES = ["en", "nl", "fr", "de", "nb", "sv"];
 
 function visibleText(element) {
   if (element.tagName === "style") return "";
   return [element.textContent, ...element.children.map(visibleText)].join(" ");
 }
+
+test("requires complete nonempty dictionaries for all six languages", () => {
+  assert.deepEqual(Object.keys(cardModule.TEXT), SUPPORTED_LANGUAGES);
+  const englishKeys = Object.keys(cardModule.TEXT.en).sort();
+  for (const language of SUPPORTED_LANGUAGES) {
+    const text = cardModule.TEXT[language];
+    assert.deepEqual(Object.keys(text).sort(), englishKeys, language);
+    for (const [key, value] of Object.entries(text)) {
+      assert.equal(typeof value, "string", `${language}.${key}`);
+      assert.ok(value.trim(), `${language}.${key}`);
+    }
+  }
+});
 
 test("rejects invalid configuration and non-CurbCharge entities", () => {
   const Card = elements.get("curbcharge-card");
@@ -181,9 +195,32 @@ test("localizes editor controls in every supported language", () => {
       show_update_times: "Aktualisierungszeiten anzeigen",
       details: "Weitere Details",
     },
+    nb: {
+      entity: "Stasjonsentitet",
+      layout: "Oppsett",
+      standard: "Standard",
+      compact: "Kompakt",
+      show_price: "Vis pris",
+      show_connector_details: "Vis kontaktdetaljer",
+      show_station_details: "Vis stasjonsdetaljer",
+      show_update_times: "Vis oppdateringstider",
+      details: "Flere detaljer",
+    },
+    sv: {
+      entity: "Stationsentitet",
+      layout: "Layout",
+      standard: "Standard",
+      compact: "Kompakt",
+      show_price: "Visa pris",
+      show_connector_details: "Visa kontaktdetaljer",
+      show_station_details: "Visa stationsdetaljer",
+      show_update_times: "Visa uppdateringstider",
+      details: "Fler detaljer",
+    },
   };
   const Editor = elements.get("curbcharge-card-editor");
 
+  assert.deepEqual(Object.keys(labels), SUPPORTED_LANGUAGES);
   for (const [language, expected] of Object.entries(labels)) {
     const editor = new Editor();
     editor.setConfig({ entity: "sensor.station_status_summary" });
@@ -502,8 +539,25 @@ test("localizes Top N score and reason labels in every supported language", () =
       reason: "Begründung",
       bestNearbyRanking: "Nach Best nearby sortiert",
     },
+    nb: {
+      topNearby: "Topprangerte ladere i nærheten",
+      recommendations: "Anbefalinger",
+      rank: "Plassering",
+      score: "Poengsum",
+      reason: "Begrunnelse",
+      bestNearbyRanking: "Rangert etter beste lader i nærheten",
+    },
+    sv: {
+      topNearby: "Högst rankade laddare i närheten",
+      recommendations: "Rekommendationer",
+      rank: "Placering",
+      score: "Poäng",
+      reason: "Motivering",
+      bestNearbyRanking: "Rangordnad efter bästa laddare i närheten",
+    },
   };
 
+  assert.deepEqual(Object.keys(labels), SUPPORTED_LANGUAGES);
   for (const [language, expected] of Object.entries(labels)) {
     const data = cardModule.buildCardData(
       {
@@ -633,8 +687,33 @@ test("localizes recommendation states, operator, and address in every supported 
       operator: "Betreiber",
       address: "Adresse",
     },
+    nb: {
+      selected: "Valgt",
+      no_current_stations: "Ingen oppdaterte stasjoner",
+      unknown_availability: "Ukjent tilgjengelighet",
+      none_available: "Ingen ledige",
+      no_comparable_price: "Prisen kan ikke sammenlignes",
+      no_positive_power: "Ingen positiv effekt",
+      no_known_distance: "Ukjent avstand",
+      unavailable: "Utilgjengelig",
+      operator: "Operatør",
+      address: "Adresse",
+    },
+    sv: {
+      selected: "Vald",
+      no_current_stations: "Inga aktuella stationer",
+      unknown_availability: "Okänd tillgänglighet",
+      none_available: "Inga lediga",
+      no_comparable_price: "Priset kan inte jämföras",
+      no_positive_power: "Ingen positiv effekt",
+      no_known_distance: "Okänt avstånd",
+      unavailable: "Otillgänglig",
+      operator: "Operatör",
+      address: "Adress",
+    },
   };
 
+  assert.deepEqual(Object.keys(labels), SUPPORTED_LANGUAGES);
   for (const [language, expected] of Object.entries(labels)) {
     const selected = cardModule.buildCardData(
       {
@@ -941,8 +1020,23 @@ test("localizes navigation disclosure and link labels in every supported languag
       "Navigation mit Waze",
       "Kartenstandort öffnen (keine Navigation)",
     ],
+    nb: [
+      "Naviger",
+      "Veibeskrivelse med Google Maps",
+      "Veibeskrivelse med Apple Maps",
+      "Navigasjon med Waze",
+      "Åpne kartposisjon (ikke veibeskrivelse)",
+    ],
+    sv: [
+      "Navigera",
+      "Vägbeskrivning med Google Maps",
+      "Vägbeskrivning med Apple Maps",
+      "Navigering med Waze",
+      "Öppna plats på karta (inte vägbeskrivning)",
+    ],
   };
 
+  assert.deepEqual(Object.keys(labels), SUPPORTED_LANGUAGES);
   for (const [language, expected] of Object.entries(labels)) {
     const data = cardModule.buildCardData(
       {
@@ -1048,6 +1142,8 @@ test("renders a localized text favorite indicator only for explicit favorites", 
     nl: "Favoriet",
     fr: "Favori",
     de: "Favorit",
+    nb: "Favoritt",
+    sv: "Favorit",
   };
   const sources = [
     {
@@ -1094,6 +1190,7 @@ test("renders a localized text favorite indicator only for explicit favorites", 
   }
 
   const Card = elements.get("curbcharge-card");
+  assert.deepEqual(Object.keys(labels), SUPPORTED_LANGUAGES);
   for (const [language, label] of Object.entries(labels)) {
     const entity = sources[2];
     const card = new Card();
@@ -1158,8 +1255,11 @@ test("localizes the provider open-status label in every supported language", () 
     nl: ["Openstatus volgens provider", "Gesloten"],
     fr: ["Statut d'ouverture indiqué par le fournisseur", "Fermée"],
     de: ["Vom Anbieter gemeldeter Öffnungsstatus", "Geschlossen"],
+    nb: ["Åpningsstatus ifølge leverandøren", "Stengt"],
+    sv: ["Öppningsstatus enligt leverantören", "Stängd"],
   };
 
+  assert.deepEqual(Object.keys(labels), SUPPORTED_LANGUAGES);
   for (const [language, [label, closed]] of Object.entries(labels)) {
     const data = cardModule.buildCardData(
       {
@@ -1240,4 +1340,164 @@ test("rerenders updated Home Assistant state without provider requests", () => {
     },
   };
   assert.match(visibleText(card.shadowRoot), /Unknown/);
+});
+
+test("switches existing cards and editors through HA locales independently of providers", () => {
+  const Card = elements.get("curbcharge-card");
+  const Editor = elements.get("curbcharge-card-editor");
+  const providerTime = "2026-08-16T12:30:00Z";
+  const refreshTime = "2026-08-16T14:45:00Z";
+  for (const property of ["locale", "language"]) {
+    for (const [provider, country, currency] of [
+      ["nobil_no", "NO", "EUR"],
+      ["nobil_se", "SE", "NOK"],
+    ]) {
+      const entity = {
+        entity_id: "sensor.custom_station_name",
+        state: "available",
+        attributes: {
+          provider,
+          country_code: country,
+          provider_station_id: `${country}_synthetic`,
+          station_name: "Øresund laddplats",
+          friendly_name: "My custom name",
+          available_connectors: 1234,
+          total_connectors: 2345,
+          max_power_kw: 43.25,
+          price_per_kwh: 1234.56,
+          currency,
+          last_updated: providerTime,
+          last_successful_update: refreshTime,
+          latitude: 0,
+          longitude: 0,
+        },
+      };
+      const original = structuredClone(entity);
+      const card = new Card();
+      const editor = new Editor();
+      const config = { entity: entity.entity_id, layout: "compact" };
+      card.setConfig(config);
+      editor.setConfig(config);
+      let originalForm;
+      for (const language of ["en", "nb", "sv", "nb-NO", "sv-SE", "es-ES", undefined]) {
+        const hass = {
+          ...(language
+            ? property === "locale"
+              ? { locale: { language }, language: "en" }
+              : { language }
+            : {}),
+          states: { [entity.entity_id]: entity },
+          callApi: () => assert.fail("Language changes must not request provider data"),
+          callService: () => assert.fail("Language changes must not change entries"),
+        };
+        const text = cardModule.TEXT[(language || "en").split("-")[0]] || cardModule.TEXT.en;
+        card.hass = hass;
+        editor.hass = hass;
+        const data = cardModule.buildCardData(entity, hass);
+        const form = editor.shadowRoot.children[0];
+        originalForm ||= form;
+
+        assert.equal(form, originalForm);
+        assert.equal(form.computeLabel({ name: "entity" }), text.entity);
+        assert.equal(form.computeLabel({ name: "show_price" }), text.showPrice);
+        assert.deepEqual(
+          form.schema[1].selector.select.options.map(({ label }) => label),
+          [text.standard, text.compact],
+        );
+        assert.equal(form.data.entity, config.entity);
+        assert.equal(form.data.layout, config.layout);
+        assert.equal(card._config.entity, config.entity);
+        assert.ok(visibleText(card.shadowRoot).includes(text.details));
+        assert.ok(visibleText(card.shadowRoot).includes(text.availableConnectors));
+        assert.equal(data.title, original.attributes.station_name);
+        assert.equal(data.status, text.available);
+        assert.equal(data.primaryRows[0][1], new Intl.NumberFormat(language || "en").format(1234));
+        assert.equal(
+          data.primaryRows[1][1],
+          `${new Intl.NumberFormat(language || "en", { maximumFractionDigits: 2 }).format(1234.56)} ${currency}/kWh`,
+        );
+        assert.deepEqual(
+          data.detailsRows.find(([label]) => label === text.maximumPower),
+          [text.maximumPower, `${new Intl.NumberFormat(language || "en", { maximumFractionDigits: 2 }).format(43.25)} kW`],
+        );
+        for (const [label, timestamp] of [
+          [text.providerUpdated, providerTime],
+          [text.integrationUpdated, refreshTime],
+        ]) {
+          assert.deepEqual(
+            data.detailsRows.find(([rowLabel]) => rowLabel === label),
+            [
+              label,
+              new Intl.DateTimeFormat(language || "en", {
+                dateStyle: "short",
+                timeStyle: "short",
+              }).format(new Date(timestamp)),
+            ],
+          );
+        }
+        assert.deepEqual(entity, original);
+      }
+    }
+  }
+});
+
+test("keeps positive, zero, unknown, and unavailable data distinct in nb and sv", () => {
+  for (const [language, labels] of [
+    ["nb", ["Ledig", "Ingen ledige", "Ukjent tilgjengelighet", "Utilgjengelig", "Ukjent"]],
+    ["sv", ["Ledig", "Inga lediga", "Okänd tillgänglighet", "Otillgänglig", "Okänt"]],
+  ]) {
+    const cases = [
+      ["available", 2, labels[0], "2"],
+      ["none_available", 0, labels[1], "0"],
+      ["unknown_availability", null, labels[2], labels[4]],
+      ["unavailable", 2, labels[3], labels[4]],
+    ];
+    for (const [status, availableCount, expectedStatus, expectedCount] of cases) {
+      const data = cardModule.buildCardData(
+        {
+          entity_id: "sensor.station_status_summary",
+          state: status === "unavailable" ? "unavailable" : "unknown",
+          attributes: {
+            provider_station_id: "synthetic-station",
+            result_status: status,
+            available_connectors: availableCount,
+            price_per_kwh: 0,
+            currency: "EUR",
+          },
+        },
+        { language },
+      );
+      assert.equal(data.status, expectedStatus);
+      assert.equal(data.statusKey, status);
+      assert.equal(data.primaryRows[0][1], expectedCount);
+      assert.equal(
+        data.primaryRows[1][1],
+        status === "unavailable" ? labels[4] : "0 EUR/kWh",
+      );
+    }
+  }
+});
+
+test("localizes missing and wrong entity errors in nb and sv", () => {
+  for (const [language, missing, wrong] of [
+    [
+      "nb",
+      "Den konfigurerte entiteten ble ikke funnet.",
+      "Velg en status- eller anbefalingssensor fra CurbCharge.",
+    ],
+    [
+      "sv",
+      "Den konfigurerade entiteten hittades inte.",
+      "Välj en status- eller rekommendationssensor från CurbCharge.",
+    ],
+  ]) {
+    assert.deepEqual(cardModule.buildCardData(undefined, { language }), { error: missing });
+    assert.deepEqual(
+      cardModule.buildCardData(
+        { entity_id: "sensor.other", state: "1", attributes: {} },
+        { language },
+      ),
+      { error: wrong },
+    );
+  }
 });

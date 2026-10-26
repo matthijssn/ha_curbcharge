@@ -14,9 +14,18 @@ for environment setup, test and formatting commands, and release workflow. The
   and free of credentials or private provider data.
 - Update user-facing strings in
   [`custom_components/curbcharge/strings.json`](custom_components/curbcharge/strings.json)
-  and keep the supported files in
+  and keep all six locales (`en`, `nl`, `fr`, `de`, `nb`, `sv`) in
   [`custom_components/curbcharge/translations/`](custom_components/curbcharge/translations/)
-  aligned.
+  aligned, with identical keys, nonempty values, and matching placeholders.
+  Keep `en.json` identical to `strings.json`. For card-facing changes, update
+  all six dictionaries in
+  [`curbcharge-card.js`](custom_components/curbcharge/www/curbcharge-card.js)
+  and the applicable cases in
+  [`tests/curbcharge-card.test.mjs`](tests/curbcharge-card.test.mjs).
+  Run `pytest tests/test_translations.py` and
+  `node --test tests/curbcharge-card.test.mjs`. Review natural UTF-8 wording
+  and consistent charging terminology; structural tests do not prove language
+  quality. Preserve placeholders, technical examples, brands, and stored codes.
 - Treat config-entry unique IDs, provider IDs, station IDs, entity unique IDs,
   and keys stored in config-entry data or options as compatibility interfaces.
   Do not change them casually. If a format must change, add a versioned config
