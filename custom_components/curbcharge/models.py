@@ -32,7 +32,7 @@ from .const import (
     NDW_CONNECTOR_TYPE_SELECTOR_OPTIONS,
     PERSONALIZATION_PROFILE_VERSION,
     PROVIDER_ECO_MOVEMENT_BE,
-    PROVIDER_NDW_DOT_NL,
+    SUPPORTED_PROVIDER_IDS,
 )
 
 
@@ -83,7 +83,7 @@ class OperatorReference:
     key: str
 
     def __post_init__(self) -> None:
-        if self.provider not in (PROVIDER_NDW_DOT_NL, PROVIDER_ECO_MOVEMENT_BE):
+        if self.provider not in SUPPORTED_PROVIDER_IDS:
             raise ValueError("Operator reference has an unsupported provider")
         if not isinstance(self.key, str):
             raise ValueError("Operator reference key must be a string")
@@ -345,6 +345,7 @@ class ProviderTimestampSource(StrEnum):
     NDW_FEATURE = "ndw_feature"
     BELGIUM_EVSE_STATUS = "belgium_evse_status"
     BELGIUM_STATIC_FALLBACK = "belgium_static_fallback"
+    NOBIL = "nobil"
 
 
 class TariffStatus(StrEnum):
@@ -554,6 +555,7 @@ class ChargingStation:
             not in (
                 ProviderTimestampSource.NDW_FEATURE,
                 ProviderTimestampSource.BELGIUM_EVSE_STATUS,
+                ProviderTimestampSource.NOBIL,
             )
             or self.last_updated.utcoffset() is None
             or now.utcoffset() is None

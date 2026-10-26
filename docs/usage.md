@@ -74,6 +74,37 @@ Missing status remains unknown; failed updates make coordinator entities
 unavailable instead of inferring charger state. See the
 [Transportdata.be dataset][belgium-dataset].
 
+### NOBIL (Norway and Sweden)
+
+NOBIL v3 is available as two country choices backed by one shared client.
+Choose **NOBIL Norway** or **NOBIL Sweden** during setup and enter your own API
+key in the password field. Request a key through the official
+[NOBIL API page][nobil-api]. The key is stored only in config-entry data and
+redacted from diagnostics. Requests stay on the Home Assistant backend; the
+integration normalizes responses and caches station models in its coordinator
+before creating entities. It does not expose raw API responses.
+
+The documented `near` search has a maximum response size of 2,000 records;
+CurbCharge requests at most 50 and rejects responses larger than the published
+cap. NOBIL does not publish a requests-per-time quota or polling interval, so
+CurbCharge adds no fixed request-spacing rule. It honors HTTP `429` and
+`Retry-After`; transient connection or server errors get at most two retries
+with one- and two-second delays, followed by a shared per-key cooldown that
+increases from 30 seconds to a five-minute cap. Authentication and invalid
+responses are not retried.
+
+Country records are selected using NOBIL's `NOR`/`SWE` country identifiers and
+mapped to `NO`/`SE`. Station identity uses the source `International_id`.
+Reported connector counts and availability are preserved; missing availability
+and tariffs remain unknown. The separate NOBIL real-time WebSocket feed is not
+used. Timezone-naive `Updated` values are left unknown instead of being treated
+as UTC.
+
+NOBIL API use terms require backend processing and caching before data is
+provided to end users. NOBIL data are licensed under [CC BY 4.0][cc-by-4.0]:
+charging-station information is provided by [NOBIL][nobil] and [Enova][enova],
+normalized by CurbCharge, with no endorsement implied.
+
 ## Configuration
 
 Add **CurbCharge** from **Settings → Devices & services → Add integration**.
@@ -94,8 +125,9 @@ select a replacement if an Entity source was renamed or removed.
 
 Choose a polling interval in minutes (default 5; minimum 1), a search radius
 from 100 to 10,000 metres, and a maximum of 1 to 50 stations (default 10), then
-select NDW DOT-NL or the Belgium preview. Belgium setup also asks for the
-Eco-Movement API token and validates connectivity before creating the entry.
+select NDW DOT-NL, the Belgium preview, NOBIL Norway, or NOBIL Sweden. Belgium
+setup asks for the Eco-Movement API token, and NOBIL setup asks for your NOBIL
+API key; each is validated before creating the entry.
 You can change the polling interval, radius, station limit, and whether to
 include stations without availability data later in Options. For Entity
 sources, Options also offers a movement threshold that defaults to 100 metres;
@@ -121,8 +153,8 @@ Missing or unknown group data does not satisfy an active filter. The existing
 by default; turning it off excludes NDW stations with no availability report
 before the station cap. The search radius remains the distance limit, and the
 maximum-station cap selects the nearest matching stations (with provider
-station ID as the tie-breaker). These filters are NDW-only; Belgium preview
-has no discovery-filter step or options. There is no provider-side operator
+station ID as the tie-breaker). These filters are NDW-only; Belgium preview and
+NOBIL have no discovery-filter step or options. There is no provider-side operator
 discovery filter or separate maximum-distance setting.
 
 The separate **Personalization** options page stores one optional, versioned
@@ -176,11 +208,12 @@ examples, not captures of a live Home Assistant session.
 
 ## Supported stations
 
-CurbCharge's supported live coverage is public charging points in the
-Netherlands published by NDW DOT-NL. Belgium DATEX II is available as a preview
-for authorized users, but is not considered release-ready until access,
-licensing, quotas, and real-payload compatibility are verified. CurbCharge
-reports provider data; it does not connect to or control physical chargers.
+CurbCharge's supported coverage includes public charging points in the
+Netherlands published by NDW DOT-NL and in Norway and Sweden through NOBIL.
+Belgium DATEX II is available as a preview for authorized users, but is not
+considered release-ready until access, licensing, quotas, and real-payload
+compatibility are verified. CurbCharge reports provider data; it does not
+connect to or control physical chargers.
 An Entity location moves the search center but does not extend provider
 coverage. Each poll still applies the selected provider's geographic coverage,
 configured search radius, and station limit.
@@ -367,13 +400,15 @@ not `off`. These attributes are distinct from the Home Assistant State object's
 `last_changed` and `last_updated` timestamps described above.
 
 `provider_timestamp_source` identifies the timestamp as an NDW feature time,
-a Belgium EVSE status time, or a Belgium static fallback. The derived
+a Belgium EVSE status time or static fallback, or a timezone-aware NOBIL record
+time. The derived
 `provider_data_age_seconds` is the whole-second age of a dynamic provider
 record, calculated in UTC when coordinator-backed attributes are written; it
 does not tick between polls. A missing or future timestamp, or a Belgium
-static fallback timestamp, yields unknown age (`None`). A missing NDW
+static fallback timestamp, yields unknown age (`None`). NOBIL timestamps without
+a timezone are left unknown; they are not assumed to be UTC. A missing NDW
 timestamp does not invalidate otherwise usable availability data. Malformed
-or timezone-naive provider timestamps are rejected as provider errors.
+timestamps are rejected as provider errors.
 
 The NDW source does not document a maximum update interval for an individual
 station, so an unchanged timestamp can be legitimate. CurbCharge applies no
@@ -409,25 +444,27 @@ integration's history.
 
 Favourites remain uncapped and are additive to the nearby station limit. The
 synthetic measurements below use one-page responses and no tariff IDs. NDW
-favourites are assumed to be absent from the initial search response; Belgium
-uses one status request per favourite with a status-capable EVSE ID and caches
-its `/locations` snapshot.
+and NOBIL favourites are assumed to be absent from the initial search response;
+Belgium uses one status request per favourite with a status-capable EVSE ID and
+caches its `/locations` snapshot.
 
-| Favourites | NDW requests / limiter spacing | Belgium cold requests / spacing | Belgium warm requests / spacing |
-| --- | --- | --- | --- |
-| 0 | 1 / 0 s | 1 / 0 s | 0 / 0 s |
-| 1 | 2 / 0.11 s | 2 / 10 s | 1 / 0 s |
-| 10 | 11 / 1.10 s | 11 / 100 s | 10 / 90 s |
-| 50 | 51 / 5.50 s | 51 / 500 s | 50 / 490 s |
+| Favourites | NDW requests / limiter spacing | Belgium cold requests / spacing | Belgium warm requests / spacing | NOBIL requests / fixed spacing |
+| --- | --- | --- | --- | --- |
+| 0 | 1 / 0 s | 1 / 0 s | 0 / 0 s | 1 / 0 s |
+| 1 | 2 / 0.11 s | 2 / 10 s | 1 / 0 s | 2 / 0 s |
+| 10 | 11 / 1.10 s | 11 / 100 s | 10 / 90 s | 11 / 0 s |
+| 50 | 51 / 5.50 s | 51 / 500 s | 50 / 490 s | 51 / 0 s |
 
 NDW counts include one initial search and one follow-up bounding-box query for
 each favourite missing from that response. Favourites already present do not add
 a query; a tariff-feed cache miss can add one request shared by all returned
 stations. Belgium cold counts include one `/locations` request; warm counts
-use its cached snapshot. Limiter spacing assumes immediate responses and
-excludes network and parsing time. The warm case assumes at least five minutes
-between polls. Nearby station status requests are additional to the favourite
-counts.
+use its cached snapshot. Each NOBIL favourite missing from the initial response
+adds one documented `near` search. NOBIL has no fixed spacing; server-directed
+cooldowns and transient retries are excluded. Limiter spacing assumes immediate
+responses and excludes network and parsing time. The warm case assumes at least
+five minutes between polls. Nearby station status requests are additional to
+the favourite counts.
 
 In the synthetic HA test with no connector groups, each returned favourite adds
 11 entity-registry entries: nine station sensors, one availability binary
@@ -440,9 +477,10 @@ No hard cap is introduced. The Belgium 50-favourite case can spend about 8m10s
 to 8m20s in rate-limit spacing, longer than the default five-minute poll. At
 that default interval, one status request per EVSE averages 0.2 per minute,
 below the documented two-per-minute per-EVSE quota; the shared IP limit is the
-aggregate bottleneck. These synthetic counts show linear growth but do not
-establish a safe universal cut-off or an HA resource limit. Saved favourites
-are therefore preserved. Any future cap needs an explicit policy that
+aggregate bottleneck. NOBIL publishes no equivalent time-based quota, so no
+fixed request spacing is imposed. These synthetic counts show linear growth
+but do not establish a safe universal cut-off or an HA resource limit. Saved
+favourites are therefore preserved. Any future cap needs an explicit policy that
 grandfathers existing favourites instead of silently truncating them.
 
 For an Entity source, CurbCharge samples coordinates during the normal
@@ -547,7 +585,7 @@ and select **Download diagnostics**.
 ## Removing CurbCharge
 
 Remove the integration from **Settings → Devices & services**; this also
-removes its stored Belgium token. For a manual installation, delete
+removes its stored provider credentials. For a manual installation, delete
 `custom_components/curbcharge` from the Home Assistant configuration directory
 and restart Home Assistant.
 
@@ -556,3 +594,7 @@ and restart Home Assistant.
 [tariffs]: https://opendata.ndw.nu/charging_point_tariffs_ocpi.json.gz
 [belgium-datex-api]: https://developers.eco-movement.com/docs/belgium-datex-ii-api
 [belgium-dataset]: https://transportdata.be/en/dataset/public-charging-infrastructure-static-dataset-selected-cpos-datex-ii
+[nobil]: https://nobil.no
+[nobil-api]: https://info.nobil.no/api
+[enova]: https://enova.no/english
+[cc-by-4.0]: https://creativecommons.org/licenses/by/4.0/

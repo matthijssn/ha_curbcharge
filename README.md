@@ -22,9 +22,10 @@ Assistant 2026.10.4 release on Python 3.14.2. This version is pinned in
 
 ## Coverage
 
-Live coverage is public charging points in the Netherlands through NDW DOT-NL.
-Belgium DATEX II is a preview for authorized users and is not release-ready
-until access, licensing, quotas, and live-payload compatibility are verified.
+Supported coverage includes public charging points in the Netherlands through NDW
+DOT-NL and in Norway and Sweden through NOBIL. Belgium DATEX II is a preview for
+authorized users and is not release-ready until access, licensing, quotas, and
+live-payload compatibility are verified.
 See [provider coverage and limitations](docs/usage.md#data-source-and-coverage).
 
 ## Installation

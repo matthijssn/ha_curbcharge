@@ -114,6 +114,26 @@
         "data_description": {
           "api_token": "Le jeton est stocké dans cette entrée et masqué dans les diagnostics."
         }
+      },
+      "nobil_credentials": {
+        "title": "Se connecter à NOBIL",
+        "description": "Saisissez votre propre clé API NOBIL. Elle est stockée uniquement dans cette entrée et masquée des diagnostics.",
+        "data": {
+          "api_token": "Clé API NOBIL"
+        },
+        "data_description": {
+          "api_token": "Utilisez uniquement une clé que vous êtes autorisé à utiliser. Ne la partagez pas dans les rapports de problèmes."
+        }
+      },
+      "nobil_reauth_confirm": {
+        "title": "Mettre à jour les identifiants NOBIL",
+        "description": "Saisissez une nouvelle clé API NOBIL.",
+        "data": {
+          "api_token": "Clé API NOBIL"
+        },
+        "data_description": {
+          "api_token": "La clé est stockée dans cette entrée et masquée des diagnostics."
+        }
       }
     },
     "error": {
@@ -122,6 +142,7 @@
       "invalid_location": "Saisissez des coordonnées valides et une zone de recherche prise en charge.",
       "invalid_entity_location": "Sélectionnez une entité qui fournit actuellement des coordonnées de latitude et longitude valides.",
       "invalid_api_token": "Saisissez un jeton API ASCII imprimable non vide.",
+      "invalid_nobil_api_key": "Saisissez une clé API NOBIL imprimable non vide.",
       "invalid_discovery_filters": "Saisissez des filtres valides. La puissance minimale doit être un nombre fini positif.",
       "invalid_response": "Le fournisseur a renvoyé des données dans un format inattendu.",
       "location_not_configured": "Les coordonnées du domicile ne sont pas configurées dans Home Assistant.",
@@ -132,7 +153,8 @@
       "already_configured": "Ce fournisseur et cette zone de recherche sont déjà configurés.",
       "location_not_configured": "La position de recherche n'est pas configurée.",
       "reconfigure_successful": "La position de recherche a été mise à jour.",
-      "reauth_successful": "Les identifiants Eco-Movement ont été mis à jour."
+      "reauth_successful": "Les identifiants Eco-Movement ont été mis à jour.",
+      "nobil_reauth_successful": "La clé API NOBIL a été mise à jour."
     }
   },
   "options": {
@@ -309,7 +331,9 @@
     "provider": {
       "options": {
         "ndw_dot_nl": "NDW DOT-NL",
-        "eco_movement_be": "Eco-Movement Belgique (aperçu)"
+        "eco_movement_be": "Eco-Movement Belgique (aperçu)",
+        "nobil_no": "NOBIL Norvège",
+        "nobil_se": "NOBIL Suède"
       }
     }
   },

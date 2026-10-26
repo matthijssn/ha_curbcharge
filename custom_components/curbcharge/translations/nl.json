@@ -114,6 +114,26 @@
         "data_description": {
           "api_token": "De token wordt in deze integratie opgeslagen en in diagnostiek afgeschermd."
         }
+      },
+      "nobil_credentials": {
+        "title": "Verbinden met NOBIL",
+        "description": "Voer uw eigen NOBIL API-sleutel in. Deze wordt alleen in deze integratie opgeslagen en in diagnostiek afgeschermd.",
+        "data": {
+          "api_token": "NOBIL API-sleutel"
+        },
+        "data_description": {
+          "api_token": "Gebruik alleen een sleutel waarvoor u toestemming heeft. Deel deze niet in probleemrapporten."
+        }
+      },
+      "nobil_reauth_confirm": {
+        "title": "NOBIL-inloggegevens wijzigen",
+        "description": "Voer een vervangende NOBIL API-sleutel in.",
+        "data": {
+          "api_token": "NOBIL API-sleutel"
+        },
+        "data_description": {
+          "api_token": "De sleutel wordt in deze integratie opgeslagen en in diagnostiek afgeschermd."
+        }
       }
     },
     "error": {
@@ -122,6 +142,7 @@
       "invalid_location": "Voer geldige coördinaten en een ondersteund zoekgebied in.",
       "invalid_entity_location": "Selecteer een entiteit die momenteel geldige breedte- en lengtegraad rapporteert.",
       "invalid_api_token": "Voer een niet-lege, afdrukbare ASCII-API-token in.",
+      "invalid_nobil_api_key": "Voer een niet-lege, afdrukbare NOBIL API-sleutel in.",
       "invalid_discovery_filters": "Voer geldige filters in. Het minimumvermogen moet een eindig positief getal zijn.",
       "invalid_response": "De provider heeft gegevens in een onverwacht formaat geretourneerd.",
       "location_not_configured": "De thuiscoördinaten zijn niet ingesteld in Home Assistant.",
@@ -132,7 +153,8 @@
       "already_configured": "Deze provider en zoeklocatie zijn al ingesteld.",
       "location_not_configured": "De zoeklocatie is niet ingesteld.",
       "reconfigure_successful": "De zoeklocatie is bijgewerkt.",
-      "reauth_successful": "De Eco-Movement-inloggegevens zijn bijgewerkt."
+      "reauth_successful": "De Eco-Movement-inloggegevens zijn bijgewerkt.",
+      "nobil_reauth_successful": "De NOBIL API-sleutel is bijgewerkt."
     }
   },
   "options": {
@@ -185,7 +207,7 @@
           "enabled": "Schakel dit opgeslagen profiel in voor gepersonaliseerde aanbevelingen. Bestaande aanbevelingen blijven ongewijzigd totdat personalisatie-evaluatie beschikbaar is.",
           "connector_type_ids": "Kies canonieke connectorstandaarden. Laat leeg om elk connectortype toe te staan.",
           "minimum_power_kw": "Optioneel minimum voor een passende connectorgroep; gebruik een eindige, niet-negatieve waarde.",
-          "preferred_operators": "Voer per regel één providerreferentie in, bijvoorbeeld ndw_dot_nl:NLX of eco_movement_be:Example CPO. NDW-ID's worden exact vergeleken; Belgische namen worden getrimd, witruimte samengevoegd en hoofdletterongevoelig vergeleken. Opgeslagen keuzes blijven bewaard als ze niet in de buurt zijn.",
+          "preferred_operators": "Voer per regel één providerreferentie in, bijvoorbeeld ndw_dot_nl:NLX, eco_movement_be:Example CPO of nobil_no:Synthetic CPO. NDW-ID's en NOBIL-namen worden exact vergeleken; Belgische namen worden getrimd, witruimte samengevoegd en hoofdletterongevoelig vergeleken. Opgeslagen keuzes blijven bewaard als ze niet in de buurt zijn.",
           "excluded_operators": "Voer per regel één providerreferentie in met hetzelfde formaat als bij voorkeursbeheerders. Uitsluitingen worden nooit door terugval omzeild.",
           "maximum_price": "Optioneel niet-negatief decimaal bedrag. Laat leeg voor geen prijsmaximum.",
           "maximum_price_currency": "Verplicht bij een maximumprijs; voer een valutacode van drie letters in, zoals EUR.",
@@ -309,7 +331,9 @@
     "provider": {
       "options": {
         "ndw_dot_nl": "NDW DOT-NL",
-        "eco_movement_be": "Eco-Movement België (preview)"
+        "eco_movement_be": "Eco-Movement België (preview)",
+        "nobil_no": "NOBIL Noorwegen",
+        "nobil_se": "NOBIL Zweden"
       }
     }
   },

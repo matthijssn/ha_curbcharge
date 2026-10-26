@@ -24,7 +24,7 @@ from homeassistant.helpers.entity_platform import (
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
-from .const import COUNTRY_BE, COUNTRY_NL, MISSING_STATION_REFRESHES
+from .const import MISSING_STATION_REFRESHES, SUPPORTED_COUNTRY_CODES
 from .coordinator import (
     CurbChargeCoordinator,
     RecommendationResult,
@@ -582,7 +582,7 @@ def _nearby_aggregate_attributes(
         "provider": coordinator.provider_name,
         "provider_id": coordinator.provider_id,
         "country_code": coordinator.country_code,
-        "supported_country_codes": [COUNTRY_NL, COUNTRY_BE],
+        "supported_country_codes": list(SUPPORTED_COUNTRY_CODES),
         "coverage_scope": "configured_search_area",
         "search_radius_m": coordinator.radius_m,
         "max_stations": coordinator.max_stations,

@@ -114,6 +114,26 @@
         "data_description": {
           "api_token": "Das Token wird in diesem Konfigurationseintrag gespeichert und in Diagnosedaten geschwärzt."
         }
+      },
+      "nobil_credentials": {
+        "title": "Mit NOBIL verbinden",
+        "description": "Geben Sie Ihren eigenen NOBIL-API-Schlüssel ein. Er wird nur in diesem Konfigurationseintrag gespeichert und in Diagnosedaten geschwärzt.",
+        "data": {
+          "api_token": "NOBIL-API-Schlüssel"
+        },
+        "data_description": {
+          "api_token": "Verwenden Sie nur einen Schlüssel, zu dessen Nutzung Sie berechtigt sind. Teilen Sie ihn nicht in Fehlerberichten."
+        }
+      },
+      "nobil_reauth_confirm": {
+        "title": "NOBIL-Zugangsdaten aktualisieren",
+        "description": "Geben Sie einen Ersatz-NOBIL-API-Schlüssel ein.",
+        "data": {
+          "api_token": "NOBIL-API-Schlüssel"
+        },
+        "data_description": {
+          "api_token": "Der Schlüssel wird in diesem Konfigurationseintrag gespeichert und in Diagnosedaten geschwärzt."
+        }
       }
     },
     "error": {
@@ -122,6 +142,7 @@
       "invalid_location": "Geben Sie gültige Koordinaten und ein unterstütztes Suchgebiet ein.",
       "invalid_entity_location": "Wählen Sie eine Entität aus, die aktuell gültige Breiten- und Längengradkoordinaten meldet.",
       "invalid_api_token": "Geben Sie ein nicht leeres, druckbares ASCII-API-Token ein.",
+      "invalid_nobil_api_key": "Geben Sie einen nicht leeren, druckbaren NOBIL-API-Schlüssel ein.",
       "invalid_discovery_filters": "Geben Sie gültige Filter ein. Die Mindestleistung muss eine endliche positive Zahl sein.",
       "invalid_response": "Der Anbieter hat Daten in einem unerwarteten Format zurückgegeben.",
       "location_not_configured": "Die Home-Assistant-Standortkoordinaten sind nicht konfiguriert.",
@@ -132,7 +153,8 @@
       "already_configured": "Dieser Anbieter und dieses Suchgebiet sind bereits konfiguriert.",
       "location_not_configured": "Der Suchstandort ist nicht konfiguriert.",
       "reconfigure_successful": "Der Suchstandort wurde aktualisiert.",
-      "reauth_successful": "Die Eco-Movement-Zugangsdaten wurden aktualisiert."
+      "reauth_successful": "Die Eco-Movement-Zugangsdaten wurden aktualisiert.",
+      "nobil_reauth_successful": "Der NOBIL-API-Schlüssel wurde aktualisiert."
     }
   },
   "options": {
@@ -309,7 +331,9 @@
     "provider": {
       "options": {
         "ndw_dot_nl": "NDW DOT-NL",
-        "eco_movement_be": "Eco-Movement Belgien (Vorschau)"
+        "eco_movement_be": "Eco-Movement Belgien (Vorschau)",
+        "nobil_no": "NOBIL Norwegen",
+        "nobil_se": "NOBIL Schweden"
       }
     }
   },

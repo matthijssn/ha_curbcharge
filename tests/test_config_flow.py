@@ -48,6 +48,8 @@ from custom_components.curbcharge.const import (
     PERSONALIZATION_PROFILE_VERSION,
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NDW_DOT_NL,
+    PROVIDER_NOBIL_NO,
+    PROVIDER_NOBIL_SE,
 )
 from custom_components.curbcharge.coordinator import CurbChargeCoordinator
 from custom_components.curbcharge.models import (
@@ -510,6 +512,78 @@ async def test_belgium_config_flow_rejects_malformed_token_before_network(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "provider_id",
+    (PROVIDER_NOBIL_NO, PROVIDER_NOBIL_SE),
+)
+async def test_nobil_config_flow_stores_end_user_key_in_config_entry(
+    hass, monkeypatch, provider_id
+):
+    hass.config.latitude = 59.91
+    hass.config.longitude = 10.74
+    provider = FakeProvider()
+    calls: list[tuple[object, ...]] = []
+
+    def create_provider(*args):
+        calls.append(args)
+        return provider
+
+    monkeypatch.setattr(config_flow, "create_provider", create_provider)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_HOME}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _station_options(provider_id)
+    )
+    assert result["step_id"] == "nobil_credentials"
+
+    api_key = "end-user-nobil-key"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: api_key}
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_PROVIDER] == provider_id
+    assert result["data"][CONF_API_TOKEN] == api_key
+    assert CONF_API_TOKEN not in result["result"].options
+    assert provider.validation_calls == [(59.91, 10.74, 500)]
+    assert calls[0][0] == provider_id
+    assert calls[0][2:] == (hass, api_key)
+
+
+@pytest.mark.asyncio
+async def test_nobil_config_flow_rejects_malformed_key_before_network(
+    hass, monkeypatch
+):
+    hass.config.latitude = 59.91
+    hass.config.longitude = 10.74
+
+    def fail_provider(*_args):
+        raise AssertionError("Invalid API keys must not reach the provider")
+
+    monkeypatch.setattr(config_flow, "create_provider", fail_provider)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_HOME}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _station_options(PROVIDER_NOBIL_NO)
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: "bad\nkey"}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "nobil_credentials"
+    assert result["errors"]["base"] == "invalid_nobil_api_key"
+
+
+@pytest.mark.asyncio
 async def test_belgium_config_flow_keeps_token_form_on_auth_failure(hass, monkeypatch):
     hass.config.latitude = 50.85
     hass.config.longitude = 4.35
@@ -571,6 +645,42 @@ async def test_reauth_replaces_belgium_token_and_preserves_unique_id(hass, monke
     assert entry.unique_id == location_id
     assert hass.config_entries.async_entries(DOMAIN) == [entry]
     assert provider.validation_calls == [(50.85, 4.35, 500)]
+
+
+@pytest.mark.asyncio
+async def test_reauth_replaces_nobil_key_and_preserves_unique_id(hass, monkeypatch):
+    hass.config.latitude = 59.91
+    hass.config.longitude = 10.74
+    provider = FakeProvider()
+    monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
+    location_id = config_flow._config_unique_id(PROVIDER_NOBIL_NO, 59.91, 10.74, 500)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=location_id,
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_HOME,
+            CONF_PROVIDER: PROVIDER_NOBIL_NO,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+            CONF_API_TOKEN: "old-nobil-key",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reauth", "entry_id": entry.entry_id},
+    )
+    assert result["step_id"] == "nobil_reauth_confirm"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: "replacement-nobil-key"}
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "nobil_reauth_successful"
+    assert entry.data[CONF_API_TOKEN] == "replacement-nobil-key"
+    assert entry.unique_id == location_id
+    assert provider.validation_calls == [(59.91, 10.74, 500)]
 
 
 @pytest.mark.asyncio

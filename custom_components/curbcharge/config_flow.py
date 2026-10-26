@@ -62,9 +62,13 @@ from .const import (
     MIN_SCAN_INTERVAL_MINUTES,
     MIN_SEARCH_RADIUS_M,
     NDW_CONNECTOR_TYPE_SELECTOR_OPTIONS,
+    NOBIL_PROVIDER_IDS,
     PERSONALIZATION_PROFILE_VERSION,
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NDW_DOT_NL,
+    PROVIDER_NOBIL_NO,
+    PROVIDER_NOBIL_SE,
+    SUPPORTED_PROVIDER_IDS,
 )
 from .coordinator import CurbChargeCoordinator
 from .location import resolve_location, valid_coordinates
@@ -79,6 +83,7 @@ from .models import (
     parse_favourite_references,
     parse_operator_reference_lines,
 )
+from .nobil import is_valid_nobil_api_key
 from .provider import (
     AuthenticationError,
     ChargingProviderError,
@@ -152,6 +157,17 @@ def belgium_credentials_schema() -> FlowSchema:
     )
 
 
+def nobil_credentials_schema() -> FlowSchema:
+    """Return a password field for the NOBIL API key."""
+    return vol.Schema(
+        {
+            vol.Required(CONF_API_TOKEN): selector.TextSelector(
+                selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+            )
+        }
+    )
+
+
 def _scan_interval_field(default: Any) -> tuple[Any, Any]:
     return (
         vol.Required(CONF_SCAN_INTERVAL, default=default),
@@ -200,7 +216,12 @@ def station_options_schema(
                 CONF_PROVIDER, default=PROVIDER_NDW_DOT_NL
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
-                    options=[PROVIDER_NDW_DOT_NL, PROVIDER_ECO_MOVEMENT_BE],
+                    options=[
+                        PROVIDER_NDW_DOT_NL,
+                        PROVIDER_ECO_MOVEMENT_BE,
+                        PROVIDER_NOBIL_NO,
+                        PROVIDER_NOBIL_SE,
+                    ],
                     mode=selector.SelectSelectorMode.DROPDOWN,
                     translation_key="provider",
                 )
@@ -277,7 +298,7 @@ def options_schema(
 ) -> FlowSchema:
     """Return the editable runtime options schema."""
     provider_id = defaults.get(CONF_PROVIDER, PROVIDER_NDW_DOT_NL)
-    if provider_id not in (PROVIDER_NDW_DOT_NL, PROVIDER_ECO_MOVEMENT_BE):
+    if provider_id not in SUPPORTED_PROVIDER_IDS:
         provider_id = PROVIDER_NDW_DOT_NL
     favourites = parse_favourite_references(
         defaults.get(CONF_FAVOURITES, []), provider_id
@@ -624,9 +645,11 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if _entry_data is not None
             else self._get_reauth_entry().data.get(CONF_PROVIDER)
         )
-        if provider_id != PROVIDER_ECO_MOVEMENT_BE:
-            return self.async_abort(reason="unsupported_provider")
-        return await self.async_step_reauth_confirm()
+        if provider_id == PROVIDER_ECO_MOVEMENT_BE:
+            return await self.async_step_reauth_confirm()
+        if provider_id in NOBIL_PROVIDER_IDS:
+            return await self.async_step_nobil_reauth_confirm()
+        return self.async_abort(reason="unsupported_provider")
 
     async def async_step_reauth_confirm(
         self, user_input: dict[str, Any] | None = None
@@ -680,6 +703,63 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             entry,
             data=data,
             reason="reauth_successful",
+        )
+
+    async def async_step_nobil_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Validate and save a replacement NOBIL API key."""
+        entry = self._get_reauth_entry()
+        if user_input is None:
+            return _show_form(
+                self,
+                step_id="nobil_reauth_confirm",
+                data_schema=nobil_credentials_schema(),
+            )
+
+        api_key = user_input[CONF_API_TOKEN]
+        if not is_valid_nobil_api_key(api_key):
+            return _show_form(
+                self,
+                step_id="nobil_reauth_confirm",
+                data_schema=nobil_credentials_schema(),
+                errors={"base": "invalid_nobil_api_key"},
+            )
+
+        options = {**entry.data, **entry.options}
+        provider_id = options.get(CONF_PROVIDER, PROVIDER_NDW_DOT_NL)
+        location = _entry_location(self.hass, entry.data)
+        if provider_id not in NOBIL_PROVIDER_IDS:
+            return self.async_abort(reason="unsupported_provider")
+        if location is None:
+            return self.async_abort(reason="location_not_configured")
+
+        try:
+            provider = create_provider(
+                provider_id,
+                async_get_clientsession(self.hass),
+                self.hass,
+                api_key,
+            )
+            await provider.async_validate_connection(
+                location[0],
+                location[1],
+                int(options.get(CONF_SEARCH_RADIUS, DEFAULT_SEARCH_RADIUS_M)),
+            )
+        except ChargingProviderError as err:
+            return _show_form(
+                self,
+                step_id="nobil_reauth_confirm",
+                data_schema=nobil_credentials_schema(),
+                errors={"base": _flow_error(err)},
+            )
+
+        data = dict(entry.data)
+        data[CONF_API_TOKEN] = api_key
+        return self._update_entry_and_abort(
+            entry,
+            data=data,
+            reason="nobil_reauth_successful",
         )
 
     async def async_step_reconfigure(
@@ -921,6 +1001,8 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             if provider_id == PROVIDER_ECO_MOVEMENT_BE:
                 return await self.async_step_belgium_credentials()
+            if provider_id in NOBIL_PROVIDER_IDS:
+                return await self.async_step_nobil_credentials()
             return await self.async_step_discovery_filters()
 
         return _show_form(
@@ -978,6 +1060,27 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
         return await self._async_validate_and_create_entry(token)
 
+    async def async_step_nobil_credentials(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Collect and validate the end user's NOBIL API key."""
+        if user_input is None:
+            return _show_form(
+                self,
+                step_id="nobil_credentials",
+                data_schema=nobil_credentials_schema(),
+            )
+
+        api_key = user_input[CONF_API_TOKEN]
+        if not is_valid_nobil_api_key(api_key):
+            return _show_form(
+                self,
+                step_id="nobil_credentials",
+                data_schema=nobil_credentials_schema(),
+                errors={"base": "invalid_nobil_api_key"},
+            )
+        return await self._async_validate_and_create_entry(api_key)
+
     async def _async_validate_and_create_entry(
         self, token: str | None = None
     ) -> FlowResult:
@@ -1002,6 +1105,13 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self,
                     step_id="belgium_credentials",
                     data_schema=belgium_credentials_schema(),
+                    errors={"base": _flow_error(err)},
+                )
+            if self._provider_id in NOBIL_PROVIDER_IDS:
+                return _show_form(
+                    self,
+                    step_id="nobil_credentials",
+                    data_schema=nobil_credentials_schema(),
                     errors={"base": _flow_error(err)},
                 )
             return _show_form(
@@ -1067,7 +1177,7 @@ class CurbChargeOptionsFlow(config_entries.OptionsFlow):
         """Save general options or show their current values."""
         defaults = {**self.config_entry.data, **self.config_entry.options}
         provider_id = defaults.get(CONF_PROVIDER, PROVIDER_NDW_DOT_NL)
-        if provider_id not in (PROVIDER_NDW_DOT_NL, PROVIDER_ECO_MOVEMENT_BE):
+        if provider_id not in SUPPORTED_PROVIDER_IDS:
             provider_id = PROVIDER_NDW_DOT_NL
         saved_profile = self._saved_personalization_profile()
         saved_favourites = parse_favourite_references(
