@@ -17,8 +17,8 @@ requires Python 3.12 or newer, matching the integration's APIs and Python
 syntax. CI tests the minimum with Python 3.12 and
 `pytest-homeassistant-custom-component` 0.13.190 using Core 2024.12.0's
 dependency constraints and `pycares==4.8.0`, then tests the current Home
-Assistant 2026.10.4 release on Python 3.13. The current Home Assistant version
-is pinned in `requirements-dev.txt` and kept updateable through Dependabot.
+Assistant 2026.10.4 release on Python 3.14.2. This version is pinned in
+`requirements-dev.txt` and kept updateable through Dependabot.
 
 ## Coverage
 

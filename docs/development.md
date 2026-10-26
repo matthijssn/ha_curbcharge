@@ -11,7 +11,8 @@ Python 3.12, `pytest-homeassistant-custom-component` 0.13.190, and Core's
 2024.12.0 package constraints. It pins `pycares==4.8.0` because newer resolver
 versions start a shutdown-loop thread that this older test plugin reports as a
 teardown leak. The current-version job runs Home Assistant 2026.10.4 on
-Python 3.13; Dependabot keeps that pin reviewable.
+Python 3.14.2; Dependabot keeps that pin reviewable. The current-version test
+run exposes `DeprecationWarning` messages.
 
 Install the Python test tools:
 

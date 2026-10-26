@@ -27,16 +27,18 @@ jobs:
           pycares==4.8.0
       - name: Test minimum Home Assistant 2024.12.0
         run: pytest
-      - name: Set up current supported Python 3.13
+      - name: Set up current supported Python 3.14.2
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: "3.13"
+          python-version: "3.14.2"
       - name: Install current Home Assistant 2026.10.4 test environment
         run: pip install -r requirements-dev.txt
       - run: ruff check .
       - run: ruff format --check .
       - run: node --test tests/curbcharge-card.test.mjs
       - name: Test Home Assistant 2026.10.4 with coverage threshold
+        env:
+          PYTHONWARNINGS: default
         run: pytest --cov=custom_components/curbcharge --cov-report=term-missing --cov-report=json:coverage.json --cov-fail-under=96
       - name: Enforce per-module coverage
         run: |
