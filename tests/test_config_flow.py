@@ -584,6 +584,32 @@ async def test_nobil_config_flow_rejects_malformed_key_before_network(
 
 
 @pytest.mark.asyncio
+async def test_nobil_config_flow_keeps_key_form_open_on_auth_failure(hass, monkeypatch):
+    hass.config.latitude = 59.91
+    hass.config.longitude = 10.74
+    provider = FakeProvider()
+    provider.validation_error = AuthenticationError("private API key")
+    monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_HOME}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _station_options(PROVIDER_NOBIL_NO)
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: "valid-nobil-key"}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "nobil_credentials"
+    assert result["errors"]["base"] == "auth"
+
+
+@pytest.mark.asyncio
 async def test_belgium_config_flow_keeps_token_form_on_auth_failure(hass, monkeypatch):
     hass.config.latitude = 50.85
     hass.config.longitude = 4.35
@@ -681,6 +707,108 @@ async def test_reauth_replaces_nobil_key_and_preserves_unique_id(hass, monkeypat
     assert entry.data[CONF_API_TOKEN] == "replacement-nobil-key"
     assert entry.unique_id == location_id
     assert provider.validation_calls == [(59.91, 10.74, 500)]
+
+
+@pytest.mark.asyncio
+async def test_nobil_reauth_rejects_malformed_key_before_network(hass, monkeypatch):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="nobil-search-area",
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_HOME,
+            CONF_PROVIDER: PROVIDER_NOBIL_NO,
+            CONF_API_TOKEN: "old-nobil-key",
+            CONF_SEARCH_RADIUS: 500,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    def fail_provider(*_args):
+        raise AssertionError("Invalid API keys must not reach the provider")
+
+    monkeypatch.setattr(config_flow, "create_provider", fail_provider)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reauth", "entry_id": entry.entry_id},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: "bad\nkey"}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "nobil_reauth_confirm"
+    assert result["errors"]["base"] == "invalid_nobil_api_key"
+    assert entry.data[CONF_API_TOKEN] == "old-nobil-key"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("data", "options", "reason"),
+    [
+        (
+            {
+                CONF_LOCATION_SOURCE: LOCATION_HOME,
+                CONF_PROVIDER: PROVIDER_NOBIL_NO,
+                CONF_SEARCH_RADIUS: 500,
+            },
+            {CONF_PROVIDER: PROVIDER_NDW_DOT_NL},
+            "unsupported_provider",
+        ),
+        ({CONF_PROVIDER: PROVIDER_NOBIL_NO}, {}, "location_not_configured"),
+    ],
+)
+async def test_nobil_reauth_aborts_when_provider_or_location_changed(
+    hass, data, options, reason
+):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="nobil-search-area",
+        data=data,
+        options=options,
+    )
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reauth", "entry_id": entry.entry_id},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: "replacement-nobil-key"}
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == reason
+
+
+@pytest.mark.asyncio
+async def test_nobil_reauth_keeps_form_open_when_key_is_rejected(hass, monkeypatch):
+    hass.config.latitude = 59.91
+    hass.config.longitude = 10.74
+    provider = FakeProvider()
+    provider.validation_error = AuthenticationError("private API key")
+    monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="nobil-search-area",
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_HOME,
+            CONF_PROVIDER: PROVIDER_NOBIL_NO,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_API_TOKEN: "old-nobil-key",
+        },
+    )
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reauth", "entry_id": entry.entry_id},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: "replacement-nobil-key"}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "nobil_reauth_confirm"
+    assert result["errors"]["base"] == "auth"
+    assert entry.data[CONF_API_TOKEN] == "old-nobil-key"
 
 
 @pytest.mark.asyncio
