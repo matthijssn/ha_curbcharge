@@ -413,6 +413,7 @@ class FavoriteStatusSensor(CurbChargeStationEntity, SensorEntity):
         entry: ConfigEntry[Any],
     ) -> None:
         super().__init__(coordinator, station, unique_id_suffix="favorite_status")
+        self._attr_unique_id = f"{self._legacy_unique_id}_{entry.entry_id}"
 
     @property
     def native_value(self) -> str:

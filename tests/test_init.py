@@ -555,8 +555,7 @@ async def test_favorite_sensors_follow_coordinator_changes_without_provider_call
     registry = er.async_get(hass)
     device_registry = dr.async_get(hass)
     status_unique_id = (
-        f"{station.provider}_{station.provider_id}_{entry.entry_id}"
-        f"_favorite_status_{entry.entry_id}"
+        f"{station.provider}_{station.provider_id}_favorite_status_{entry.entry_id}"
     )
     summary_unique_id = f"{entry.entry_id}_favorite_summary"
 
@@ -724,8 +723,7 @@ async def test_setup_unload_and_reload_keep_stable_entities(
         f"{provider_id}_{station.provider_id}_status_summary_{entry.entry_id}",
     }
     expected_favorite_status_entity = (
-        f"{provider_id}_{station.provider_id}_{entry.entry_id}"
-        f"_favorite_status_{entry.entry_id}"
+        f"{provider_id}_{station.provider_id}_favorite_status_{entry.entry_id}"
     )
     expected_selection_entities = {
         f"{entry.entry_id}_nearest_available_charger",
@@ -874,7 +872,7 @@ async def test_favorite_entity_and_device_growth_is_linear(
     assert len(favorite_entities) == favorite_count * 11
     assert (
         sum(
-            entity.unique_id.endswith(f"{entry.entry_id}_favorite_status")
+            entity.unique_id.endswith(f"_favorite_status_{entry.entry_id}")
             for entity in favorite_entities
         )
         == favorite_count
@@ -1495,10 +1493,7 @@ async def test_overlapping_station_entries_keep_independent_entities_and_cleanup
     first_entry = _entry(
         unique_id="overlap-area-one",
         entry_id="overlap-entry-one",
-        options={
-            CONF_SEARCH_RADIUS: 100,
-            CONF_FAVOURITES: [_favorite_reference(station)],
-        },
+        options={CONF_SEARCH_RADIUS: 100},
     )
     second_entry = _entry(
         unique_id="overlap-area-two",
