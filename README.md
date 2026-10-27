@@ -6,6 +6,8 @@ availability, connector counts, power, distance and unambiguous tariff data,
 plus a recommendation for the best nearby station. Favorites can be monitored
 with sensors and managed with admin-only actions.
 
+![CurbCharge dashboard showing nearby charger availability and price](docs/images/curbcharge-dashboard-screenshot.png)
+
 ## Get started
 
 Install **CurbCharge** from **HACS → Integrations**, then restart Home
