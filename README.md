@@ -1,61 +1,55 @@
 # CurbCharge
 
-CurbCharge discovers public EV charging points near a Home Assistant home, a
-manually configured location, or a tracked Home Assistant entity. It creates
-one device per charging point and reports provider-supplied availability,
-connector counts, power, distance, operator, tariff data when unambiguous, and
-a best-nearby recommendation.
-Favorites are scoped to a config entry and can be managed with admin-only
-actions, monitored with favorite sensors, and shown in the bundled card. See
-the [favorite services and automation guide](docs/dashboards-and-automations.md#favorite-services-and-automations).
+CurbCharge finds public EV charging points near your Home Assistant home, a
+manually set location, or a tracked location entity. See provider-reported
+availability, connector counts, power, distance and unambiguous tariff data,
+plus a recommendation for the best nearby station. Favorites can be monitored
+with sensors and managed with admin-only actions.
 
-## Requirements
+![CurbCharge dashboard showing nearby charger availability and price](docs/images/curbcharge-dashboard-screenshot.png)
 
-CurbCharge requires Home Assistant 2024.12.0 or newer; this is the minimum
-declared in `hacs.json`. Core 2024.12.0 provides `ConfigEntry.runtime_data` and
-requires Python 3.12 or newer, matching the integration's APIs and Python
-syntax. CI tests the minimum with Python 3.12 and
-`pytest-homeassistant-custom-component` 0.13.190 using Core 2024.12.0's
-dependency constraints and `pycares==4.8.0`, then tests the current Home
-Assistant 2026.10.4 release on Python 3.14.2. This version is pinned in
-`requirements-dev.txt` and kept updateable through Dependabot.
+## Get started
 
-## Coverage
+Install **CurbCharge** from **HACS → Integrations**, then restart Home
+Assistant and add CurbCharge from **Settings → Devices & services**.
 
-Supported coverage includes public charging points in the Netherlands through NDW
-DOT-NL and in Norway and Sweden through NOBIL. Belgium DATEX II is a preview for
-authorized users and is not release-ready until access, licensing, quotas, and
-live-payload compatibility are verified.
-See [provider coverage and limitations](docs/usage.md#data-source-and-coverage).
+Home Assistant **2024.12.0 or newer** is required.
 
-The latest published release, `v0.4.3`, predates NOBIL and Norwegian/Swedish
-translations. Those changes are on `main` and will be included in a later
-release; check the [release notes](https://github.com/matthijssn/ha_curbcharge/releases)
-before relying on them in an installed version.
+## Coverage in the latest release
 
-## Installation
+The latest release, `v0.4.3`, supports public charging points in the
+Netherlands through NDW DOT-NL. Norway and Sweden support through NOBIL is on
+`main` but is not included in that release yet. Belgium DATEX II remains a
+preview and is not release-ready while provider access, licensing, quotas and
+live-payload compatibility are unverified.
 
-### HACS (default catalog)
+Check the [release notes](https://github.com/matthijssn/ha_curbcharge/releases)
+for the coverage available in your installed version, and see
+[provider coverage and limitations](docs/usage.md#data-source-and-coverage)
+for details.
+
+## Installation options
+
+### HACS
 
 In HACS, open **Integrations**, search for **CurbCharge**, and install it.
-Restart Home Assistant.
+You can also [open CurbCharge in HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=matthijssn&repository=ha_curbcharge&category=integration).
 
-### HACS custom repository
-
-To add CurbCharge as a custom repository, use [Add CurbCharge to
-HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=matthijssn&repository=ha_curbcharge&category=integration),
-or:
-
-1. In HACS, open **Integrations** and choose **Custom repositories** from the
-   menu.
-2. Add the GitHub URL for this repository and select **Integration** as the
-   category.
-3. Search for **CurbCharge**, install it, and restart Home Assistant.
+Restart Home Assistant, then add CurbCharge from **Settings → Devices &
+services → Add integration**.
 
 ### Manual
 
 Copy `custom_components/curbcharge` into the Home Assistant configuration
 directory at `custom_components/curbcharge`, then restart Home Assistant.
+
+## What it provides
+
+- One device per nearby public charging point
+- Provider-reported availability, connector counts, power, distance and operator
+- Tariff information when the provider data is complete and unambiguous
+- A best-nearby recommendation and favorite monitoring
+- A bundled dashboard card, plus copyable dashboard and automation examples
 
 ## Documentation
 
@@ -64,6 +58,7 @@ directory at `custom_components/curbcharge`, then restart Home Assistant.
 - [Development and releases](docs/development.md)
 - [Contributing](CONTRIBUTING.md) | [Code of Conduct](CODE_OF_CONDUCT.md) | [Security policy](SECURITY.md)
 - [Copyable YAML examples](examples/)
+- [Favorite services and automation guide](docs/dashboards-and-automations.md#favorite-services-and-automations)
 
 ## Support
 
