@@ -412,9 +412,7 @@ class FavoriteStatusSensor(CurbChargeStationEntity, SensorEntity):
         station: ChargingStation,
         entry: ConfigEntry[Any],
     ) -> None:
-        super().__init__(
-            coordinator, station, unique_id_suffix=f"{entry.entry_id}_favorite_status"
-        )
+        super().__init__(coordinator, station, unique_id_suffix="favorite_status")
 
     @property
     def native_value(self) -> str:

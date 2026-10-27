@@ -1530,9 +1530,8 @@ async def test_overlapping_station_entries_keep_independent_entities_and_cleanup
     monkeypatch.setattr(
         curbcharge, "create_provider", lambda *_args: next(provider_order)
     )
-    for entry in (first_entry, second_entry):
-        entry.add_to_hass(hass)
     for entry in setup_order:
+        entry.add_to_hass(hass)
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -2359,7 +2358,7 @@ async def test_reconfigure_preserves_legacy_entity_ids_and_custom_names(
     )
     registry.async_update_entity(legacy_aggregate.entity_id, name="My best charger")
     legacy_station = registry.async_get_or_create(
-        "sensor",
+        "binary_sensor",
         DOMAIN,
         f"{station.provider}_{station.provider_id}_available",
         config_entry=entry,
