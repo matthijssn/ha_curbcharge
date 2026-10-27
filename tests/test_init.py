@@ -308,7 +308,7 @@ async def test_saved_favourite_placeholder_recovers_after_restart(
         entity
         for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
         if entity.unique_id
-        == f"{station.provider}_{station.provider_id}_status_summary"
+        == f"{station.provider}_{station.provider_id}_status_summary_{entry.entry_id}"
     )
     stale_state = hass.states.get(summary_entity.entity_id)
     assert stale_state is not None
@@ -555,7 +555,8 @@ async def test_favorite_sensors_follow_coordinator_changes_without_provider_call
     registry = er.async_get(hass)
     device_registry = dr.async_get(hass)
     status_unique_id = (
-        f"{station.provider}_{station.provider_id}_{entry.entry_id}_favorite_status"
+        f"{station.provider}_{station.provider_id}_{entry.entry_id}"
+        f"_favorite_status_{entry.entry_id}"
     )
     summary_unique_id = f"{entry.entry_id}_favorite_summary"
 
@@ -717,23 +718,24 @@ async def test_setup_unload_and_reload_keep_stable_entities(
         for item in er.async_entries_for_config_entry(registry, entry.entry_id)
     }
     expected_station_entities = {
-        f"{provider_id}_{station.provider_id}_available",
-        f"{provider_id}_{station.provider_id}_availability_percentage",
-        f"{provider_id}_{station.provider_id}_price_per_kwh",
-        f"{provider_id}_{station.provider_id}_status_summary",
+        f"{provider_id}_{station.provider_id}_available_{entry.entry_id}",
+        f"{provider_id}_{station.provider_id}_availability_percentage_{entry.entry_id}",
+        f"{provider_id}_{station.provider_id}_price_per_kwh_{entry.entry_id}",
+        f"{provider_id}_{station.provider_id}_status_summary_{entry.entry_id}",
     }
     expected_favorite_status_entity = (
-        f"{provider_id}_{station.provider_id}_{entry.entry_id}_favorite_status"
+        f"{provider_id}_{station.provider_id}_{entry.entry_id}"
+        f"_favorite_status_{entry.entry_id}"
     )
     expected_selection_entities = {
-        f"{entry.unique_id}_nearest_available_charger",
-        f"{entry.unique_id}_cheapest_available_charger",
-        f"{entry.unique_id}_fastest_available_charger",
+        f"{entry.entry_id}_nearest_available_charger",
+        f"{entry.entry_id}_cheapest_available_charger",
+        f"{entry.entry_id}_fastest_available_charger",
     }
     expected_connector_entities = {
         (
             f"{provider_id}_{station.provider_id}_connector_group_"
-            f"{connector.provider_connector_id.rsplit(':', 1)[-1]}"
+            f"{connector.provider_connector_id.rsplit(':', 1)[-1]}_{entry.entry_id}"
         )
         for connector in station.connectors
     }
@@ -746,12 +748,14 @@ async def test_setup_unload_and_reload_keep_stable_entities(
     available_entity = next(
         item
         for item in er.async_entries_for_config_entry(registry, entry.entry_id)
-        if item.unique_id == f"{provider_id}_{station.provider_id}_available"
+        if item.unique_id
+        == f"{provider_id}_{station.provider_id}_available_{entry.entry_id}"
     )
     summary_entity = next(
         item
         for item in er.async_entries_for_config_entry(registry, entry.entry_id)
-        if item.unique_id == f"{provider_id}_{station.provider_id}_status_summary"
+        if item.unique_id
+        == f"{provider_id}_{station.provider_id}_status_summary_{entry.entry_id}"
     )
     summary_state = hass.states.get(summary_entity.entity_id)
     available_state = hass.states.get(available_entity.entity_id)
@@ -924,7 +928,10 @@ async def test_station_availability_percentage_is_unavailable_during_provider_fa
         entity
         for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
         if entity.unique_id
-        == f"{station.provider}_{station.provider_id}_availability_percentage"
+        == (
+            f"{station.provider}_{station.provider_id}_availability_percentage_"
+            f"{entry.entry_id}"
+        )
     )
 
     state = hass.states.get(availability_entity.entity_id)
@@ -1028,44 +1035,50 @@ async def test_nl_and_be_entries_refresh_fail_recover_and_reload_independently(
     nl_count = next(
         entity
         for entity in nl_entities
-        if entity.unique_id == "nl-search-area_nearby_charging_units"
+        if entity.unique_id == f"{nl_entry.entry_id}_nearby_charging_units"
     )
     be_count = next(
         entity
         for entity in be_entities
-        if entity.unique_id == "be-search-area_nearby_charging_units"
+        if entity.unique_id == f"{be_entry.entry_id}_nearby_charging_units"
     )
     nl_available_connectors = next(
         entity
         for entity in nl_entities
-        if entity.unique_id == "nl-search-area_nearby_available_connectors"
+        if entity.unique_id == f"{nl_entry.entry_id}_nearby_available_connectors"
     )
     be_available_connectors = next(
         entity
         for entity in be_entities
-        if entity.unique_id == "be-search-area_nearby_available_connectors"
+        if entity.unique_id == f"{be_entry.entry_id}_nearby_available_connectors"
     )
     nl_availability_percentage = next(
         entity
         for entity in nl_entities
-        if entity.unique_id == "nl-search-area_nearby_availability_percentage"
+        if entity.unique_id == f"{nl_entry.entry_id}_nearby_availability_percentage"
     )
     be_availability_percentage = next(
         entity
         for entity in be_entities
-        if entity.unique_id == "be-search-area_nearby_availability_percentage"
+        if entity.unique_id == f"{be_entry.entry_id}_nearby_availability_percentage"
     )
     nl_available = next(
         entity
         for entity in nl_entities
         if entity.unique_id
-        == f"{PROVIDER_NDW_DOT_NL}_{nl_station.provider_id}_available"
+        == (
+            f"{PROVIDER_NDW_DOT_NL}_{nl_station.provider_id}_available_"
+            f"{nl_entry.entry_id}"
+        )
     )
     be_available = next(
         entity
         for entity in be_entities
         if entity.unique_id
-        == f"{PROVIDER_ECO_MOVEMENT_BE}_{be_station.provider_id}_available"
+        == (
+            f"{PROVIDER_ECO_MOVEMENT_BE}_{be_station.provider_id}_available_"
+            f"{be_entry.entry_id}"
+        )
     )
     nl_count_state = hass.states.get(nl_count.entity_id)
     be_count_state = hass.states.get(be_count.entity_id)
@@ -1243,12 +1256,12 @@ async def test_same_country_entries_keep_coverage_counts_per_search_area(
     first_count = next(
         entity
         for entity in first_entities
-        if entity.unique_id == "nl-area-one_nearby_charging_units"
+        if entity.unique_id == f"{first_entry.entry_id}_nearby_charging_units"
     )
     second_count = next(
         entity
         for entity in second_entities
-        if entity.unique_id == "nl-area-two_nearby_charging_units"
+        if entity.unique_id == f"{second_entry.entry_id}_nearby_charging_units"
     )
     first_state = hass.states.get(first_count.entity_id)
     second_state = hass.states.get(second_count.entity_id)
@@ -1340,13 +1353,17 @@ async def test_moving_search_adds_and_removes_station_entities_after_three_polls
     first_available = next(
         entity
         for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
-        if entity.unique_id == f"{first.provider}_{first.provider_id}_available"
+        if entity.unique_id
+        == f"{first.provider}_{first.provider_id}_available_{entry.entry_id}"
     )
     first_availability_percentage = next(
         entity
         for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
         if entity.unique_id
-        == f"{first.provider}_{first.provider_id}_availability_percentage"
+        == (
+            f"{first.provider}_{first.provider_id}_availability_percentage_"
+            f"{entry.entry_id}"
+        )
     )
 
     hass.states.async_set(
@@ -1363,7 +1380,7 @@ async def test_moving_search_adds_and_removes_station_entities_after_three_polls
     assert _has_device(device_registry, entry.entry_id, first_identifier)
     assert _has_device(device_registry, entry.entry_id, new_identifier)
     assert first_available.unique_id == (
-        f"{first.provider}_{first.provider_id}_available"
+        f"{first.provider}_{first.provider_id}_available_{entry.entry_id}"
     )
     first_state = hass.states.get(first_available.entity_id)
     assert first_state is not None
@@ -1386,17 +1403,219 @@ async def test_moving_search_adds_and_removes_station_entities_after_three_polls
         entity.unique_id
         for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
     }
-    assert f"{first.provider}_{first.provider_id}_available" not in entity_unique_ids
     assert (
-        f"{first.provider}_{first.provider_id}_availability_percentage"
+        f"{first.provider}_{first.provider_id}_available_{entry.entry_id}"
         not in entity_unique_ids
     )
-    assert f"{newly_discovered.provider}_{newly_discovered.provider_id}_available" in (
-        entity_unique_ids
+    assert (
+        f"{first.provider}_{first.provider_id}_availability_percentage_{entry.entry_id}"
+        not in entity_unique_ids
     )
     assert (
-        f"{newly_discovered.provider}_{newly_discovered.provider_id}_availability_percentage"
+        f"{newly_discovered.provider}_{newly_discovered.provider_id}_available_{entry.entry_id}"
         in entity_unique_ids
+    )
+    assert (
+        f"{newly_discovered.provider}_{newly_discovered.provider_id}_availability_percentage_{entry.entry_id}"
+        in entity_unique_ids
+    )
+
+
+@pytest.mark.asyncio
+async def test_connector_groups_are_added_and_missing_groups_keep_registry_state(
+    hass, monkeypatch, sample_stations
+):
+    station = sample_stations[0]
+    original_group = station.connectors[0]
+    added_group = replace(
+        original_group,
+        provider_connector_id=f"{station.provider_id}:added-group",
+        count=3,
+        available_count=1,
+    )
+    updated_station = replace(station, connectors=(*station.connectors, added_group))
+    missing_station = replace(
+        updated_station,
+        connectors=tuple(
+            connector
+            for connector in updated_station.connectors
+            if connector.provider_connector_id != original_group.provider_connector_id
+        ),
+    )
+    provider = FakeProvider([(station,), (updated_station,), (missing_station,)])
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    entry = _entry()
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    coordinator = entry.runtime_data
+    registry = er.async_get(hass)
+    original_unique_id = (
+        f"{station.provider}_{station.provider_id}_connector_group_"
+        f"{original_group.provider_connector_id.rsplit(':', 1)[-1]}_{entry.entry_id}"
+    )
+    added_unique_id = (
+        f"{station.provider}_{station.provider_id}_connector_group_added-group_"
+        f"{entry.entry_id}"
+    )
+    original_registry_entry = next(
+        entity
+        for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
+        if entity.unique_id == original_unique_id
+    )
+    registry.async_update_entity(
+        original_registry_entry.entity_id, name="Custom connector group"
+    )
+
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert added_unique_id in {
+        entity.unique_id
+        for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
+    }
+
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+    current_entries = er.async_entries_for_config_entry(registry, entry.entry_id)
+    retained_group = next(
+        entity for entity in current_entries if entity.unique_id == original_unique_id
+    )
+    assert retained_group.name == "Custom connector group"
+    assert added_unique_id in {entity.unique_id for entity in current_entries}
+    assert len(provider.station_calls) == 3
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("reverse_setup", [False, True])
+async def test_overlapping_station_entries_keep_independent_entities_and_cleanup(
+    hass, monkeypatch, sample_stations, reverse_setup
+):
+    station = sample_stations[0]
+    first_entry = _entry(
+        unique_id="overlap-area-one",
+        entry_id="overlap-entry-one",
+        options={
+            CONF_SEARCH_RADIUS: 100,
+            CONF_FAVOURITES: [_favorite_reference(station)],
+        },
+    )
+    second_entry = _entry(
+        unique_id="overlap-area-two",
+        entry_id="overlap-entry-two",
+        options={CONF_SEARCH_RADIUS: 200},
+    )
+    station_by_entry = {
+        first_entry.entry_id: replace(station, distance_m=30),
+        second_entry.entry_id: replace(station, distance_m=60),
+    }
+    setup_order = [first_entry, second_entry]
+    if reverse_setup:
+        setup_order.reverse()
+    providers = {
+        setup_order[0].entry_id: FakeProvider(
+            [
+                (station_by_entry[setup_order[0].entry_id],),
+                ChargingProviderError("offline"),
+                (),
+                (),
+                (),
+            ]
+        ),
+        setup_order[1].entry_id: FakeProvider(
+            [(station_by_entry[setup_order[1].entry_id],)]
+        ),
+    }
+    provider_order = iter(providers[entry.entry_id] for entry in setup_order)
+    monkeypatch.setattr(
+        curbcharge, "create_provider", lambda *_args: next(provider_order)
+    )
+    for entry in (first_entry, second_entry):
+        entry.add_to_hass(hass)
+    for entry in setup_order:
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    device_registry = dr.async_get(hass)
+    available_entities = {}
+    for entry in (first_entry, second_entry):
+        entities = er.async_entries_for_config_entry(registry, entry.entry_id)
+        available_id = (
+            f"{station.provider}_{station.provider_id}_available_{entry.entry_id}"
+        )
+        distance_id = (
+            f"{station.provider}_{station.provider_id}_distance_{entry.entry_id}"
+        )
+        available = next(
+            entity for entity in entities if entity.unique_id == available_id
+        )
+        distance = next(
+            entity for entity in entities if entity.unique_id == distance_id
+        )
+        available_entities[entry.entry_id] = available
+        assert hass.states.get(available.entity_id).state == "on"
+        assert hass.states.get(distance.entity_id).state == str(
+            station_by_entry[entry.entry_id].distance_m
+        )
+
+    assert _has_device(
+        device_registry,
+        first_entry.entry_id,
+        station_device_identifier(station.provider, station.provider_id),
+    )
+    assert _has_device(
+        device_registry,
+        second_entry.entry_id,
+        station_device_identifier(station.provider, station.provider_id),
+    )
+
+    removed_entry = setup_order[0]
+    survivor_entry = setup_order[1]
+    removed_coordinator = removed_entry.runtime_data
+    await removed_coordinator.async_refresh()
+    await hass.async_block_till_done()
+    assert not removed_coordinator.last_update_success
+    assert (
+        hass.states.get(available_entities[removed_entry.entry_id].entity_id).state
+        == "unavailable"
+    )
+    assert (
+        hass.states.get(available_entities[survivor_entry.entry_id].entity_id).state
+        == "on"
+    )
+
+    for _ in range(3):
+        await removed_coordinator.async_refresh()
+        await hass.async_block_till_done()
+
+    removed_station_id = (
+        f"{station.provider}_{station.provider_id}_available_{removed_entry.entry_id}"
+    )
+    survivor_station_id = (
+        f"{station.provider}_{station.provider_id}_available_{survivor_entry.entry_id}"
+    )
+    assert removed_station_id not in {
+        entity.unique_id
+        for entity in er.async_entries_for_config_entry(
+            registry, removed_entry.entry_id
+        )
+    }
+    assert survivor_station_id in {
+        entity.unique_id
+        for entity in er.async_entries_for_config_entry(
+            registry, survivor_entry.entry_id
+        )
+    }
+    assert _has_device(
+        device_registry,
+        survivor_entry.entry_id,
+        station_device_identifier(station.provider, station.provider_id),
+    )
+    assert not _has_device(
+        device_registry,
+        removed_entry.entry_id,
+        station_device_identifier(station.provider, station.provider_id),
     )
 
 
@@ -1868,7 +2087,8 @@ async def test_invalid_entity_location_makes_entities_unavailable_then_recovers(
     available_entity = next(
         entity
         for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
-        if entity.unique_id == f"{PROVIDER_NDW_DOT_NL}_{station.provider_id}_available"
+        if entity.unique_id
+        == f"{PROVIDER_NDW_DOT_NL}_{station.provider_id}_available_{entry.entry_id}"
     )
     state = hass.states.get(available_entity.entity_id)
     assert state is not None
@@ -2119,6 +2339,85 @@ async def test_loaded_reconfigure_reloads_entry_once(hass, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_reconfigure_preserves_legacy_entity_ids_and_custom_names(
+    hass, monkeypatch, sample_stations
+):
+    station = sample_stations[0]
+    provider = FakeProvider([(station,)])
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
+    entry = _entry(unique_id="legacy-search-identity", entry_id="stable-entry-id")
+    entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+
+    legacy_aggregate = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{entry.unique_id}_best_nearby_charger",
+        config_entry=entry,
+        suggested_object_id="my_best_charger",
+    )
+    registry.async_update_entity(legacy_aggregate.entity_id, name="My best charger")
+    legacy_station = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{station.provider}_{station.provider_id}_available",
+        config_entry=entry,
+        suggested_object_id="my_station_availability",
+    )
+    registry.async_update_entity(
+        legacy_station.entity_id, name="My station availability"
+    )
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    aggregate = next(
+        entity
+        for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
+        if entity.unique_id == f"{entry.entry_id}_best_nearby_charger"
+    )
+    station_entity = next(
+        entity
+        for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
+        if entity.unique_id
+        == f"{station.provider}_{station.provider_id}_available_{entry.entry_id}"
+    )
+    assert aggregate.entity_id == legacy_aggregate.entity_id
+    assert aggregate.name == "My best charger"
+    assert station_entity.entity_id == legacy_station.entity_id
+    assert station_entity.name == "My station availability"
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reconfigure", "entry_id": entry.entry_id},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_MANUAL}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LATITUDE: 52.1, CONF_LONGITUDE: 5.1}
+    )
+    await hass.async_block_till_done()
+
+    assert result["reason"] == "reconfigure_successful"
+    aggregate = next(
+        entity
+        for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
+        if entity.unique_id == f"{entry.entry_id}_best_nearby_charger"
+    )
+    station_entity = next(
+        entity
+        for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
+        if entity.unique_id
+        == f"{station.provider}_{station.provider_id}_available_{entry.entry_id}"
+    )
+    assert aggregate.entity_id == legacy_aggregate.entity_id
+    assert aggregate.name == "My best charger"
+    assert station_entity.entity_id == legacy_station.entity_id
+    assert station_entity.name == "My station availability"
+
+
+@pytest.mark.asyncio
 async def test_options_update_applies_favourites_to_live_coordinator(
     hass, monkeypatch, sample_stations
 ):
@@ -2224,7 +2523,8 @@ async def test_discovery_filter_changes_preserve_live_station_lifecycle(
     availability_entity = next(
         entity
         for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
-        if entity.unique_id == f"{station.provider}_{station.provider_id}_available"
+        if entity.unique_id
+        == f"{station.provider}_{station.provider_id}_available_{entry.entry_id}"
     )
     station_identifier = station_device_identifier(
         station.provider, station.provider_id
@@ -2270,7 +2570,8 @@ async def test_discovery_filter_changes_preserve_live_station_lifecycle(
     assert _has_device(device_registry, entry.entry_id, station_identifier)
     assert (
         sum(
-            entity.unique_id == f"{station.provider}_{station.provider_id}_available"
+            entity.unique_id
+            == f"{station.provider}_{station.provider_id}_available_{entry.entry_id}"
             for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
         )
         == 1
@@ -2293,7 +2594,8 @@ async def test_discovery_filter_changes_preserve_live_station_lifecycle(
     assert station.provider_id not in coordinator.data
     assert not _has_device(device_registry, entry.entry_id, station_identifier)
     assert all(
-        entity.unique_id != f"{station.provider}_{station.provider_id}_available"
+        entity.unique_id
+        != f"{station.provider}_{station.provider_id}_available_{entry.entry_id}"
         for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
     )
 

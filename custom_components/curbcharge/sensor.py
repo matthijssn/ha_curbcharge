@@ -1,7 +1,7 @@
 """Sensors for CurbCharge stations and recommendations."""
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
@@ -16,6 +16,7 @@ from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfLength, UnitOf
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import (
     AddEntitiesCallback,
     EntityPlatform,
@@ -33,6 +34,7 @@ from .coordinator import (
 from .entity import (
     CurbChargeStationEntity,
     get_or_create_location_device,
+    migrate_entity_unique_id,
     setup_dynamic_station_entities,
 )
 from .models import ChargingConnector, ChargingStation, ChargingTariff, TariffStatus
@@ -55,23 +57,60 @@ async def async_setup_entry(
         coordinator,
         async_add_entities,
         lambda station: create_station_sensors(coordinator, station),
+        lambda station, existing_unique_ids: create_missing_connector_group_sensors(
+            coordinator, station, existing_unique_ids
+        ),
     )
     await async_setup_dynamic_favorite_status_sensors(
         hass, entry, coordinator, async_add_entities
     )
-    async_add_entities(
-        [
-            BestNearbyChargerSensor(coordinator, entry),
-            TopNearbyChargersSensor(coordinator, entry),
-            NearestAvailableChargerSensor(coordinator, entry),
-            CheapestAvailableChargerSensor(coordinator, entry),
-            FastestAvailableChargerSensor(coordinator, entry),
-            NearbyChargingUnitsSensor(coordinator, entry),
-            NearbyAvailableConnectorsSensor(coordinator, entry),
-            NearbyAvailabilityPercentageSensor(coordinator, entry),
-            FavoriteSummarySensor(coordinator, entry),
-        ]
-    )
+    aggregate_entities = [
+        BestNearbyChargerSensor(coordinator, entry),
+        TopNearbyChargersSensor(coordinator, entry),
+        NearestAvailableChargerSensor(coordinator, entry),
+        CheapestAvailableChargerSensor(coordinator, entry),
+        FastestAvailableChargerSensor(coordinator, entry),
+        NearbyChargingUnitsSensor(coordinator, entry),
+        NearbyAvailableConnectorsSensor(coordinator, entry),
+        NearbyAvailabilityPercentageSensor(coordinator, entry),
+        FavoriteSummarySensor(coordinator, entry),
+    ]
+    _migrate_aggregate_entity_ids(hass, entry, aggregate_entities)
+    async_add_entities(aggregate_entities)
+
+
+def _migrate_aggregate_entity_ids(
+    hass: HomeAssistant,
+    entry: ConfigEntry[Any],
+    entities: Sequence[Entity],
+) -> None:
+    """Keep aggregate entity IDs when the mutable search identity changes."""
+    registry = er.async_get(hass)
+    entries = er.async_entries_for_config_entry(registry, entry.entry_id)
+    entities_by_suffix: dict[str, str] = {}
+    for entity in entities:
+        suffix = getattr(entity, "_unique_id_suffix", None)
+        if isinstance(suffix, str) and entity.unique_id is not None:
+            entities_by_suffix[suffix] = entity.unique_id
+    for registry_entry in entries:
+        if registry_entry.domain != "sensor":
+            continue
+        suffix = next(
+            (
+                suffix
+                for suffix in entities_by_suffix
+                if registry_entry.unique_id.endswith(f"_{suffix}")
+            ),
+            None,
+        )
+        if suffix is not None:
+            migrate_entity_unique_id(
+                hass,
+                entry,
+                "sensor",
+                registry_entry.unique_id,
+                entities_by_suffix[suffix],
+            )
 
 
 class AvailableConnectorsSensor(CurbChargeStationEntity, SensorEntity):
@@ -163,30 +202,62 @@ class ConnectorGroupSensor(CurbChargeStationEntity, SensorEntity):
         super().__init__(
             coordinator, station, unique_id_suffix=f"connector_group_{group_index}"
         )
-        self._connector = connector
+        self._connector_id = connector.provider_connector_id
         self._attr_translation_placeholders = {
             "connector_type": _display_connector_type(connector.connector_type)
         }
 
     @property
-    def native_value(self) -> int:
+    def connector(self) -> ChargingConnector | None:
+        """Return the latest version of this provider group."""
+        station = self.station
+        if station is None:
+            return None
+        return next(
+            (
+                connector
+                for connector in station.connectors
+                if connector.provider_connector_id == self._connector_id
+            ),
+            None,
+        )
+
+    @property
+    def available(self) -> bool:
+        """Do not present a missing group as current station data."""
+        return super().available and self.connector is not None
+
+    @property
+    def native_value(self) -> int | None:
         """Return the provider-reported total in this connector group."""
-        return self._connector.count
+        connector = self.connector
+        return None if connector is None else connector.count
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Expose only counts and properties actually present in the feed."""
-        available = self._connector.available_count
+        connector = self.connector
+        if connector is None:
+            return {
+                "available_connectors": None,
+                "unavailable_connectors": None,
+                "occupied_connectors": None,
+                "connector_type": None,
+                "connector_format": None,
+                "power_type": None,
+                "max_power_kw": None,
+            }
+        available = connector.available_count
         return {
             "available_connectors": available,
             "unavailable_connectors": (
-                self._connector.count - available if available is not None else None
+                connector.count - available if available is not None else None
             ),
-            "occupied_connectors": (0 if available == self._connector.count else None),
-            "connector_type": self._connector.connector_type,
-            "connector_format": self._connector.connector_format,
-            "power_type": self._connector.power_type,
-            "max_power_kw": self._connector.max_power_kw,
+            "occupied_connectors": (0 if available == connector.count else None),
+            "connector_type": connector.connector_type,
+            "connector_format": connector.connector_format,
+            "power_type": connector.power_type,
+            "max_power_kw": connector.max_power_kw,
         }
 
 
@@ -709,9 +780,8 @@ class NearbyChargingUnitsSensor(CoordinatorEntity[CurbChargeCoordinator], Sensor
         self, coordinator: CurbChargeCoordinator, entry: ConfigEntry[Any]
     ) -> None:
         super().__init__(coordinator)
-        self._attr_unique_id = (
-            f"{entry.unique_id or entry.entry_id}_nearby_charging_units"
-        )
+        self._attr_unique_id = f"{entry.entry_id}_nearby_charging_units"
+        self._unique_id_suffix = "nearby_charging_units"
 
     @property
     def native_value(self) -> int | None:
@@ -748,9 +818,8 @@ class NearbyAvailableConnectorsSensor(
         self, coordinator: CurbChargeCoordinator, entry: ConfigEntry[Any]
     ) -> None:
         super().__init__(coordinator)
-        self._attr_unique_id = (
-            f"{entry.unique_id or entry.entry_id}_nearby_available_connectors"
-        )
+        self._attr_unique_id = f"{entry.entry_id}_nearby_available_connectors"
+        self._unique_id_suffix = "nearby_available_connectors"
 
     @property
     def native_value(self) -> int | None:
@@ -810,9 +879,8 @@ class NearbyAvailabilityPercentageSensor(
         self, coordinator: CurbChargeCoordinator, entry: ConfigEntry[Any]
     ) -> None:
         super().__init__(coordinator)
-        self._attr_unique_id = (
-            f"{entry.unique_id or entry.entry_id}_nearby_availability_percentage"
-        )
+        self._attr_unique_id = f"{entry.entry_id}_nearby_availability_percentage"
+        self._unique_id_suffix = "nearby_availability_percentage"
 
     @property
     def native_value(self) -> float | None:
@@ -877,9 +945,8 @@ class BestNearbyChargerSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEn
         self, coordinator: CurbChargeCoordinator, entry: ConfigEntry[Any]
     ) -> None:
         super().__init__(coordinator)
-        self._attr_unique_id = (
-            f"{entry.unique_id or entry.entry_id}_best_nearby_charger"
-        )
+        self._attr_unique_id = f"{entry.entry_id}_best_nearby_charger"
+        self._unique_id_suffix = "best_nearby_charger"
 
     @property
     def native_value(self) -> str | None:
@@ -940,9 +1007,8 @@ class TopNearbyChargersSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEn
         self, coordinator: CurbChargeCoordinator, entry: ConfigEntry[Any]
     ) -> None:
         super().__init__(coordinator)
-        self._attr_unique_id = (
-            f"{entry.unique_id or entry.entry_id}_top_nearby_chargers"
-        )
+        self._attr_unique_id = f"{entry.entry_id}_top_nearby_chargers"
+        self._unique_id_suffix = "top_nearby_chargers"
 
     @property
     def native_value(self) -> int | None:
@@ -995,9 +1061,7 @@ class _SelectedChargerSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEnt
     ) -> None:
         super().__init__(coordinator)
         self._selector = selector
-        self._attr_unique_id = (
-            f"{entry.unique_id or entry.entry_id}_{self._unique_id_suffix}"
-        )
+        self._attr_unique_id = f"{entry.entry_id}_{self._unique_id_suffix}"
 
     def _selection(self) -> RecommendationResult:
         results = self.coordinator.recommendation_results
@@ -1227,6 +1291,14 @@ async def async_setup_dynamic_favorite_status_sensors(
             for station_id in sorted(desired_ids - entities_by_favorite.keys()):
                 station = stations[station_id]
                 entity = FavoriteStatusSensor(coordinator, station, entry)
+                if entity.unique_id is not None:
+                    migrate_entity_unique_id(
+                        hass,
+                        entry,
+                        platform.domain,
+                        entity._legacy_unique_id,
+                        entity.unique_id,
+                    )
                 parent_device_info = get_or_create_location_device(
                     device_registry, entry, station
                 )
@@ -1255,3 +1327,17 @@ async def async_setup_dynamic_favorite_status_sensors(
 
 def _isoformat(value: datetime | None) -> str | None:
     return value.isoformat() if value is not None else None
+
+
+def create_missing_connector_group_sensors(
+    coordinator: CurbChargeCoordinator,
+    station: ChargingStation,
+    existing_unique_ids: set[str],
+) -> list[ConnectorGroupSensor]:
+    """Create only newly reported groups for an existing station."""
+    entities: list[ConnectorGroupSensor] = []
+    for connector in station.connectors:
+        entity = ConnectorGroupSensor(coordinator, station, connector)
+        if entity.unique_id not in existing_unique_ids:
+            entities.append(entity)
+    return entities

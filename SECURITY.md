@@ -14,3 +14,6 @@ have permission to assess.
 
 Please allow maintainers time to investigate and coordinate a fix before
 publicly disclosing a vulnerability. No response timeline is guaranteed.
+
+Security fixes target the latest stable CurbCharge release. Backports to older
+releases are considered case by case and are not guaranteed.

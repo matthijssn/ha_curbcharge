@@ -822,7 +822,7 @@ def _unique_time_price(
         price, _ = _gross_component_price(component, tax_included)
         if price is None:
             return None
-        prices.add(price * Decimal(60) / step_size)
+        prices.add(price / Decimal(60))
     return next(iter(prices)) if len(prices) == 1 else None
 
 

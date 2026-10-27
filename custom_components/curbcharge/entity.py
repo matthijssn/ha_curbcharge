@@ -40,7 +40,14 @@ class CurbChargeStationEntity(CoordinatorEntity[CurbChargeCoordinator]):
         super().__init__(coordinator)
         self._station_id = station.provider_id
         entity_key = unique_id_suffix or self._attr_translation_key
-        self._attr_unique_id = f"{station.provider}_{station.provider_id}_{entity_key}"
+        self._legacy_unique_id = (
+            f"{station.provider}_{station.provider_id}_{entity_key}"
+        )
+        self._attr_unique_id = (
+            f"{self._legacy_unique_id}_{coordinator.entry_id}"
+            if coordinator.entry_id is not None
+            else self._legacy_unique_id
+        )
         self._attr_device_info = DeviceInfo(
             identifiers={
                 station_device_identifier(station.provider, station.provider_id)
@@ -103,6 +110,32 @@ def location_device_identifier(provider: str, location_id: str) -> tuple[str, st
     return DOMAIN, f"{provider}:location:{location_id}"
 
 
+def migrate_entity_unique_id(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    domain: str,
+    old_unique_id: str,
+    new_unique_id: str,
+) -> None:
+    """Preserve the entity registry entry when changing its integration identity."""
+    if old_unique_id == new_unique_id:
+        return
+
+    entity_registry = er.async_get(hass)
+    entity_id = entity_registry.async_get_entity_id(domain, DOMAIN, old_unique_id)
+    if entity_id is None:
+        return
+    registry_entry = entity_registry.entities.get(entity_id)
+    if (
+        registry_entry is None
+        or registry_entry.config_entry_id != entry.entry_id
+        or entity_registry.async_get_entity_id(domain, DOMAIN, new_unique_id)
+        is not None
+    ):
+        return
+    entity_registry.async_update_entity(entity_id, new_unique_id=new_unique_id)
+
+
 def get_or_create_location_device(
     device_registry: DeviceRegistry,
     entry: ConfigEntry,
@@ -137,6 +170,8 @@ def setup_dynamic_station_entities(
     coordinator: CurbChargeCoordinator,
     async_add_entities: AddEntitiesCallback,
     create_entities: Callable[[ChargingStation], Sequence[Entity]],
+    create_additional_entities: Callable[[ChargingStation, set[str]], Sequence[Entity]]
+    | None = None,
 ) -> None:
     """Add new station entities and remove stations absent for three good polls."""
     platform = async_get_current_platform()
@@ -153,6 +188,32 @@ def setup_dynamic_station_entities(
         new_entities: list[Entity] = []
         for station_id, station in stations.items():
             if station_id in known_station_ids:
+                existing_entities = entities_by_station[station_id]
+                if create_additional_entities is not None:
+                    existing_unique_ids = {
+                        entity.unique_id
+                        for entity in existing_entities
+                        if entity.unique_id is not None
+                    }
+                    additional_entities = list(
+                        create_additional_entities(station, existing_unique_ids)
+                    )
+                    for entity in additional_entities:
+                        legacy_unique_id = getattr(entity, "_legacy_unique_id", None)
+                        if (
+                            legacy_unique_id is not None
+                            and entity.unique_id is not None
+                        ):
+                            migrate_entity_unique_id(
+                                hass,
+                                entry,
+                                platform.domain,
+                                legacy_unique_id,
+                                entity.unique_id,
+                            )
+                    if additional_entities:
+                        existing_entities.extend(additional_entities)
+                        new_entities.extend(additional_entities)
                 continue
 
             parent_device_info = get_or_create_location_device(
@@ -162,6 +223,16 @@ def setup_dynamic_station_entities(
                 parent_identifiers_by_station[station_id] = parent_device_info[1]
 
             entities = list(create_entities(station))
+            for entity in entities:
+                legacy_unique_id = getattr(entity, "_legacy_unique_id", None)
+                if legacy_unique_id is not None and entity.unique_id is not None:
+                    migrate_entity_unique_id(
+                        hass,
+                        entry,
+                        platform.domain,
+                        legacy_unique_id,
+                        entity.unique_id,
+                    )
             if parent_device_info is not None:
                 parent_device, parent_identifier = parent_device_info
                 for entity in entities:
@@ -185,8 +256,13 @@ def setup_dynamic_station_entities(
                     continue
                 parent_identifier = parent_identifiers_by_station.pop(station_id, None)
                 for entity in entities_by_station.pop(station_id, []):
-                    if entity.entity_id in platform.entities:
-                        await platform.async_remove_entity(entity.entity_id)
+                    entity_id = entity.entity_id
+                    if entity_id in platform.entities:
+                        await platform.async_remove_entity(entity_id)
+                    if entity_id in entity_registry.entities:
+                        registry_entry = entity_registry.entities[entity_id]
+                        if registry_entry.config_entry_id == entry.entry_id:
+                            entity_registry.async_remove(entity_id)
 
                 identifier = station_device_identifier(
                     coordinator.provider_id, station_id
@@ -214,9 +290,39 @@ def setup_dynamic_station_entities(
                     for registry_entry in er.async_entries_for_device(
                         entity_registry, device.id
                     ):
-                        if registry_entry.domain == platform.domain:
+                        if (
+                            registry_entry.domain == platform.domain
+                            and registry_entry.config_entry_id == entry.entry_id
+                        ):
+                            if registry_entry.entity_id in platform.entities:
+                                await platform.async_remove_entity(
+                                    registry_entry.entity_id
+                                )
                             entity_registry.async_remove(registry_entry.entity_id)
-                    if not er.async_entries_for_device(entity_registry, device.id):
+
+                    remaining_entries = er.async_entries_for_device(
+                        entity_registry, device.id
+                    )
+                    if not any(
+                        registry_entry.config_entry_id == entry.entry_id
+                        for registry_entry in remaining_entries
+                    ):
+                        device = device_registry.async_update_device(
+                            device.id, remove_config_entry_id=entry.entry_id
+                        )
+
+                    get_children = getattr(dr, "async_entries_for_parent_device", None)
+                    has_child_devices = (
+                        bool(get_children(device_registry, device.id))
+                        if get_children is not None and device is not None
+                        else False
+                    )
+                    if (
+                        device is not None
+                        and not device.config_entries
+                        and not remaining_entries
+                        and not has_child_devices
+                    ):
                         device_registry.async_remove_device(device.id)
 
                 known_station_ids.discard(station_id)
@@ -252,12 +358,21 @@ def setup_dynamic_station_entities(
                         device_registry, entry.entry_id
                     )
                 )
-                if (
-                    not has_child_devices
-                    and not has_legacy_children
-                    and not er.async_entries_for_device(entity_registry, device.id)
+                if not has_legacy_children and not any(
+                    registry_entry.config_entry_id == entry.entry_id
+                    for registry_entry in er.async_entries_for_device(
+                        entity_registry, device.id
+                    )
                 ):
-                    device_registry.async_remove_device(device.id)
+                    device = device_registry.async_update_device(
+                        device.id, remove_config_entry_id=entry.entry_id
+                    )
+                    if (
+                        device is not None
+                        and not device.config_entries
+                        and not has_child_devices
+                    ):
+                        device_registry.async_remove_device(device.id)
 
     add_stations(coordinator.data or {})
 

@@ -36,7 +36,7 @@ rules:
   parallel_updates: done
   reauthentication_flow:
     status: done
-    comment: Belgium token failures use the tested reauthentication flow; the public NDW API requires no credentials.
+    comment: Belgium and NOBIL credential failures use the tested reauthentication flow; the public NDW API requires no credentials.
   test_coverage:
     status: done
     comment: CI enforces over 95% coverage per module and 96% overall.
@@ -65,7 +65,7 @@ rules:
   reconfiguration_flow: done
   repair_issues:
     status: exempt
-    comment: Credential failures use reauthentication, transient network/rate-limit errors recover automatically, and no separate manual repair action exists.
+    comment: Belgium and NOBIL credential failures use reauthentication, transient network/rate-limit errors recover automatically, and no separate manual repair action exists.
   stale_devices: done
   async_dependency: done
   inject_websession: done

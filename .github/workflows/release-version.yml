@@ -1,6 +1,8 @@
 name: Release version
 
 on:
+  push:
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
       tag:
@@ -14,6 +16,67 @@ permissions:
   contents: read
 
 jobs:
+  verify_tag:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Verify tag, manifest, and main ancestry
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import subprocess
+          from pathlib import Path
+
+          tag = os.environ["RELEASE_TAG"]
+          match = re.fullmatch(
+              r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)",
+              tag,
+          )
+          if match is None:
+              raise SystemExit(f"Tag {tag!r} is not stable SemVer")
+
+          version = ".".join(match.groups())
+          manifest = json.loads(
+              Path("custom_components/curbcharge/manifest.json").read_text(
+                  encoding="utf-8"
+              )
+          )
+          if manifest["version"] != version:
+              raise SystemExit(
+                  f"Tag {tag} does not match manifest version {manifest['version']}"
+              )
+
+          sha = subprocess.check_output(
+              ["git", "rev-parse", "HEAD"], text=True
+          ).strip()
+          tag_sha = subprocess.check_output(
+              ["git", "rev-parse", f"{tag}^{{commit}}"], text=True
+          ).strip()
+          if sha != tag_sha:
+              raise SystemExit(f"Checkout SHA {sha} does not match {tag} ({tag_sha})")
+          subprocess.run(
+              ["git", "merge-base", "--is-ancestor", "HEAD", "FETCH_HEAD"],
+              check=True,
+          )
+          print(f"Verified {tag} ({sha}), manifest {version}, and main ancestry.")
+          PY
+
+      - name: Validate release integration archive
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 -m unittest discover -s tests -p test_release_package.py
+
   prepare:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
@@ -185,3 +248,8 @@ jobs:
           )
           print(f"Verified {tag}, manifest {expected_version}, and main ancestry.")
           PY
+
+      - name: Revalidate published integration archive
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: python3 -m unittest discover -s tests -p test_release_package.py
