@@ -153,7 +153,7 @@ digests or a concrete integrity concern arises.
 | Official HA container smoke | Defer | Current HA fixtures cover lifecycle behavior; exact archive checks are being added first. Reassess when a stable, isolated container runner is available. |
 | HA beta | Advisory only after stable smoke | Do not increase the supported minimum or gate normal feature work on beta. |
 | Branch coverage | Selective measurement | Protect changed critical branches; do not introduce a higher global threshold. |
-| Browser/mobile/accessibility automation | Defer | Run owner checks for keyboard, theme, narrow layout, and locales first; automate only a demonstrated recurring gap. |
+| Browser/mobile/accessibility automation | Defer | Owner checks for keyboard, theme, narrow layout, and locales remain pending; automate only a demonstrated recurring gap. |
 | CI caching/concurrency | Defer | Measure equivalent full runs before optimizing; never weaken required checks or cancel release validation. |
 | Dependency review, CodeQL, dead-code tooling | Defer | Existing Dependabot, repository security controls, and required checks remain; add tools only for demonstrated value. |
 | Frontend build/lint tooling | Reject for now | The card is one directly served JavaScript file with no runtime dependencies; Node tests are sufficient. |
