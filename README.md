@@ -13,20 +13,16 @@ with sensors and managed with admin-only actions.
 Install **CurbCharge** from **HACS → Integrations**, then restart Home
 Assistant and add CurbCharge from **Settings → Devices & services**.
 
-Home Assistant **2024.12.0 or newer** is required.
+Use a Home Assistant release that meets the minimum listed in
+[`hacs.json`](hacs.json).
 
-## Coverage in the latest release
+## Coverage
 
-The latest release, `v0.4.3`, supports public charging points in the
-Netherlands through NDW DOT-NL. Norway and Sweden support through NOBIL is on
-`main` but is not included in that release yet. Belgium DATEX II remains a
-preview and is not release-ready while provider access, licensing, quotas and
-live-payload compatibility are unverified.
-
-Check the [release notes](https://github.com/matthijssn/ha_curbcharge/releases)
-for the coverage available in your installed version, and see
+Provider availability depends on your installed release. Check the
+[release notes](https://github.com/matthijssn/ha_curbcharge/releases) before
+relying on a provider, and see
 [provider coverage and limitations](docs/usage.md#data-source-and-coverage)
-for details.
+for data sources and preview status.
 
 ## Installation options
 
