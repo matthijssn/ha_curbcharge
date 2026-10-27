@@ -143,13 +143,11 @@ def test_nearby_charging_units_counts_current_records_and_reports_scope(
             unknown_availability.provider_id: unknown_availability,
         }
     )
-    sensor = NearbyChargingUnitsSensor(
-        coordinator,
-        MockConfigEntry(domain=DOMAIN, unique_id="test-nearby-area"),
-    )
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="test-nearby-area")
+    sensor = NearbyChargingUnitsSensor(coordinator, entry)
 
     assert sensor.native_value == 2
-    assert sensor.unique_id == "test-nearby-area_nearby_charging_units"
+    assert sensor.unique_id == f"{entry.entry_id}_nearby_charging_units"
     assert sensor.state_class is SensorStateClass.MEASUREMENT
     assert sensor.extra_state_attributes == {
         "provider": "NDW DOT-NL",
@@ -241,13 +239,11 @@ def test_nearby_available_connectors_sums_nl_groups_and_reports_coverage(
             stale.provider_id: stale,
         }
     )
-    sensor = NearbyAvailableConnectorsSensor(
-        coordinator,
-        MockConfigEntry(domain=DOMAIN, unique_id="nl-search-area"),
-    )
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="nl-search-area")
+    sensor = NearbyAvailableConnectorsSensor(coordinator, entry)
 
     assert sensor.native_value == 2
-    assert sensor.unique_id == "nl-search-area_nearby_available_connectors"
+    assert sensor.unique_id == f"{entry.entry_id}_nearby_available_connectors"
     assert sensor.state_class is SensorStateClass.MEASUREMENT
     attributes = sensor.extra_state_attributes
     assert attributes["provider_id"] == "ndw_dot_nl"
@@ -424,16 +420,14 @@ def test_nearby_availability_percentage_sums_known_groups_and_reports_coverage(
             stale.provider_id: stale,
         }
     )
-    sensor = NearbyAvailabilityPercentageSensor(
-        coordinator,
-        MockConfigEntry(domain=DOMAIN, unique_id="nl-search-area"),
-    )
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="nl-search-area")
+    sensor = NearbyAvailabilityPercentageSensor(coordinator, entry)
 
     assert partial.available_connectors is None
     assert sensor.native_value == 33.3
     assert sensor.native_unit_of_measurement == PERCENTAGE
     assert sensor.state_class is SensorStateClass.MEASUREMENT
-    assert sensor.unique_id == "nl-search-area_nearby_availability_percentage"
+    assert sensor.unique_id == f"{entry.entry_id}_nearby_availability_percentage"
     attributes = sensor.extra_state_attributes
     assert attributes["available_connectors"] == 3
     assert attributes["total_connectors"] == 9
@@ -625,6 +619,33 @@ def test_connector_group_sensor_exposes_provider_group_counts(hass, sample_stati
     assert sensor.extra_state_attributes["connector_type"] == connector.connector_type
     assert sensor.entity_registry_enabled_default is False
 
+    updated_connector = replace(connector, count=4, available_count=0)
+    coordinator.async_set_updated_data(
+        {
+            station.provider_id: replace(
+                station,
+                connectors=(
+                    updated_connector,
+                    *station.connectors[1:],
+                ),
+            )
+        }
+    )
+    assert sensor.native_value == 4
+    assert sensor.extra_state_attributes["available_connectors"] == 0
+    assert sensor.extra_state_attributes["unavailable_connectors"] == 4
+
+    coordinator.async_set_updated_data(
+        {station.provider_id: replace(station, connectors=station.connectors[1:])}
+    )
+    assert not sensor.available
+    assert sensor.native_value is None
+    assert sensor.extra_state_attributes["available_connectors"] is None
+
+    coordinator.async_set_updated_data({station.provider_id: station})
+    assert sensor.available
+    assert sensor.native_value == connector.count
+
     unknown_connector = replace(connector, connector_type=None)
     unknown_sensor = ConnectorGroupSensor(coordinator, station, unknown_connector)
     assert unknown_sensor.translation_placeholders["connector_type"] == "Unknown"
@@ -635,7 +656,7 @@ def test_price_sensor_uses_decimal_tariff_and_currency_unit(hass, sample_station
         "EUR",
         Decimal("0.257"),
         None,
-        None,
+        Decimal("0.0605"),
         "Public tariff",
         "NDW DOT-NL",
         tariff_id="tariff-1",
@@ -655,6 +676,7 @@ def test_price_sensor_uses_decimal_tariff_and_currency_unit(hass, sample_station
     assert sensor.native_unit_of_measurement == "EUR/kWh"
     attributes = sensor.extra_state_attributes
     assert attributes["price_per_kwh"] == 0.257
+    assert attributes["price_per_minute"] == 0.0605
     assert attributes["currency"] == "EUR"
     assert attributes["tariff_description"] == "Public tariff"
     assert attributes["tariff_source"] == "NDW DOT-NL"
@@ -1055,7 +1077,7 @@ def test_selection_sensors_report_station_details_and_reasons(hass, sample_stati
 
     for sensor, station, reason, suffix, rank, score in sensors:
         assert sensor.native_value == station.name
-        assert sensor.unique_id == f"selector-area_{suffix}"
+        assert sensor.unique_id == f"{entry.entry_id}_{suffix}"
         assert sensor.extra_state_attributes == {
             "reason": reason,
             "result_status": "selected",
@@ -1127,7 +1149,7 @@ def test_top_nearby_sensor_returns_bounded_backend_ranked_payload(
     reloaded_sensor = TopNearbyChargersSensor(coordinator, entry)
 
     assert sensor.native_value == 5
-    assert sensor.unique_id == "top-area_top_nearby_chargers"
+    assert sensor.unique_id == f"{entry.entry_id}_top_nearby_chargers"
     assert reloaded_sensor.unique_id == sensor.unique_id
     assert sensor.device_info is None
     attributes = sensor.extra_state_attributes

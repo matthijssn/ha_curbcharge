@@ -37,7 +37,9 @@ status-summary sensors expose tariff attributes, including a stable
 is available, the status-summary sensor includes a connector-group tariff
 breakdown. OCPI price components are published before VAT; CurbCharge applies
 the reported VAT percentage to present a gross rate and treats a missing VAT
-rate as unknown.
+rate as unknown. An OCPI `TIME` component is expressed per hour and normalized
+to a per-minute amount by dividing its gross hourly rate by 60; `step_size`
+specifies billing granularity in seconds and does not change that rate.
 
 The GeoJSON OpenAPI description labels `power_max` as kW, while current live
 examples contain values such as `15000` for a 15 kW connector. CurbCharge

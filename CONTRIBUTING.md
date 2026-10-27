@@ -33,9 +33,10 @@ for environment setup, test and formatting commands, and release workflow. The
 - Use only data and API access you are authorized to share. Never commit tokens,
   credentials, exact home coordinates, personal information, or unredacted
   provider responses.
-- For provider-specific implementation context, see the
-  [provider development guide tracked in issue #45](https://github.com/matthijssn/ha_curbcharge/issues/45);
-  this file intentionally does not duplicate that guide.
+- For provider architecture, normalized models, and source-specific tests, see
+  the [provider development guide](docs/development.md#provider-architecture).
+  Keep API credentials and provider payloads private unless their terms allow
+  sharing.
 
 Follow the checks in the [development guide](docs/development.md) before
 submitting. The pull request template lists the compatibility, privacy, and

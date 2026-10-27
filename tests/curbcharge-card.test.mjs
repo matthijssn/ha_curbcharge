@@ -26,18 +26,43 @@ class FakeElement extends FakeEventTarget {
     this.children = [];
     this.textContent = "";
     this.attributes = new Map();
+    this.dataset = {};
+    this.open = false;
   }
 
   append(...children) {
+    for (const child of children) child.parentNode = this;
     this.children.push(...children);
   }
 
   replaceChildren(...children) {
+    for (const child of children) child.parentNode = this;
     this.children = children;
+    if (this.tagName === "shadow-root") this.activeElement = null;
   }
 
   setAttribute(name, value) {
     this.attributes.set(name, value);
+  }
+
+  querySelectorAll(selector) {
+    const matches = [];
+    for (const child of this.children) {
+      if (
+        (selector === "details" && child.tagName === "details") ||
+        (selector === "[data-focus-key]" && child.dataset.focusKey)
+      ) {
+        matches.push(child);
+      }
+      matches.push(...child.querySelectorAll(selector));
+    }
+    return matches;
+  }
+
+  focus() {
+    let parent = this.parentNode;
+    while (parent && parent.tagName !== "shadow-root") parent = parent.parentNode;
+    if (parent) parent.activeElement = this;
   }
 }
 
@@ -1134,6 +1159,54 @@ test("renders keyboard-accessible details collapsed by default", () => {
   assert.equal(details.children[0].tagName, "summary");
   assert.equal(details.children[0].textContent, "More details");
   assert.equal(haCard.children[0].children[1].attributes.get("role"), "status");
+});
+
+test("preserves disclosure state and keyboard focus across Home Assistant updates", () => {
+  const Card = elements.get("curbcharge-card");
+  const card = new Card();
+  card.setConfig({ entity: "sensor.station_status_summary" });
+  card.hass = {
+    language: "en",
+    states: {
+      "sensor.station_status_summary": {
+        entity_id: "sensor.station_status_summary",
+        state: "available",
+        attributes: {
+          provider_station_id: "station-1",
+          available_connectors: 2,
+        },
+      },
+    },
+  };
+  const firstDetails = card.shadowRoot.querySelectorAll("details")[0];
+  const firstSummary = card.shadowRoot.querySelectorAll(
+    "[data-focus-key]",
+  ).find((element) => element.dataset.focusKey === "details-summary");
+  firstDetails.open = true;
+  firstSummary.focus();
+
+  card.hass = {
+    language: "nl",
+    states: {
+      "sensor.station_status_summary": {
+        entity_id: "sensor.station_status_summary",
+        state: "available",
+        attributes: {
+          provider_station_id: "station-1",
+          available_connectors: 3,
+        },
+      },
+    },
+  };
+
+  const updatedDetails = card.shadowRoot.querySelectorAll("details")[0];
+  const updatedSummary = card.shadowRoot.querySelectorAll(
+    "[data-focus-key]",
+  ).find((element) => element.dataset.focusKey === "details-summary");
+  assert.notEqual(updatedDetails, firstDetails);
+  assert.equal(updatedDetails.open, true);
+  assert.notEqual(updatedSummary, firstSummary);
+  assert.equal(card.shadowRoot.activeElement, updatedSummary);
 });
 
 test("renders a localized text favorite indicator only for explicit favorites", () => {

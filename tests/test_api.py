@@ -602,8 +602,110 @@ def test_tariff_prices_remain_decimal():
     assert tariff is not None
     assert tariff.price_per_kwh == Decimal("0.31097")
     assert tariff.session_fee == Decimal("0.121")
-    assert tariff.price_per_minute == Decimal("0.0605")
+    assert tariff.price_per_minute == Decimal("0.0605") / 60
     assert tariff.vat_percentage == Decimal("21.0")
+
+
+@pytest.mark.parametrize("step_size", [60, 300, 3600])
+def test_time_price_is_hourly_and_independent_of_billing_step(step_size):
+    tariff = _parse_tariff(
+        {
+            "currency": "EUR",
+            "elements": [
+                {
+                    "price_components": [
+                        {
+                            "type": "TIME",
+                            "price": 3.0,
+                            "vat": 21.0,
+                            "step_size": step_size,
+                        }
+                    ]
+                }
+            ],
+        }
+    )
+
+    assert tariff is not None
+    assert tariff.price_per_minute == Decimal("0.0605")
+
+
+@pytest.mark.parametrize(
+    ("tax_included", "vat", "price", "expected"),
+    [
+        ("YES", 21.0, 0.05, Decimal("0.05") / 60),
+        ("NO", 21.0, 0.05, Decimal("0.0605") / 60),
+        ("YES", None, 0.05, Decimal("0.05") / 60),
+        ("NO", None, 0.05, None),
+        ("NO", 21.0, 0, Decimal(0)),
+    ],
+)
+def test_time_price_vat_and_zero_semantics(tax_included, vat, price, expected):
+    tariff = _parse_tariff(
+        {
+            "currency": "EUR",
+            "tax_included": tax_included,
+            "elements": [
+                {
+                    "price_components": [
+                        {
+                            "type": "TIME",
+                            "price": price,
+                            "vat": vat,
+                            "step_size": 300,
+                        }
+                    ]
+                }
+            ],
+        }
+    )
+
+    assert tariff is not None
+    assert tariff.price_per_minute == expected
+
+
+@pytest.mark.parametrize("step_size", [0, -1, True, "60"])
+def test_time_price_with_invalid_billing_step_is_unknown(step_size):
+    tariff = _parse_tariff(
+        {
+            "currency": "EUR",
+            "tax_included": "YES",
+            "elements": [
+                {
+                    "price_components": [
+                        {
+                            "type": "TIME",
+                            "price": 3.0,
+                            "step_size": step_size,
+                        }
+                    ]
+                }
+            ],
+        }
+    )
+
+    assert tariff is not None
+    assert tariff.price_per_minute is None
+
+
+def test_conflicting_time_components_remain_unknown():
+    tariff = _parse_tariff(
+        {
+            "currency": "EUR",
+            "tax_included": "YES",
+            "elements": [
+                {
+                    "price_components": [
+                        {"type": "TIME", "price": 1.0, "step_size": 60},
+                        {"type": "TIME", "price": 2.0, "step_size": 300},
+                    ]
+                }
+            ],
+        }
+    )
+
+    assert tariff is not None
+    assert tariff.price_per_minute is None
 
 
 def test_connector_group_ids_survive_new_groups_before_existing_groups(

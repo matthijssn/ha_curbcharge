@@ -79,12 +79,11 @@ jobs:
             exit 0
           fi
           git worktree add --detach "$RUNNER_TEMP/base" "$BASE_SHA"
-          # HA 2026.9 moved child devices to a separate registry. Reuse the
-          # current lifecycle assertions while measuring coverage against base code.
-          cp "$GITHUB_WORKSPACE/tests/test_init.py" "$RUNNER_TEMP/base/tests/test_init.py"
           (
             cd "$RUNNER_TEMP/base"
-            pytest --cov=custom_components/curbcharge --cov-report=json:"$RUNNER_TEMP/coverage-base.json"
+            pytest --cov=custom_components/curbcharge --cov-report=json:"$RUNNER_TEMP/coverage-base.json" \
+              --deselect='tests/test_init.py::test_belgium_evse_devices_are_children_of_location_and_cleanup_parent[cleanup-parent]' \
+              --deselect='tests/test_init.py::test_belgium_evse_devices_are_children_of_location_and_cleanup_parent[parent-already-removed]'
           )
           python3 - <<'PY'
           import json

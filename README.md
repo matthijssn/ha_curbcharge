@@ -28,6 +28,11 @@ authorized users and is not release-ready until access, licensing, quotas, and
 live-payload compatibility are verified.
 See [provider coverage and limitations](docs/usage.md#data-source-and-coverage).
 
+The latest published release, `v0.4.3`, predates NOBIL and Norwegian/Swedish
+translations. Those changes are on `main` and will be included in a later
+release; check the [release notes](https://github.com/matthijssn/ha_curbcharge/releases)
+before relying on them in an installed version.
+
 ## Installation
 
 ### HACS (default catalog)

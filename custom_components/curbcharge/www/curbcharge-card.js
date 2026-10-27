@@ -730,6 +730,13 @@ class CurbChargeCard extends HTMLElement {
       return;
     }
 
+    const openDetails = new Map(
+      [...this.shadowRoot.querySelectorAll("details")].map((details) => [
+        details.dataset.focusKey,
+        details.open,
+      ]),
+    );
+    const focusedKey = this.shadowRoot.activeElement?.dataset.focusKey;
     const data = buildCardData(
       this._hass.states[this._config.entity],
       this._hass,
@@ -890,8 +897,10 @@ class CurbChargeCard extends HTMLElement {
     if (data.detailsRows.length > 0) {
       const details = document.createElement("details");
       details.className = "details";
-      details.open = false;
+      details.dataset.focusKey = "details";
+      details.open = openDetails.get("details") ?? false;
       const summary = document.createElement("summary");
+      summary.dataset.focusKey = "details-summary";
       summary.textContent = data.detailsLabel;
       const detailsGrid = document.createElement("div");
       detailsGrid.className = "details-grid";
@@ -905,14 +914,17 @@ class CurbChargeCard extends HTMLElement {
     if (data.navigationLinks.length > 0) {
       const navigation = document.createElement("details");
       navigation.className = "navigation";
-      navigation.open = false;
+      navigation.dataset.focusKey = "navigation";
+      navigation.open = openDetails.get("navigation") ?? false;
       const summary = document.createElement("summary");
+      summary.dataset.focusKey = "navigation-summary";
       summary.textContent = data.navigationLabel;
       const list = document.createElement("ul");
       list.className = "navigation-links";
-      for (const item of data.navigationLinks) {
+      for (const [index, item] of data.navigationLinks.entries()) {
         const row = document.createElement("li");
         const link = document.createElement("a");
+        link.dataset.focusKey = `navigation-link-${index}`;
         link.setAttribute("href", item.url);
         link.setAttribute("target", "_blank");
         link.setAttribute("rel", "noopener noreferrer");
@@ -922,6 +934,12 @@ class CurbChargeCard extends HTMLElement {
       }
       navigation.append(summary, list);
       card.append(navigation);
+    }
+
+    if (focusedKey) {
+      [...this.shadowRoot.querySelectorAll("[data-focus-key]")]
+        .find((element) => element.dataset.focusKey === focusedKey)
+        ?.focus();
     }
   }
 }

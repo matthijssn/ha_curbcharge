@@ -14,20 +14,38 @@ teardown leak. The current-version job runs Home Assistant 2026.10.4 on
 Python 3.14.2; Dependabot keeps that pin reviewable. The current-version test
 run exposes `DeprecationWarning` messages.
 
-Install the Python test tools:
+The supported development environments are Linux:
+
+- Minimum: CPython 3.12, Home Assistant 2024.12.0, and the same pinned test
+  plugin and `pycares` override used by CI:
 
 ```bash
-pip install -r requirements-dev.txt
+python3.12 -m venv .venv-min
+source .venv-min/bin/activate
+python -m pip install --constraint https://raw.githubusercontent.com/home-assistant/core/2024.12.0/homeassistant/package_constraints.txt pytest-homeassistant-custom-component==0.13.190 pycares==4.8.0
+python -m pytest
+deactivate
 ```
 
-Run the Python checks:
+- Current: CPython 3.14.2 and the pinned Home Assistant/tool versions:
 
 ```bash
-pytest --cov=custom_components/curbcharge --cov-fail-under=96
-ruff check .
-ruff format --check .
-mypy
+python3.14 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements-dev.txt
+python -m pytest --cov=custom_components/curbcharge --cov-fail-under=96
+python -m ruff check .
+python -m ruff format --check .
+python -m mypy
+node --test tests/curbcharge-card.test.mjs
 ```
+
+The minimum environment follows the CI constraints file and avoids installing
+the current-development dependency set alongside the older Core release.
+Dependabot reviews the exact current tool pins in `requirements-dev.txt`.
+Native Windows pytest collection is not supported by the Home Assistant test
+plugin because it imports the Unix-only `fcntl` module; run the HA suites in
+Linux/CI. Ruff, MyPy, and Node tests can still be run separately on Windows.
 
 CI also enforces coverage strictly above 95% for each Python module under
 `custom_components/curbcharge`; the package-wide 96% threshold does not replace
@@ -65,9 +83,19 @@ replace it with a template placeholder. To prepare a release, run the
 such as `v0.1.2`. The workflow validates the tag, updates the manifest on a
 `release/vX.Y.Z` branch, and provides a compare link for a pull request.
 
-Review and merge that PR before creating the GitHub release from the same tag
-on `main`. When the release is published, the workflow verifies that the tag
-matches the manifest version and points to a commit on `main`.
+Review and merge that PR before creating a stable tag on `main`. Pushing the tag
+runs `verify_tag`, which checks its exact commit SHA, manifest version, main
+ancestry, and the integration archive contract. The normal `test`, `hassfest`,
+and `hacs` workflows also run for that tag. Publish the GitHub release only
+after all four tag checks pass; publication then runs the existing post-release
+verification as a second check.
+
+Before upgrading an installation, make a Home Assistant backup that includes
+the configuration and `.storage`. If a published release causes a regression,
+pause further promotion, document the affected version, and prepare a corrective
+release with a new tag; never move or reuse a published tag. Restore the backup
+if the previous installation state is needed, and do not downgrade across a
+documented data migration unless the release notes confirm compatibility.
 
 ## Versioning and upgrade compatibility
 
@@ -93,3 +121,45 @@ stored-data format change requires a versioned config-entry migration and
 tests using an existing entry; identity changes need an explicit compatibility
 and migration plan. Include required user actions in both the pull request and
 release notes.
+
+## Provider architecture
+
+`provider.py` defines provider errors and the normalized provider contract;
+`models.py` holds immutable stations, connectors, tariffs, and discovery
+settings. `api.py` implements NDW, while `belgium.py` and `nobil.py` keep
+source-specific behavior in their own adapters. `coordinator.py` owns one
+provider update cycle, and `sensor.py`/`binary_sensor.py` expose normalized
+data. Follow a provider's published terms and limits, add synthetic fixtures
+and offline tests under `tests/`, and do not add live credentials or private
+payloads to tests, issues, or logs.
+
+## Security and external tooling
+
+Security fixes are supported for the latest stable CurbCharge release. Older
+release backports are considered case by case; no response or backport timeline
+is promised. Report privately using [SECURITY.md](../SECURITY.md).
+
+GitHub Actions are pinned by commit SHA and Dependabot reviews updates weekly.
+The pinned HACS validator currently pulls its official `main` container image,
+and Hassfest uses an official image without a version digest. Accept this
+upstream-controlled freshness tradeoff for now; action SHA pinning does not
+make those container contents hermetic. Reassess if upstream publishes stable
+digests or a concrete integrity concern arises.
+
+## Optional validation decisions
+
+| Candidate | Decision | Rationale |
+|---|---|---|
+| Official HA container smoke | Defer | Current HA fixtures cover lifecycle behavior; exact archive checks are being added first. Reassess when a stable, isolated container runner is available. |
+| HA beta | Advisory only after stable smoke | Do not increase the supported minimum or gate normal feature work on beta. |
+| Branch coverage | Selective measurement | Protect changed critical branches; do not introduce a higher global threshold. |
+| Browser/mobile/accessibility automation | Defer | Owner checks for keyboard, theme, narrow layout, and locales remain pending; automate only a demonstrated recurring gap. |
+| CI caching/concurrency | Defer | Measure equivalent full runs before optimizing; never weaken required checks or cancel release validation. |
+| Dependency review, CodeQL, dead-code tooling | Defer | Existing Dependabot, repository security controls, and required checks remain; add tools only for demonstrated value. |
+| Frontend build/lint tooling | Reject for now | The card is one directly served JavaScript file with no runtime dependencies; Node tests are sufficient. |
+
+The next-release HACS install/upgrade and `nb`/`sv` UI smoke checks have not
+been run in this development environment. The owner-run locale gate remains
+pending in [issue #257](https://github.com/matthijssn/ha_curbcharge/issues/257);
+CI, archive validation, and source inspection are not substitutes for that
+evidence.

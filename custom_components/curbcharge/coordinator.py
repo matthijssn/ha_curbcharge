@@ -108,6 +108,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         self.scan_interval_minutes = scan_interval_minutes
         self.include_unknown = include_unknown
         self.favourites = favourites
+        self.entry_id = config_entry.entry_id if config_entry is not None else None
         self.location_resolver = location_resolver
         self.location_movement_threshold_m = location_movement_threshold_m
         self.discovery_filters = discovery_filters or DiscoveryFilterSettings()
