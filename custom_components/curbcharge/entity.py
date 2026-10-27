@@ -307,23 +307,29 @@ def setup_dynamic_station_entities(
                         registry_entry.config_entry_id == entry.entry_id
                         for registry_entry in remaining_entries
                     ):
-                        device = device_registry.async_update_device(
-                            device.id, remove_config_entry_id=entry.entry_id
-                        )
+                        if getattr(device, "parent_device_id", None) is not None:
+                            if not remaining_entries:
+                                device_registry.async_remove_device(device.id)
+                        else:
+                            device = device_registry.async_update_device(
+                                device.id, remove_config_entry_id=entry.entry_id
+                            )
 
-                    get_children = getattr(dr, "async_entries_for_parent_device", None)
-                    has_child_devices = (
-                        bool(get_children(device_registry, device.id))
-                        if get_children is not None and device is not None
-                        else False
-                    )
-                    if (
-                        device is not None
-                        and not device.config_entries
-                        and not remaining_entries
-                        and not has_child_devices
-                    ):
-                        device_registry.async_remove_device(device.id)
+                            get_children = getattr(
+                                dr, "async_entries_for_parent_device", None
+                            )
+                            has_child_devices = (
+                                bool(get_children(device_registry, device.id))
+                                if get_children is not None and device is not None
+                                else False
+                            )
+                            if (
+                                device is not None
+                                and not device.config_entries
+                                and not remaining_entries
+                                and not has_child_devices
+                            ):
+                                device_registry.async_remove_device(device.id)
 
                 known_station_ids.discard(station_id)
                 pending_removals.discard(station_id)
