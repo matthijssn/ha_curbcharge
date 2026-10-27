@@ -1704,7 +1704,7 @@ async def test_belgium_evse_devices_are_children_of_location_and_cleanup_parent(
     use_legacy_via_device,
 ):
     if use_legacy_via_device:
-        monkeypatch.setattr(dr, "ChildDeviceInfo", None)
+        monkeypatch.setattr(dr, "ChildDeviceInfo", None, raising=False)
 
     sample_station = sample_stations[0]
     assert sample_station.location is not None
