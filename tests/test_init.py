@@ -1566,6 +1566,19 @@ async def test_overlapping_station_entries_keep_independent_entities_and_cleanup
 
     removed_entry = setup_order[0]
     survivor_entry = setup_order[1]
+    removed_device = _device_for_identifier(
+        device_registry,
+        removed_entry.entry_id,
+        station_device_identifier(station.provider, station.provider_id),
+    )
+    assert removed_device is not None
+    orphan = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{station.provider}_{station.provider_id}_orphan",
+        config_entry=removed_entry,
+        device_id=removed_device.id,
+    )
     removed_coordinator = removed_entry.runtime_data
     await removed_coordinator.async_refresh()
     await hass.async_block_till_done()
@@ -1595,6 +1608,7 @@ async def test_overlapping_station_entries_keep_independent_entities_and_cleanup
             registry, removed_entry.entry_id
         )
     }
+    assert registry.async_get_entity_id("sensor", DOMAIN, orphan.unique_id) is None
     assert survivor_station_id in {
         entity.unique_id
         for entity in er.async_entries_for_config_entry(
@@ -1677,9 +1691,21 @@ async def test_stations_with_the_same_address_get_unique_device_names(
     [False, True],
     ids=("cleanup-parent", "parent-already-removed"),
 )
+@pytest.mark.parametrize(
+    "use_legacy_via_device",
+    [False, True],
+    ids=("child-device-info", "legacy-via-device"),
+)
 async def test_belgium_evse_devices_are_children_of_location_and_cleanup_parent(
-    hass, monkeypatch, sample_stations, remove_parent_before_final_cleanup
+    hass,
+    monkeypatch,
+    sample_stations,
+    remove_parent_before_final_cleanup,
+    use_legacy_via_device,
 ):
+    if use_legacy_via_device:
+        monkeypatch.setattr(dr, "ChildDeviceInfo", None)
+
     sample_station = sample_stations[0]
     assert sample_station.location is not None
     location = replace(
@@ -2409,6 +2435,29 @@ async def test_reconfigure_preserves_legacy_entity_ids_and_custom_names(
     assert aggregate.name == "My best charger"
     assert station_entity.entity_id == legacy_station.entity_id
     assert station_entity.name == "My station availability"
+
+
+def test_migrate_entity_unique_id_keeps_existing_target_identity(hass):
+    entry = _entry()
+    entry.add_to_hass(hass)
+    registry = er.async_get(hass)
+    legacy = registry.async_get_or_create(
+        "sensor", DOMAIN, "legacy-unique-id", config_entry=entry
+    )
+    existing = registry.async_get_or_create(
+        "sensor", DOMAIN, "current-unique-id", config_entry=entry
+    )
+
+    curbcharge_entity.migrate_entity_unique_id(
+        hass, entry, "sensor", "legacy-unique-id", "current-unique-id"
+    )
+
+    assert registry.async_get_entity_id("sensor", DOMAIN, "legacy-unique-id") == (
+        legacy.entity_id
+    )
+    assert registry.async_get_entity_id("sensor", DOMAIN, "current-unique-id") == (
+        existing.entity_id
+    )
 
 
 @pytest.mark.asyncio
