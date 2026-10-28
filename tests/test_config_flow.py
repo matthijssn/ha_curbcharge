@@ -711,6 +711,7 @@ async def test_reauth_replaces_nobil_key_and_preserves_unique_id(hass, monkeypat
         result["description_placeholders"]["nobil_api_url"]
         == config_flow.NOBIL_API_KEY_INFO_URL
     )
+    assert result["description_placeholders"]["name"] == "Mock Title"
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_API_TOKEN: "replacement-nobil-key"}
     )
