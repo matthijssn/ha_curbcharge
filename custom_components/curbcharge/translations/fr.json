@@ -160,7 +160,11 @@
   "options": {
     "step": {
       "init": {
-        "title": "Options CurbCharge"
+        "title": "Options CurbCharge",
+        "menu_options": {
+          "general": "Paramètres généraux",
+          "personalization": "Personnalisation"
+        }
       },
       "general": {
         "title": "Paramètres généraux",

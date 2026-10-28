@@ -160,7 +160,11 @@
   "options": {
     "step": {
       "init": {
-        "title": "CurbCharge-Optionen"
+        "title": "CurbCharge-Optionen",
+        "menu_options": {
+          "general": "Allgemeine Einstellungen",
+          "personalization": "Personalisierung"
+        }
       },
       "general": {
         "title": "Allgemeine Einstellungen",
