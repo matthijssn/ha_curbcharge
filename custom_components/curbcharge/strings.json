@@ -117,7 +117,7 @@
       },
       "nobil_credentials": {
         "title": "Connect to NOBIL",
-        "description": "Enter your own NOBIL API key. For details on obtaining a key, visit [NOBIL's API page](https://info.nobil.no/api). It is stored only in this config entry and redacted from diagnostics.",
+        "description": "Enter your own NOBIL API key. For details on obtaining a key, visit [NOBIL's API page]({nobil_api_url}). It is stored only in this config entry and redacted from diagnostics.",
         "data": {
           "api_token": "NOBIL API key"
         },
@@ -127,7 +127,7 @@
       },
       "nobil_reauth_confirm": {
         "title": "Update NOBIL credentials",
-        "description": "Enter a replacement NOBIL API key. For details on obtaining a key, visit [NOBIL's API page](https://info.nobil.no/api).",
+        "description": "Enter a replacement NOBIL API key. For details on obtaining a key, visit [NOBIL's API page]({nobil_api_url}).",
         "data": {
           "api_token": "NOBIL API key"
         },

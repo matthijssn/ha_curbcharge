@@ -117,7 +117,7 @@
       },
       "nobil_credentials": {
         "title": "Se connecter à NOBIL",
-        "description": "Saisissez votre propre clé API NOBIL. Consultez la [page API de NOBIL](https://info.nobil.no/api) pour savoir comment en obtenir une. Elle est stockée uniquement dans cette entrée et masquée des diagnostics.",
+        "description": "Saisissez votre propre clé API NOBIL. Consultez la [page API de NOBIL]({nobil_api_url}) pour savoir comment en obtenir une. Elle est stockée uniquement dans cette entrée et masquée des diagnostics.",
         "data": {
           "api_token": "Clé API NOBIL"
         },
@@ -127,7 +127,7 @@
       },
       "nobil_reauth_confirm": {
         "title": "Mettre à jour les identifiants NOBIL",
-        "description": "Saisissez une nouvelle clé API NOBIL. Consultez la [page API de NOBIL](https://info.nobil.no/api) pour savoir comment en obtenir une.",
+        "description": "Saisissez une nouvelle clé API NOBIL. Consultez la [page API de NOBIL]({nobil_api_url}) pour savoir comment en obtenir une.",
         "data": {
           "api_token": "Clé API NOBIL"
         },

@@ -117,7 +117,7 @@
       },
       "nobil_credentials": {
         "title": "Mit NOBIL verbinden",
-        "description": "Geben Sie Ihren eigenen NOBIL-API-Schlüssel ein. Informationen zur Beantragung finden Sie auf der [NOBIL-API-Seite](https://info.nobil.no/api). Er wird nur in diesem Konfigurationseintrag gespeichert und in Diagnosedaten geschwärzt.",
+        "description": "Geben Sie Ihren eigenen NOBIL-API-Schlüssel ein. Informationen zur Beantragung finden Sie auf der [NOBIL-API-Seite]({nobil_api_url}). Er wird nur in diesem Konfigurationseintrag gespeichert und in Diagnosedaten geschwärzt.",
         "data": {
           "api_token": "NOBIL-API-Schlüssel"
         },
@@ -127,7 +127,7 @@
       },
       "nobil_reauth_confirm": {
         "title": "NOBIL-Zugangsdaten aktualisieren",
-        "description": "Geben Sie einen Ersatz-NOBIL-API-Schlüssel ein. Informationen zur Beantragung finden Sie auf der [NOBIL-API-Seite](https://info.nobil.no/api).",
+        "description": "Geben Sie einen Ersatz-NOBIL-API-Schlüssel ein. Informationen zur Beantragung finden Sie auf der [NOBIL-API-Seite]({nobil_api_url}).",
         "data": {
           "api_token": "NOBIL-API-Schlüssel"
         },

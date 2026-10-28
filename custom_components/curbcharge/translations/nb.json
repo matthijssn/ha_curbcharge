@@ -117,7 +117,7 @@
       },
       "nobil_credentials": {
         "title": "Koble til NOBIL",
-        "description": "Skriv inn din egen API-nøkkel fra NOBIL. Se [NOBILs API-side](https://info.nobil.no/api) for informasjon om hvordan du får en nøkkel. Den lagres bare i denne konfigurasjonsoppføringen og skjules i diagnostikken.",
+        "description": "Skriv inn din egen API-nøkkel fra NOBIL. Se [NOBILs API-side]({nobil_api_url}) for informasjon om hvordan du får en nøkkel. Den lagres bare i denne konfigurasjonsoppføringen og skjules i diagnostikken.",
         "data": {
           "api_token": "API-nøkkel fra NOBIL"
         },
@@ -127,7 +127,7 @@
       },
       "nobil_reauth_confirm": {
         "title": "Oppdater påloggingsinformasjonen for NOBIL",
-        "description": "Skriv inn en ny API-nøkkel fra NOBIL. Se [NOBILs API-side](https://info.nobil.no/api) for informasjon om hvordan du får en nøkkel.",
+        "description": "Skriv inn en ny API-nøkkel fra NOBIL. Se [NOBILs API-side]({nobil_api_url}) for informasjon om hvordan du får en nøkkel.",
         "data": {
           "api_token": "API-nøkkel fra NOBIL"
         },
