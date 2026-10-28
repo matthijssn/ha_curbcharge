@@ -1,0 +1,50 @@
+{
+  "total_results": 1,
+  "fuel_stations": [
+    {
+      "id": 990001,
+      "fuel_type_code": "ELEC",
+      "access_code": "public",
+      "country": "US",
+      "station_name": "Synthetic Public Charging Station",
+      "street_address": "100 Example Avenue",
+      "city": "Denver",
+      "state": "CO",
+      "zip": "80202",
+      "latitude": 39.743078,
+      "longitude": -105.152278,
+      "ev_network": "Synthetic Network",
+      "status_code": "E",
+      "updated_at": "2026-10-28T12:00:00Z",
+      "ev_level1_evse_num": 0,
+      "ev_level2_evse_num": 2,
+      "ev_dc_fast_num": 3,
+      "ev_charging_units": [
+        {
+          "network": "Synthetic Network",
+          "connectors": {
+            "J1772": {
+              "power_kw": 7.2,
+              "port_count": 2
+            }
+          },
+          "port_count": 2,
+          "charging_level": "2",
+          "funding_sources": []
+        },
+        {
+          "network": "Synthetic Network",
+          "connectors": {
+            "J1772COMBO": {
+              "power_kw": 150.0,
+              "port_count": 3
+            }
+          },
+          "port_count": 3,
+          "charging_level": "dc_fast",
+          "funding_sources": []
+        }
+      ]
+    }
+  ]
+}

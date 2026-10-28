@@ -44,9 +44,9 @@ from custom_components.curbcharge.models import (
 
 
 def test_canonical_connector_ids_cover_ndw_selector_codes():
-    assert {connector_type.value for connector_type in ConnectorTypeId} == set(
-        NDW_CONNECTOR_TYPE_CODES
-    )
+    assert set(NDW_CONNECTOR_TYPE_CODES) <= {
+        connector_type.value for connector_type in ConnectorTypeId
+    }
 
 
 def _personalization_config(**overrides):

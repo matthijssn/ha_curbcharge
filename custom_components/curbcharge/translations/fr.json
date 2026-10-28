@@ -134,6 +134,26 @@
         "data_description": {
           "api_token": "La clé est stockée dans cette entrée et masquée des diagnostics."
         }
+      },
+      "afdc_credentials": {
+        "title": "Se connecter à l'AFDC (États-Unis)",
+        "description": "Saisissez votre propre clé API NLR. Obtenez une clé gratuite sur le [NLR Developer Network]({afdc_api_url}). Elle est stockée uniquement dans cette entrée et masquée des diagnostics.",
+        "data": {
+          "api_token": "Clé API NLR"
+        },
+        "data_description": {
+          "api_token": "Utilisez uniquement une clé que vous êtes autorisé à utiliser. Ne la partagez pas dans les rapports de problèmes."
+        }
+      },
+      "afdc_reauth_confirm": {
+        "title": "Mettre à jour les identifiants AFDC",
+        "description": "Saisissez une nouvelle clé API NLR. Obtenez une clé gratuite sur le [NLR Developer Network]({afdc_api_url}).",
+        "data": {
+          "api_token": "Clé API NLR"
+        },
+        "data_description": {
+          "api_token": "La clé est stockée dans cette entrée et masquée des diagnostics."
+        }
       }
     },
     "error": {
@@ -143,6 +163,7 @@
       "invalid_entity_location": "Sélectionnez une entité qui fournit actuellement des coordonnées de latitude et longitude valides.",
       "invalid_api_token": "Saisissez un jeton API ASCII imprimable non vide.",
       "invalid_nobil_api_key": "Saisissez une clé API NOBIL imprimable non vide.",
+      "invalid_afdc_api_key": "Saisissez une clé API NLR imprimable non vide.",
       "invalid_discovery_filters": "Saisissez des filtres valides. La puissance minimale doit être un nombre fini positif.",
       "invalid_response": "Le fournisseur a renvoyé des données dans un format inattendu.",
       "location_not_configured": "Les coordonnées du domicile ne sont pas configurées dans Home Assistant.",
@@ -154,7 +175,8 @@
       "location_not_configured": "La position de recherche n'est pas configurée.",
       "reconfigure_successful": "La position de recherche a été mise à jour.",
       "reauth_successful": "Les identifiants Eco-Movement ont été mis à jour.",
-      "nobil_reauth_successful": "La clé API NOBIL a été mise à jour."
+      "nobil_reauth_successful": "La clé API NOBIL a été mise à jour.",
+      "afdc_reauth_successful": "La clé API NLR a été mise à jour."
     }
   },
   "options": {
@@ -314,7 +336,14 @@
         "iec_60309_2_single_16": "CEE 16 A (monophasé)",
         "iec_60309_2_three_16": "CEE 16 A (triphasé)",
         "iec_60309_2_three_32": "CEE 32 A (triphasé)",
-        "domestic_a": "Prise domestique type A (NEMA 1-15)"
+        "domestic_a": "Prise domestique type A (NEMA 1-15)",
+        "iec_62196_t1": "Type 1 (J1772)",
+        "iec_62196_t1_combo": "CCS Combo 1",
+        "tesla": "Tesla",
+        "nema_5_15": "NEMA 5-15",
+        "nema_5_20": "NEMA 5-20",
+        "nema_14_50": "NEMA 14-50",
+        "sae_j3271": "SAE J3271 (MCS)"
       }
     },
     "personalization_ranking_preset": {
@@ -337,7 +366,8 @@
         "ndw_dot_nl": "NDW DOT-NL",
         "eco_movement_be": "Eco-Movement Belgique (aperçu)",
         "nobil_no": "NOBIL Norvège",
-        "nobil_se": "NOBIL Suède"
+        "nobil_se": "NOBIL Suède",
+        "afdc_us": "AFDC États-Unis"
       }
     }
   },

@@ -19,6 +19,7 @@ from zoneinfo import ZoneInfo
 import aiohttp
 from homeassistant.core import HomeAssistant
 
+from .afdc import create_afdc_provider
 from .belgium import create_belgium_provider
 from .const import (
     COUNTRY_NL,
@@ -27,6 +28,7 @@ from .const import (
     MAX_BBOX_AREA_DEG2,
     MIN_SEARCH_RADIUS_M,
     NOBIL_PROVIDER_IDS,
+    PROVIDER_AFDC_US,
     PROVIDER_API_URL,
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NAME,
@@ -420,6 +422,10 @@ def create_provider(
     token: str | None = None,
 ) -> BaseChargingProvider:
     """Return the requested implemented provider."""
+    if provider_id == PROVIDER_AFDC_US:
+        if not token:
+            raise AuthenticationError("An AFDC API key is required")
+        return create_afdc_provider(session, token, hass)
     if provider_id == PROVIDER_NDW_DOT_NL:
         limiter = _shared_ndw_request_limiter(hass) if hass is not None else None
         return NdwDotNlProvider(session, limiter)

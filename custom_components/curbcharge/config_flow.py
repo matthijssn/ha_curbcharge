@@ -18,9 +18,11 @@ if TYPE_CHECKING:
 else:
     from homeassistant.data_entry_flow import FlowResult
 
+from .afdc import is_valid_afdc_api_key
 from .api import create_provider
 from .belgium import is_valid_belgium_api_token
 from .const import (
+    AFDC_API_KEY_SIGNUP_URL,
     CONF_ALLOW_FALLBACK,
     CONF_API_TOKEN,
     CONF_CONNECTOR_TYPE_IDS,
@@ -65,6 +67,7 @@ from .const import (
     NOBIL_API_KEY_INFO_URL,
     NOBIL_PROVIDER_IDS,
     PERSONALIZATION_PROFILE_VERSION,
+    PROVIDER_AFDC_US,
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NDW_DOT_NL,
     PROVIDER_NOBIL_NO,
@@ -169,6 +172,17 @@ def nobil_credentials_schema() -> FlowSchema:
     )
 
 
+def afdc_credentials_schema() -> FlowSchema:
+    """Return a password field for the user's NLR API key."""
+    return vol.Schema(
+        {
+            vol.Required(CONF_API_TOKEN): selector.TextSelector(
+                selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+            )
+        }
+    )
+
+
 def _scan_interval_field(default: Any) -> tuple[Any, Any]:
     return (
         vol.Required(CONF_SCAN_INTERVAL, default=default),
@@ -222,6 +236,7 @@ def station_options_schema(
                         PROVIDER_ECO_MOVEMENT_BE,
                         PROVIDER_NOBIL_NO,
                         PROVIDER_NOBIL_SE,
+                        PROVIDER_AFDC_US,
                     ],
                     mode=selector.SelectSelectorMode.DROPDOWN,
                     translation_key="provider",
@@ -652,6 +667,8 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return await self.async_step_reauth_confirm()
         if provider_id in NOBIL_PROVIDER_IDS:
             return await self.async_step_nobil_reauth_confirm()
+        if provider_id == PROVIDER_AFDC_US:
+            return await self.async_step_afdc_reauth_confirm()
         return self.async_abort(reason="unsupported_provider")
 
     async def async_step_reauth_confirm(
@@ -766,6 +783,67 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             entry,
             data=data,
             reason="nobil_reauth_successful",
+        )
+
+    async def async_step_afdc_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Validate and save a replacement AFDC/NLR API key."""
+        entry = self._get_reauth_entry()
+        placeholders = {"afdc_api_url": AFDC_API_KEY_SIGNUP_URL}
+        if user_input is None:
+            return _show_form(
+                self,
+                step_id="afdc_reauth_confirm",
+                data_schema=afdc_credentials_schema(),
+                description_placeholders=placeholders,
+            )
+
+        api_key = user_input[CONF_API_TOKEN]
+        if not is_valid_afdc_api_key(api_key):
+            return _show_form(
+                self,
+                step_id="afdc_reauth_confirm",
+                data_schema=afdc_credentials_schema(),
+                errors={"base": "invalid_afdc_api_key"},
+                description_placeholders=placeholders,
+            )
+
+        options = {**entry.data, **entry.options}
+        provider_id = options.get(CONF_PROVIDER, PROVIDER_NDW_DOT_NL)
+        location = _entry_location(self.hass, entry.data)
+        if provider_id != PROVIDER_AFDC_US:
+            return self.async_abort(reason="unsupported_provider")
+        if location is None:
+            return self.async_abort(reason="location_not_configured")
+
+        try:
+            provider = create_provider(
+                provider_id,
+                async_get_clientsession(self.hass),
+                self.hass,
+                api_key,
+            )
+            await provider.async_validate_connection(
+                location[0],
+                location[1],
+                int(options.get(CONF_SEARCH_RADIUS, DEFAULT_SEARCH_RADIUS_M)),
+            )
+        except ChargingProviderError as err:
+            return _show_form(
+                self,
+                step_id="afdc_reauth_confirm",
+                data_schema=afdc_credentials_schema(),
+                errors={"base": _flow_error(err)},
+                description_placeholders=placeholders,
+            )
+
+        data = dict(entry.data)
+        data[CONF_API_TOKEN] = api_key
+        return self._update_entry_and_abort(
+            entry,
+            data=data,
+            reason="afdc_reauth_successful",
         )
 
     async def async_step_reconfigure(
@@ -1009,6 +1087,8 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return await self.async_step_belgium_credentials()
             if provider_id in NOBIL_PROVIDER_IDS:
                 return await self.async_step_nobil_credentials()
+            if provider_id == PROVIDER_AFDC_US:
+                return await self.async_step_afdc_credentials()
             return await self.async_step_discovery_filters()
 
         return _show_form(
@@ -1089,6 +1169,30 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
         return await self._async_validate_and_create_entry(api_key)
 
+    async def async_step_afdc_credentials(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Collect and validate the user's AFDC/NLR API key."""
+        placeholders = {"afdc_api_url": AFDC_API_KEY_SIGNUP_URL}
+        if user_input is None:
+            return _show_form(
+                self,
+                step_id="afdc_credentials",
+                data_schema=afdc_credentials_schema(),
+                description_placeholders=placeholders,
+            )
+
+        api_key = user_input[CONF_API_TOKEN]
+        if not is_valid_afdc_api_key(api_key):
+            return _show_form(
+                self,
+                step_id="afdc_credentials",
+                data_schema=afdc_credentials_schema(),
+                errors={"base": "invalid_afdc_api_key"},
+                description_placeholders=placeholders,
+            )
+        return await self._async_validate_and_create_entry(api_key)
+
     async def _async_validate_and_create_entry(
         self, token: str | None = None
     ) -> FlowResult:
@@ -1122,6 +1226,14 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data_schema=nobil_credentials_schema(),
                     errors={"base": _flow_error(err)},
                     description_placeholders={"nobil_api_url": NOBIL_API_KEY_INFO_URL},
+                )
+            if self._provider_id == PROVIDER_AFDC_US:
+                return _show_form(
+                    self,
+                    step_id="afdc_credentials",
+                    data_schema=afdc_credentials_schema(),
+                    errors={"base": _flow_error(err)},
+                    description_placeholders={"afdc_api_url": AFDC_API_KEY_SIGNUP_URL},
                 )
             return _show_form(
                 self,

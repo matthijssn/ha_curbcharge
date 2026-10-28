@@ -49,9 +49,16 @@ class ConnectorStatus(StrEnum):
 class ConnectorTypeId(StrEnum):
     """Provider-independent identifiers for recognized connector standards."""
 
+    TYPE_1 = "IEC_62196_T1"
     TYPE_2 = "IEC_62196_T2"
+    CCS_COMBO_1 = "IEC_62196_T1_COMBO"
     CCS_COMBO_2 = "IEC_62196_T2_COMBO"
     CHADEMO = "CHADEMO"
+    TESLA = "TESLA"
+    NEMA_5_15 = "NEMA_5_15"
+    NEMA_5_20 = "NEMA_5_20"
+    NEMA_14_50 = "NEMA_14_50"
+    SAE_J3271 = "SAE_J3271"
     CEE_16A_SINGLE_PHASE = "IEC_60309_2_SINGLE_16"
     CEE_16A_THREE_PHASE = "IEC_60309_2_THREE_16"
     CEE_32A_THREE_PHASE = "IEC_60309_2_THREE_32"
@@ -346,6 +353,7 @@ class ProviderTimestampSource(StrEnum):
     BELGIUM_EVSE_STATUS = "belgium_evse_status"
     BELGIUM_STATIC_FALLBACK = "belgium_static_fallback"
     NOBIL = "nobil"
+    AFDC = "afdc"
 
 
 class TariffStatus(StrEnum):
@@ -556,6 +564,7 @@ class ChargingStation:
                 ProviderTimestampSource.NDW_FEATURE,
                 ProviderTimestampSource.BELGIUM_EVSE_STATUS,
                 ProviderTimestampSource.NOBIL,
+                ProviderTimestampSource.AFDC,
             )
             or self.last_updated.utcoffset() is None
             or now.utcoffset() is None

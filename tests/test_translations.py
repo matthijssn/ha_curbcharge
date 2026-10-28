@@ -8,6 +8,15 @@ from typing import Any
 import pytest
 
 SUPPORTED_LANGUAGES = ("en", "nl", "fr", "de", "nb", "sv")
+AFDC_CONNECTOR_TRANSLATION_KEYS = (
+    "iec_62196_t1",
+    "iec_62196_t1_combo",
+    "tesla",
+    "nema_5_15",
+    "nema_5_20",
+    "nema_14_50",
+    "sae_j3271",
+)
 
 
 def _leaf_values(
@@ -68,3 +77,7 @@ def test_translations_match_english_keys_values_and_placeholders(language):
             translated[("options", "step", "init", "menu_options", step_id)]
             == translated[("options", "step", step_id, "title")]
         )
+    for connector_key in AFDC_CONNECTOR_TRANSLATION_KEYS:
+        assert translated[
+            ("selector", "personalization_connector_type", "options", connector_key)
+        ].strip()

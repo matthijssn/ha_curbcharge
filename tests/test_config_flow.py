@@ -46,6 +46,7 @@ from custom_components.curbcharge.const import (
     LOCATION_MANUAL,
     NDW_CONNECTOR_TYPE_CODES,
     PERSONALIZATION_PROFILE_VERSION,
+    PROVIDER_AFDC_US,
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NDW_DOT_NL,
     PROVIDER_NOBIL_NO,
@@ -619,6 +620,105 @@ async def test_nobil_config_flow_keeps_key_form_open_on_auth_failure(hass, monke
 
 
 @pytest.mark.asyncio
+async def test_afdc_config_flow_stores_end_user_key_in_config_entry(hass, monkeypatch):
+    hass.config.latitude = 39.74
+    hass.config.longitude = -105.15
+    provider = FakeProvider()
+    calls: list[tuple[object, ...]] = []
+
+    def create_provider(*args):
+        calls.append(args)
+        return provider
+
+    monkeypatch.setattr(config_flow, "create_provider", create_provider)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_HOME}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _station_options(PROVIDER_AFDC_US)
+    )
+
+    assert result["step_id"] == "afdc_credentials"
+    assert result["description_placeholders"]["afdc_api_url"] == (
+        config_flow.AFDC_API_KEY_SIGNUP_URL
+    )
+    api_key = "end-user-afdc-key"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: api_key}
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_PROVIDER] == PROVIDER_AFDC_US
+    assert result["data"][CONF_API_TOKEN] == api_key
+    assert CONF_API_TOKEN not in result["result"].options
+    assert provider.validation_calls == [(39.74, -105.15, 500)]
+    assert calls[0][0] == PROVIDER_AFDC_US
+    assert calls[0][2:] == (hass, api_key)
+
+
+@pytest.mark.asyncio
+async def test_afdc_config_flow_rejects_malformed_key_before_network(hass, monkeypatch):
+    hass.config.latitude = 39.74
+    hass.config.longitude = -105.15
+
+    def fail_provider(*_args):
+        raise AssertionError("Invalid API keys must not reach the provider")
+
+    monkeypatch.setattr(config_flow, "create_provider", fail_provider)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_HOME}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _station_options(PROVIDER_AFDC_US)
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: "bad\nkey"}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "afdc_credentials"
+    assert result["errors"]["base"] == "invalid_afdc_api_key"
+    assert result["description_placeholders"]["afdc_api_url"] == (
+        config_flow.AFDC_API_KEY_SIGNUP_URL
+    )
+
+
+@pytest.mark.asyncio
+async def test_afdc_config_flow_keeps_key_form_open_on_auth_failure(hass, monkeypatch):
+    hass.config.latitude = 39.74
+    hass.config.longitude = -105.15
+    provider = FakeProvider()
+    provider.validation_error = AuthenticationError("private API key")
+    monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_HOME}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _station_options(PROVIDER_AFDC_US)
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: "valid-afdc-key"}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "afdc_credentials"
+    assert result["errors"]["base"] == "auth"
+    assert result["description_placeholders"]["afdc_api_url"] == (
+        config_flow.AFDC_API_KEY_SIGNUP_URL
+    )
+
+
+@pytest.mark.asyncio
 async def test_belgium_config_flow_keeps_token_form_on_auth_failure(hass, monkeypatch):
     hass.config.latitude = 50.85
     hass.config.longitude = 4.35
@@ -757,6 +857,173 @@ async def test_nobil_reauth_rejects_malformed_key_before_network(hass, monkeypat
         == config_flow.NOBIL_API_KEY_INFO_URL
     )
     assert entry.data[CONF_API_TOKEN] == "old-nobil-key"
+
+
+@pytest.mark.asyncio
+async def test_afdc_reauth_replaces_key_and_preserves_unique_id(hass, monkeypatch):
+    hass.config.latitude = 39.74
+    hass.config.longitude = -105.15
+    provider = FakeProvider()
+    monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
+    location_id = config_flow._config_unique_id(PROVIDER_AFDC_US, 39.74, -105.15, 500)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=location_id,
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_HOME,
+            CONF_PROVIDER: PROVIDER_AFDC_US,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+            CONF_API_TOKEN: "old-afdc-key",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reauth", "entry_id": entry.entry_id},
+    )
+    assert result["step_id"] == "afdc_reauth_confirm"
+    assert result["description_placeholders"]["afdc_api_url"] == (
+        config_flow.AFDC_API_KEY_SIGNUP_URL
+    )
+    assert result["description_placeholders"]["name"] == "Mock Title"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: "replacement-afdc-key"}
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "afdc_reauth_successful"
+    assert entry.data[CONF_API_TOKEN] == "replacement-afdc-key"
+    assert entry.unique_id == location_id
+    assert provider.validation_calls == [(39.74, -105.15, 500)]
+
+
+@pytest.mark.asyncio
+async def test_afdc_reauth_rejects_malformed_key_before_network(hass, monkeypatch):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="afdc-search-area",
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_HOME,
+            CONF_PROVIDER: PROVIDER_AFDC_US,
+            CONF_API_TOKEN: "old-afdc-key",
+            CONF_SEARCH_RADIUS: 500,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    def fail_provider(*_args):
+        raise AssertionError("Invalid API keys must not reach the provider")
+
+    monkeypatch.setattr(config_flow, "create_provider", fail_provider)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reauth", "entry_id": entry.entry_id},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: "bad\nkey"}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "afdc_reauth_confirm"
+    assert result["errors"]["base"] == "invalid_afdc_api_key"
+    assert result["description_placeholders"]["afdc_api_url"] == (
+        config_flow.AFDC_API_KEY_SIGNUP_URL
+    )
+    assert entry.data[CONF_API_TOKEN] == "old-afdc-key"
+
+
+@pytest.mark.asyncio
+async def test_afdc_reauth_aborts_when_provider_changed(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="afdc-search-area",
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_HOME,
+            CONF_PROVIDER: PROVIDER_AFDC_US,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_API_TOKEN: "old-afdc-key",
+        },
+        options={CONF_PROVIDER: PROVIDER_NOBIL_NO},
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reauth", "entry_id": entry.entry_id},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: "replacement-afdc-key"}
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "unsupported_provider"
+
+
+@pytest.mark.asyncio
+async def test_afdc_reauth_aborts_without_location(hass, monkeypatch):
+    hass.config.latitude = None
+    hass.config.longitude = None
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="afdc-search-area",
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_HOME,
+            CONF_PROVIDER: PROVIDER_AFDC_US,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_API_TOKEN: "old-afdc-key",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    def fail_provider(*_args):
+        raise AssertionError("Missing location must not reach the provider")
+
+    monkeypatch.setattr(config_flow, "create_provider", fail_provider)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reauth", "entry_id": entry.entry_id},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: "replacement-afdc-key"}
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "location_not_configured"
+
+
+@pytest.mark.asyncio
+async def test_afdc_reauth_keeps_form_open_when_key_is_rejected(hass, monkeypatch):
+    hass.config.latitude = 39.74
+    hass.config.longitude = -105.15
+    provider = FakeProvider()
+    provider.validation_error = AuthenticationError("private API key")
+    monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="afdc-search-area",
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_HOME,
+            CONF_PROVIDER: PROVIDER_AFDC_US,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_API_TOKEN: "old-afdc-key",
+        },
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN,
+        context={"source": "reauth", "entry_id": entry.entry_id},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: "replacement-afdc-key"}
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "afdc_reauth_confirm"
+    assert result["errors"]["base"] == "auth"
+    assert entry.data[CONF_API_TOKEN] == "old-afdc-key"
 
 
 @pytest.mark.asyncio
