@@ -117,7 +117,7 @@
       },
       "nobil_credentials": {
         "title": "Verbinden met NOBIL",
-        "description": "Voer uw eigen NOBIL API-sleutel in. Deze wordt alleen in deze integratie opgeslagen en in diagnostiek afgeschermd.",
+        "description": "Voer uw eigen NOBIL API-sleutel in. Lees op de [NOBIL-API-pagina]({nobil_api_url}) hoe u een sleutel kunt aanvragen. Deze wordt alleen in deze integratie opgeslagen en in diagnostiek afgeschermd.",
         "data": {
           "api_token": "NOBIL API-sleutel"
         },
@@ -127,7 +127,7 @@
       },
       "nobil_reauth_confirm": {
         "title": "NOBIL-inloggegevens wijzigen",
-        "description": "Voer een vervangende NOBIL API-sleutel in.",
+        "description": "Voer een vervangende NOBIL API-sleutel in. Lees op de [NOBIL-API-pagina]({nobil_api_url}) hoe u een sleutel kunt aanvragen.",
         "data": {
           "api_token": "NOBIL API-sleutel"
         },

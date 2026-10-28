@@ -539,6 +539,9 @@ async def test_nobil_config_flow_stores_end_user_key_in_config_entry(
         result["flow_id"], _station_options(provider_id)
     )
     assert result["step_id"] == "nobil_credentials"
+    assert result["description_placeholders"] == {
+        "nobil_api_url": config_flow.NOBIL_API_KEY_INFO_URL
+    }
 
     api_key = "end-user-nobil-key"
     result = await hass.config_entries.flow.async_configure(
@@ -581,6 +584,9 @@ async def test_nobil_config_flow_rejects_malformed_key_before_network(
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "nobil_credentials"
     assert result["errors"]["base"] == "invalid_nobil_api_key"
+    assert result["description_placeholders"] == {
+        "nobil_api_url": config_flow.NOBIL_API_KEY_INFO_URL
+    }
 
 
 @pytest.mark.asyncio
@@ -607,6 +613,9 @@ async def test_nobil_config_flow_keeps_key_form_open_on_auth_failure(hass, monke
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "nobil_credentials"
     assert result["errors"]["base"] == "auth"
+    assert result["description_placeholders"] == {
+        "nobil_api_url": config_flow.NOBIL_API_KEY_INFO_URL
+    }
 
 
 @pytest.mark.asyncio
@@ -698,6 +707,11 @@ async def test_reauth_replaces_nobil_key_and_preserves_unique_id(hass, monkeypat
         context={"source": "reauth", "entry_id": entry.entry_id},
     )
     assert result["step_id"] == "nobil_reauth_confirm"
+    assert (
+        result["description_placeholders"]["nobil_api_url"]
+        == config_flow.NOBIL_API_KEY_INFO_URL
+    )
+    assert result["description_placeholders"]["name"] == "Mock Title"
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_API_TOKEN: "replacement-nobil-key"}
     )
@@ -738,6 +752,10 @@ async def test_nobil_reauth_rejects_malformed_key_before_network(hass, monkeypat
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "nobil_reauth_confirm"
     assert result["errors"]["base"] == "invalid_nobil_api_key"
+    assert (
+        result["description_placeholders"]["nobil_api_url"]
+        == config_flow.NOBIL_API_KEY_INFO_URL
+    )
     assert entry.data[CONF_API_TOKEN] == "old-nobil-key"
 
 
