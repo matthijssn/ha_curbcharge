@@ -58,3 +58,8 @@ def test_translations_match_english_keys_values_and_placeholders(language):
             language,
             path,
         )
+    for step_id in ("nobil_credentials", "nobil_reauth_confirm"):
+        assert (
+            "(https://info.nobil.no/api)"
+            in translated[("config", "step", step_id, "description")]
+        )
