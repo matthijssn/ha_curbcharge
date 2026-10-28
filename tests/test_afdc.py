@@ -5,8 +5,10 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
+import aiohttp
 import pytest
 from homeassistant.core import HomeAssistant
 
@@ -25,6 +27,7 @@ from custom_components.curbcharge.provider import (
     InvalidProviderResponseError,
     ProviderConnectionError,
     ProviderRateLimitError,
+    UnsupportedLocationError,
 )
 
 
@@ -80,6 +83,10 @@ class FakeSession:
 def _sample_payload() -> dict[str, Any]:
     path = Path(__file__).parent / "fixtures" / "afdc_stations_synthetic.json"
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _sample_record() -> dict[str, Any]:
+    return _sample_payload()["fuel_stations"][0]
 
 
 def _provider(
@@ -197,9 +204,11 @@ async def test_afdc_station_status_does_not_infer_connector_availability(
 @pytest.mark.parametrize(
     ("status", "headers", "error_type", "retry_after"),
     [
+        (401, {}, AuthenticationError, None),
         (403, {}, AuthenticationError, None),
         (429, {"Retry-After": "60"}, ProviderRateLimitError, 60),
         (503, {}, ProviderConnectionError, None),
+        (400, {}, InvalidProviderResponseError, None),
     ],
 )
 async def test_afdc_maps_http_errors_without_exposing_credentials(
@@ -228,3 +237,280 @@ async def test_afdc_rejects_malformed_station_collection():
 def test_afdc_rejects_empty_or_nonprintable_api_keys():
     with pytest.raises(ValueError):
         afdc.create_afdc_provider(FakeSession([]), "bad\nkey")
+
+
+def test_afdc_shares_request_limiter_per_home_assistant(hass: HomeAssistant):
+    provider = _provider(FakeSession([]), hass)
+    another_entry_provider = _provider(FakeSession([]), hass)
+
+    assert provider.provider_name == afdc.PROVIDER_AFDC_US_NAME
+    assert provider._request_limiter is another_entry_provider._request_limiter
+
+    hass.data[afdc.DOMAIN][afdc._REQUEST_LIMITER_DATA_KEY] = object()
+    with pytest.raises(RuntimeError):
+        _provider(FakeSession([]), hass)
+
+
+@pytest.mark.asyncio
+async def test_afdc_request_limiter_enforces_interval_and_retry_after(monkeypatch):
+    clock = [100.0]
+    delays: list[float] = []
+
+    async def advance_time(seconds: float) -> None:
+        delays.append(seconds)
+        clock[0] += seconds
+
+    monkeypatch.setattr(afdc, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(afdc.asyncio, "sleep", advance_time)
+    limiter = afdc.AFDCRequestLimiter()
+
+    await limiter.async_wait("first-key")
+    limiter.defer_for_retry_after("first-key", None)
+    limiter.defer_for_retry_after("first-key", 0)
+    limiter.defer_for_retry_after("first-key", -1)
+    limiter.defer_for_retry_after("first-key", 5)
+    await limiter.async_wait("other-key")
+    await limiter.async_wait("first-key")
+    await limiter.async_wait("first-key")
+
+    assert delays == pytest.approx([5, afdc._REQUEST_INTERVAL_SECONDS])
+
+
+@pytest.mark.asyncio
+async def test_afdc_validates_connection_from_a_station_record():
+    provider = _provider(FakeSession([FakeResponse(_sample_payload())]))
+
+    await provider.async_validate_connection(39.743078, -105.152278, 100)
+
+
+@pytest.mark.parametrize(
+    ("latitude", "longitude"),
+    [(float("nan"), 0.0), (True, 0.0), (91.0, 0.0), (0.0, 181.0)],
+)
+@pytest.mark.asyncio
+async def test_afdc_rejects_invalid_search_coordinates(latitude, longitude):
+    provider = _provider(FakeSession([]))
+
+    with pytest.raises(UnsupportedLocationError):
+        await provider.async_validate_connection(latitude, longitude, 100)
+
+
+@pytest.mark.asyncio
+async def test_afdc_rejects_unsupported_search_radius_and_station_limit():
+    provider = _provider(FakeSession([]))
+
+    with pytest.raises(UnsupportedLocationError):
+        await provider.async_validate_connection(39.743078, -105.152278, 0)
+    with pytest.raises(UnsupportedLocationError):
+        await provider.async_get_stations(39.743078, -105.152278, 100, 0)
+
+
+@pytest.mark.asyncio
+async def test_afdc_rejects_favourites_from_another_provider():
+    provider = _provider(FakeSession([]))
+    favourite = FavouriteStationReference(
+        provider="another_provider",
+        provider_id="123",
+        name="Station",
+        latitude=39.743078,
+        longitude=-105.152278,
+    )
+
+    with pytest.raises(InvalidProviderResponseError):
+        await provider.async_get_stations(
+            39.743078, -105.152278, 100, 10, favourites=(favourite,)
+        )
+
+
+@pytest.mark.parametrize(
+    "transport_error",
+    [TimeoutError("timeout"), aiohttp.ClientError("offline"), OSError("offline")],
+)
+@pytest.mark.asyncio
+async def test_afdc_maps_transport_errors(transport_error):
+    provider = _provider(FakeSession([transport_error]))
+
+    with pytest.raises(ProviderConnectionError):
+        await provider.async_validate_connection(39.743078, -105.152278, 100)
+
+
+@pytest.mark.parametrize("body", [b"not json", b"\xff"])
+@pytest.mark.asyncio
+async def test_afdc_rejects_invalid_json(body):
+    provider = _provider(FakeSession([FakeResponse(body)]))
+
+    with pytest.raises(InvalidProviderResponseError):
+        await provider.async_validate_connection(39.743078, -105.152278, 100)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("fuel_type_code", "GAS"),
+        ("country", "CA"),
+        ("access_code", None),
+        ("access_code", "private"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_afdc_ignores_non_public_us_electric_stations(field, value):
+    record = _sample_record()
+    record[field] = value
+    provider = _provider(FakeSession([FakeResponse({"fuel_stations": [record]})]))
+
+    result = await provider.async_get_stations(39.743078, -105.152278, 100, 10)
+
+    assert result.nearby == ()
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("id", True),
+        ("id", -1),
+        ("latitude", True),
+        ("latitude", float("nan")),
+        ("latitude", 91),
+        ("longitude", 181),
+        ("station_name", 123),
+        ("updated_at", "not-a-timestamp"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_afdc_rejects_invalid_station_fields(field, value):
+    record = _sample_record()
+    record[field] = value
+    provider = _provider(FakeSession([FakeResponse({"fuel_stations": [record]})]))
+
+    with pytest.raises(InvalidProviderResponseError):
+        await provider.async_validate_connection(39.743078, -105.152278, 100)
+
+
+@pytest.mark.asyncio
+async def test_afdc_uses_station_id_when_optional_metadata_is_missing():
+    record = _sample_record()
+    record.update(
+        {
+            "station_name": " ",
+            "street_address": None,
+            "city": None,
+            "state": None,
+            "zip": None,
+            "ev_network": None,
+            "updated_at": None,
+        }
+    )
+    provider = _provider(FakeSession([FakeResponse({"fuel_stations": [record]})]))
+
+    result = await provider.async_get_stations(39.743078, -105.152278, 100, 10)
+
+    station = result.nearby[0]
+    assert station.name == "990001"
+    assert station.address is None
+    assert station.operator is None
+    assert station.last_updated is None
+    assert station.last_updated_source is None
+
+
+@pytest.mark.asyncio
+async def test_afdc_ignores_naive_station_update_timestamps():
+    record = _sample_record()
+    record["updated_at"] = "2026-10-28T12:00:00"
+    provider = _provider(FakeSession([FakeResponse({"fuel_stations": [record]})]))
+
+    result = await provider.async_get_stations(39.743078, -105.152278, 100, 10)
+
+    assert result.nearby[0].last_updated is None
+    assert result.nearby[0].last_updated_source is None
+
+
+@pytest.mark.asyncio
+async def test_afdc_maps_aggregate_connector_counts_when_units_are_unavailable():
+    record = _sample_record()
+    record["ev_charging_units"] = []
+    record["ev_level1_evse_num"] = 0
+    record["ev_level2_evse_num"] = 2
+    record["ev_dc_fast_num"] = 1
+    provider = _provider(FakeSession([FakeResponse({"fuel_stations": [record]})]))
+
+    result = await provider.async_get_stations(39.743078, -105.152278, 100, 10)
+
+    station = result.nearby[0]
+    assert station.connector_count_reported
+    assert station.total_connectors == 3
+    assert [connector.power_type for connector in station.connectors] == ["AC", "DC"]
+
+
+@pytest.mark.asyncio
+async def test_afdc_reports_incomplete_fallback_connector_counts():
+    record = _sample_record()
+    record["ev_charging_units"] = [{"connectors": None}]
+    for field, _level, _power_type in afdc._FALLBACK_LEVELS:
+        record[field] = None
+    provider = _provider(FakeSession([FakeResponse({"fuel_stations": [record]})]))
+
+    result = await provider.async_get_stations(39.743078, -105.152278, 100, 10)
+
+    station = result.nearby[0]
+    assert station.connectors == ()
+    assert not station.connector_count_reported
+
+
+@pytest.mark.asyncio
+async def test_afdc_preserves_unknown_connector_types_and_missing_counts():
+    record = _sample_record()
+    record["ev_charging_units"] = [
+        {
+            "charging_level": "future_level",
+            "connectors": {
+                "FUTURE": {"port_count": 1, "power_kw": None},
+                "ZERO": {"port_count": 0},
+                "MISSING": {},
+            },
+        },
+        {"connectors": None},
+    ]
+    provider = _provider(FakeSession([FakeResponse({"fuel_stations": [record]})]))
+
+    result = await provider.async_get_stations(39.743078, -105.152278, 100, 10)
+
+    station = result.nearby[0]
+    assert len(station.connectors) == 1
+    assert station.connectors[0].connector_type == "FUTURE"
+    assert station.connectors[0].connector_type_id is None
+    assert station.connectors[0].power_type is None
+    assert not station.connector_count_reported
+
+
+@pytest.mark.parametrize(
+    "units",
+    [
+        {},
+        [None],
+        [{"connectors": []}],
+        [{"connectors": {"J1772": None}}],
+    ],
+)
+@pytest.mark.asyncio
+async def test_afdc_rejects_malformed_charging_units(units):
+    record = _sample_record()
+    record["ev_charging_units"] = units
+    provider = _provider(FakeSession([FakeResponse({"fuel_stations": [record]})]))
+
+    with pytest.raises(InvalidProviderResponseError):
+        await provider.async_validate_connection(39.743078, -105.152278, 100)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("port_count", -1), ("port_count", True), ("power_kw", -1)],
+)
+@pytest.mark.asyncio
+async def test_afdc_rejects_invalid_connector_values(field, value):
+    record = _sample_record()
+    connector = record["ev_charging_units"][0]["connectors"]["J1772"]
+    connector[field] = value
+    provider = _provider(FakeSession([FakeResponse({"fuel_stations": [record]})]))
+
+    with pytest.raises(InvalidProviderResponseError):
+        await provider.async_validate_connection(39.743078, -105.152278, 100)
