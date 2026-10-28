@@ -62,6 +62,7 @@ from .const import (
     MIN_SCAN_INTERVAL_MINUTES,
     MIN_SEARCH_RADIUS_M,
     NDW_CONNECTOR_TYPE_SELECTOR_OPTIONS,
+    NOBIL_API_KEY_INFO_URL,
     NOBIL_PROVIDER_IDS,
     PERSONALIZATION_PROFILE_VERSION,
     PROVIDER_ECO_MOVEMENT_BE,
@@ -532,12 +533,14 @@ def _show_form(
     step_id: str,
     data_schema: FlowSchema,
     errors: dict[str, str] | None = None,
+    description_placeholders: dict[str, str] | None = None,
 ) -> FlowResult:
     """Show a form using the schema library for the installed Core version."""
     return flow.async_show_form(
         step_id=step_id,
         data_schema=data_schema,
         errors=errors,
+        description_placeholders=description_placeholders,
     )
 
 
@@ -715,6 +718,7 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self,
                 step_id="nobil_reauth_confirm",
                 data_schema=nobil_credentials_schema(),
+                description_placeholders={"nobil_api_url": NOBIL_API_KEY_INFO_URL},
             )
 
         api_key = user_input[CONF_API_TOKEN]
@@ -724,6 +728,7 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 step_id="nobil_reauth_confirm",
                 data_schema=nobil_credentials_schema(),
                 errors={"base": "invalid_nobil_api_key"},
+                description_placeholders={"nobil_api_url": NOBIL_API_KEY_INFO_URL},
             )
 
         options = {**entry.data, **entry.options}
@@ -752,6 +757,7 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 step_id="nobil_reauth_confirm",
                 data_schema=nobil_credentials_schema(),
                 errors={"base": _flow_error(err)},
+                description_placeholders={"nobil_api_url": NOBIL_API_KEY_INFO_URL},
             )
 
         data = dict(entry.data)
@@ -1069,6 +1075,7 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self,
                 step_id="nobil_credentials",
                 data_schema=nobil_credentials_schema(),
+                description_placeholders={"nobil_api_url": NOBIL_API_KEY_INFO_URL},
             )
 
         api_key = user_input[CONF_API_TOKEN]
@@ -1078,6 +1085,7 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 step_id="nobil_credentials",
                 data_schema=nobil_credentials_schema(),
                 errors={"base": "invalid_nobil_api_key"},
+                description_placeholders={"nobil_api_url": NOBIL_API_KEY_INFO_URL},
             )
         return await self._async_validate_and_create_entry(api_key)
 
@@ -1113,6 +1121,7 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     step_id="nobil_credentials",
                     data_schema=nobil_credentials_schema(),
                     errors={"base": _flow_error(err)},
+                    description_placeholders={"nobil_api_url": NOBIL_API_KEY_INFO_URL},
                 )
             return _show_form(
                 self,
