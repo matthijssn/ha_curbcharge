@@ -63,3 +63,8 @@ def test_translations_match_english_keys_values_and_placeholders(language):
             "({nobil_api_url})"
             in translated[("config", "step", step_id, "description")]
         )
+    for step_id in ("general", "personalization"):
+        assert (
+            translated[("options", "step", "init", "menu_options", step_id)]
+            == translated[("options", "step", step_id, "title")]
+        )
