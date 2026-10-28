@@ -134,6 +134,26 @@
         "data_description": {
           "api_token": "The key is stored in this config entry and redacted from diagnostics."
         }
+      },
+      "afdc_credentials": {
+        "title": "Connect to AFDC (United States)",
+        "description": "Enter your own NLR API key. Sign up for a free key at the [NLR Developer Network]({afdc_api_url}). It is stored only in this config entry and redacted from diagnostics.",
+        "data": {
+          "api_token": "NLR API key"
+        },
+        "data_description": {
+          "api_token": "Use only a key you are authorized to use. Do not share it in issue reports."
+        }
+      },
+      "afdc_reauth_confirm": {
+        "title": "Update AFDC credentials",
+        "description": "Enter a replacement NLR API key. Get a free key from the [NLR Developer Network]({afdc_api_url}).",
+        "data": {
+          "api_token": "NLR API key"
+        },
+        "data_description": {
+          "api_token": "The key is stored in this config entry and redacted from diagnostics."
+        }
       }
     },
     "error": {
@@ -143,6 +163,7 @@
       "invalid_entity_location": "Select an entity that currently reports valid latitude and longitude coordinates.",
       "invalid_api_token": "Enter a non-empty printable ASCII API token.",
       "invalid_nobil_api_key": "Enter a non-empty printable NOBIL API key.",
+      "invalid_afdc_api_key": "Enter a non-empty printable NLR API key.",
       "invalid_discovery_filters": "Enter valid discovery filters. Minimum power must be a finite positive number.",
       "invalid_response": "The provider returned data in an unexpected format.",
       "location_not_configured": "Home coordinates are not configured in Home Assistant.",
@@ -154,7 +175,8 @@
       "location_not_configured": "The search location is not configured.",
       "reconfigure_successful": "Search location updated.",
       "reauth_successful": "Eco-Movement credentials updated.",
-      "nobil_reauth_successful": "NOBIL API key updated."
+      "nobil_reauth_successful": "NOBIL API key updated.",
+      "afdc_reauth_successful": "NLR API key updated."
     }
   },
   "options": {
@@ -314,7 +336,14 @@
       "iec_60309_2_single_16": "CEE 16 A (single phase)",
       "iec_60309_2_three_16": "CEE 16 A (three phase)",
       "iec_60309_2_three_32": "CEE 32 A (three phase)",
-      "domestic_a": "Domestic A (NEMA 1-15)"
+      "domestic_a": "Domestic A (NEMA 1-15)",
+      "iec_62196_t1": "Type 1 (J1772)",
+      "iec_62196_t1_combo": "CCS Combo 1",
+      "tesla": "Tesla",
+      "nema_5_15": "NEMA 5-15",
+      "nema_5_20": "NEMA 5-20",
+      "nema_14_50": "NEMA 14-50",
+      "sae_j3271": "SAE J3271 (MCS)"
       }
     },
     "personalization_ranking_preset": {
@@ -337,7 +366,8 @@
         "ndw_dot_nl": "NDW DOT-NL",
         "eco_movement_be": "Eco-Movement Belgium (preview)",
         "nobil_no": "NOBIL Norway",
-        "nobil_se": "NOBIL Sweden"
+        "nobil_se": "NOBIL Sweden",
+        "afdc_us": "AFDC United States"
       }
     }
   },

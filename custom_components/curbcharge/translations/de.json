@@ -134,6 +134,26 @@
         "data_description": {
           "api_token": "Der Schlüssel wird in diesem Konfigurationseintrag gespeichert und in Diagnosedaten geschwärzt."
         }
+      },
+      "afdc_credentials": {
+        "title": "Mit AFDC (USA) verbinden",
+        "description": "Geben Sie Ihren eigenen NLR-API-Schlüssel ein. Einen kostenlosen Schlüssel erhalten Sie im [NLR Developer Network]({afdc_api_url}). Er wird nur in diesem Konfigurationseintrag gespeichert und in Diagnosedaten geschwärzt.",
+        "data": {
+          "api_token": "NLR-API-Schlüssel"
+        },
+        "data_description": {
+          "api_token": "Verwenden Sie nur einen Schlüssel, zu dessen Nutzung Sie berechtigt sind. Teilen Sie ihn nicht in Fehlerberichten."
+        }
+      },
+      "afdc_reauth_confirm": {
+        "title": "AFDC-Zugangsdaten aktualisieren",
+        "description": "Geben Sie einen Ersatz-NLR-API-Schlüssel ein. Einen kostenlosen Schlüssel erhalten Sie im [NLR Developer Network]({afdc_api_url}).",
+        "data": {
+          "api_token": "NLR-API-Schlüssel"
+        },
+        "data_description": {
+          "api_token": "Der Schlüssel wird in diesem Konfigurationseintrag gespeichert und in Diagnosedaten geschwärzt."
+        }
       }
     },
     "error": {
@@ -143,6 +163,7 @@
       "invalid_entity_location": "Wählen Sie eine Entität aus, die aktuell gültige Breiten- und Längengradkoordinaten meldet.",
       "invalid_api_token": "Geben Sie ein nicht leeres, druckbares ASCII-API-Token ein.",
       "invalid_nobil_api_key": "Geben Sie einen nicht leeren, druckbaren NOBIL-API-Schlüssel ein.",
+      "invalid_afdc_api_key": "Geben Sie einen nicht leeren, druckbaren NLR-API-Schlüssel ein.",
       "invalid_discovery_filters": "Geben Sie gültige Filter ein. Die Mindestleistung muss eine endliche positive Zahl sein.",
       "invalid_response": "Der Anbieter hat Daten in einem unerwarteten Format zurückgegeben.",
       "location_not_configured": "Die Home-Assistant-Standortkoordinaten sind nicht konfiguriert.",
@@ -154,7 +175,8 @@
       "location_not_configured": "Der Suchstandort ist nicht konfiguriert.",
       "reconfigure_successful": "Der Suchstandort wurde aktualisiert.",
       "reauth_successful": "Die Eco-Movement-Zugangsdaten wurden aktualisiert.",
-      "nobil_reauth_successful": "Der NOBIL-API-Schlüssel wurde aktualisiert."
+      "nobil_reauth_successful": "Der NOBIL-API-Schlüssel wurde aktualisiert.",
+      "afdc_reauth_successful": "Der NLR-API-Schlüssel wurde aktualisiert."
     }
   },
   "options": {
@@ -314,7 +336,14 @@
         "iec_60309_2_single_16": "CEE 16 A (einphasig)",
         "iec_60309_2_three_16": "CEE 16 A (dreiphasig)",
         "iec_60309_2_three_32": "CEE 32 A (dreiphasig)",
-        "domestic_a": "Haushaltsstecker Typ A (NEMA 1-15)"
+        "domestic_a": "Haushaltsstecker Typ A (NEMA 1-15)",
+        "iec_62196_t1": "Typ 1 (J1772)",
+        "iec_62196_t1_combo": "CCS Combo 1",
+        "tesla": "Tesla",
+        "nema_5_15": "NEMA 5-15",
+        "nema_5_20": "NEMA 5-20",
+        "nema_14_50": "NEMA 14-50",
+        "sae_j3271": "SAE J3271 (MCS)"
       }
     },
     "personalization_ranking_preset": {
@@ -337,7 +366,8 @@
         "ndw_dot_nl": "NDW DOT-NL",
         "eco_movement_be": "Eco-Movement Belgien (Vorschau)",
         "nobil_no": "NOBIL Norwegen",
-        "nobil_se": "NOBIL Schweden"
+        "nobil_se": "NOBIL Schweden",
+        "afdc_us": "AFDC Vereinigte Staaten"
       }
     }
   },

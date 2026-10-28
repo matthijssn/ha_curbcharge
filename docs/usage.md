@@ -107,6 +107,26 @@ provided to end users. NOBIL data are licensed under [CC BY 4.0][cc-by-4.0]:
 charging-station information is provided by [NOBIL][nobil] and [Enova][enova],
 normalized by CurbCharge, with no endorsement implied.
 
+### United States AFDC
+
+The U.S. provider uses the Alternative Fuels Data Center (AFDC) station API
+hosted by the National Laboratory of the Rockies (NLR). During setup, enter an
+API key from the [NLR Developer Network][afdc-api-key]. Signup is free; the key
+is stored only in config-entry data and redacted from diagnostics. NLR's terms
+permit use of its data but prohibit implying DOE/NLR endorsement.
+
+AFDC records include public station location, network, connector/port counts,
+power, station status, and a provider update timestamp. Network data are
+collected through API feeds, CSV imports, or manual entries, so freshness varies
+by network. NLR's standard quota is 1,000 requests per hour per key; CurbCharge
+shares request pacing and `Retry-After` cooldowns across entries using that key.
+
+AFDC status describes the station record (existing, planned, or temporarily
+unavailable), not whether a connector is currently free. CurbCharge keeps
+connector availability unknown and does not infer a live status from the
+station-level status. AFDC's free-text pricing is not converted into a
+structured tariff.
+
 ## Configuration
 
 Add **CurbCharge** from **Settings → Devices & services → Add integration**.
@@ -127,9 +147,10 @@ select a replacement if an Entity source was renamed or removed.
 
 Choose a polling interval in minutes (default 5; minimum 1), a search radius
 from 100 to 10,000 metres, and a maximum of 1 to 50 stations (default 10), then
-select NDW DOT-NL, the Belgium preview, NOBIL Norway, or NOBIL Sweden. Belgium
-setup asks for the Eco-Movement API token, and NOBIL setup asks for your NOBIL
-API key; each is validated before creating the entry.
+select NDW DOT-NL, the Belgium preview, NOBIL Norway, NOBIL Sweden, or AFDC
+United States. Belgium setup asks for the Eco-Movement API token, NOBIL asks for
+a NOBIL API key, and the U.S. AFDC source asks for an NLR API key; each is
+validated before creating the entry.
 You can change the polling interval, radius, station limit, and whether to
 include stations without availability data later in Options. For Entity
 sources, Options also offers a movement threshold that defaults to 100 metres;
@@ -166,8 +187,8 @@ excluded operators, an optional maximum price and currency, a fixed ranking
 preset, fallback, and an unknown-data policy. A maximum price must be a
 nonnegative decimal and include a three-letter currency code.
 
-Enter operator references one per line as `ndw_dot_nl:<cpo_id>` or
-`eco_movement_be:<operator name>`. NDW's `cpo_id` identifies the CPO in its
+Enter operator references one per line as `ndw_dot_nl:<cpo_id>`,
+`eco_movement_be:<operator name>`, or `afdc_us:<network name>`. NDW's `cpo_id` identifies the CPO in its
 published data; see the
 [NDW OCPI data-submission documentation](https://docs.ndw.nu/en/data-uitwisseling/interface-beschrijvingen/dafne-api/dafne_api_supplier/).
 It is used as a provider-scoped key, not a promise that an operator identifier
@@ -175,6 +196,7 @@ can never change; if it changes, the saved preference remains stored but no
 longer matches.
 Belgium currently has no stable operator ID in the available fixture, so its
 names match only after trimming, collapsing whitespace, and case-folding.
+AFDC network names are matched exactly as returned by the station directory.
 These references are saved independently of the current search radius and are
 not fuzzy-matched. The profile is stored for personalization support; existing
 recommendation behavior remains unchanged until a recommendation evaluator
@@ -211,11 +233,12 @@ examples, not captures of a live Home Assistant session.
 ## Supported stations
 
 CurbCharge's supported coverage includes public charging points in the
-Netherlands published by NDW DOT-NL and in Norway and Sweden through NOBIL.
-Belgium DATEX II is available as a preview for authorized users, but is not
-considered release-ready until access, licensing, quotas, and real-payload
-compatibility are verified. CurbCharge reports provider data; it does not
-connect to or control physical chargers.
+Netherlands published by NDW DOT-NL, Norway and Sweden through NOBIL, and the
+United States through AFDC. AFDC provides station-directory data, not live
+connector availability. Belgium DATEX II is available as a preview for
+authorized users, but is not considered release-ready until access, licensing,
+quotas, and real-payload compatibility are verified. CurbCharge reports
+provider data; it does not connect to or control physical chargers.
 An Entity location moves the search center but does not extend provider
 coverage. Each poll still applies the selected provider's geographic coverage,
 configured search radius, and station limit.
@@ -403,12 +426,12 @@ not `off`. These attributes are distinct from the Home Assistant State object's
 
 `provider_timestamp_source` identifies the timestamp as an NDW feature time,
 a Belgium EVSE status time or static fallback, or a timezone-aware NOBIL record
-time. The derived
-`provider_data_age_seconds` is the whole-second age of a dynamic provider
-record, calculated in UTC when coordinator-backed attributes are written; it
-does not tick between polls. A missing or future timestamp, or a Belgium
-static fallback timestamp, yields unknown age (`None`). NOBIL timestamps without
-a timezone are left unknown; they are not assumed to be UTC. A missing NDW
+time, or a timezone-aware AFDC directory-record time. The derived
+`provider_data_age_seconds` is the whole-second age of a provider record with a
+supported timestamp, calculated in UTC when coordinator-backed attributes are
+written; it does not tick between polls. A missing or future timestamp, or a
+Belgium static fallback timestamp, yields unknown age (`None`). NOBIL timestamps
+without a timezone are left unknown; they are not assumed to be UTC. A missing NDW
 timestamp does not invalidate otherwise usable availability data. Malformed
 timestamps are rejected as provider errors.
 
@@ -598,5 +621,6 @@ and restart Home Assistant.
 [belgium-dataset]: https://transportdata.be/en/dataset/public-charging-infrastructure-static-dataset-selected-cpos-datex-ii
 [nobil]: https://nobil.no
 [nobil-api]: https://info.nobil.no/api
+[afdc-api-key]: https://developer.nlr.gov/signup/
 [enova]: https://enova.no/english
 [cc-by-4.0]: https://creativecommons.org/licenses/by/4.0/

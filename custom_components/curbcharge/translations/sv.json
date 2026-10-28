@@ -134,6 +134,26 @@
         "data_description": {
           "api_token": "Nyckeln lagras i den här konfigurationsposten och döljs i diagnostiken."
         }
+      },
+      "afdc_credentials": {
+        "title": "Anslut till AFDC (USA)",
+        "description": "Ange din egen API-nyckel från NLR. Skaffa en kostnadsfri nyckel via [NLR Developer Network]({afdc_api_url}). Den lagras endast i den här konfigurationsposten och döljs i diagnostiken.",
+        "data": {
+          "api_token": "API-nyckel från NLR"
+        },
+        "data_description": {
+          "api_token": "Använd endast en nyckel som du har behörighet att använda. Dela den inte i felrapporter."
+        }
+      },
+      "afdc_reauth_confirm": {
+        "title": "Uppdatera AFDC-inloggningsuppgifter",
+        "description": "Ange en ny API-nyckel från NLR. Skaffa en kostnadsfri nyckel via [NLR Developer Network]({afdc_api_url}).",
+        "data": {
+          "api_token": "API-nyckel från NLR"
+        },
+        "data_description": {
+          "api_token": "Nyckeln lagras i den här konfigurationsposten och döljs i diagnostiken."
+        }
       }
     },
     "error": {
@@ -143,6 +163,7 @@
       "invalid_entity_location": "Välj en entitet som för närvarande rapporterar giltig latitud och longitud.",
       "invalid_api_token": "Ange en API-token som inte är tom och endast innehåller skrivbara ASCII-tecken.",
       "invalid_nobil_api_key": "Ange en API-nyckel från NOBIL som inte är tom och endast innehåller skrivbara tecken.",
+      "invalid_afdc_api_key": "Ange en API-nyckel från NLR som inte är tom och endast innehåller skrivbara tecken.",
       "invalid_discovery_filters": "Ange giltiga filter. Lägsta effekt måste vara ett ändligt, positivt tal.",
       "invalid_response": "Leverantören returnerade data i ett oväntat format.",
       "location_not_configured": "Hemkoordinaterna är inte konfigurerade i Home Assistant.",
@@ -154,7 +175,8 @@
       "location_not_configured": "Sökpositionen är inte konfigurerad.",
       "reconfigure_successful": "Sökpositionen har uppdaterats.",
       "reauth_successful": "Inloggningsuppgifterna för Eco-Movement har uppdaterats.",
-      "nobil_reauth_successful": "API-nyckeln från NOBIL har uppdaterats."
+      "nobil_reauth_successful": "API-nyckeln från NOBIL har uppdaterats.",
+      "afdc_reauth_successful": "API-nyckeln från NLR har uppdaterats."
     }
   },
   "options": {
@@ -314,7 +336,14 @@
         "iec_60309_2_single_16": "CEE 16 A (enfas)",
         "iec_60309_2_three_16": "CEE 16 A (trefas)",
         "iec_60309_2_three_32": "CEE 32 A (trefas)",
-        "domestic_a": "Hushållskontakt A (NEMA 1-15)"
+        "domestic_a": "Hushållskontakt A (NEMA 1-15)",
+        "iec_62196_t1": "Type 1 (J1772)",
+        "iec_62196_t1_combo": "CCS Combo 1",
+        "tesla": "Tesla",
+        "nema_5_15": "NEMA 5-15",
+        "nema_5_20": "NEMA 5-20",
+        "nema_14_50": "NEMA 14-50",
+        "sae_j3271": "SAE J3271 (MCS)"
       }
     },
     "personalization_ranking_preset": {
@@ -337,7 +366,8 @@
         "ndw_dot_nl": "NDW DOT-NL",
         "eco_movement_be": "Eco-Movement Belgien (förhandsversion)",
         "nobil_no": "NOBIL Norge",
-        "nobil_se": "NOBIL Sverige"
+        "nobil_se": "NOBIL Sverige",
+        "afdc_us": "AFDC USA"
       }
     }
   },

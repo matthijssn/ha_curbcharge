@@ -134,6 +134,26 @@
         "data_description": {
           "api_token": "De sleutel wordt in deze integratie opgeslagen en in diagnostiek afgeschermd."
         }
+      },
+      "afdc_credentials": {
+        "title": "Verbinden met AFDC (Verenigde Staten)",
+        "description": "Voer uw eigen NLR API-sleutel in. Vraag gratis een sleutel aan via het [NLR Developer Network]({afdc_api_url}). Deze wordt alleen in deze integratie opgeslagen en in diagnostiek afgeschermd.",
+        "data": {
+          "api_token": "NLR API-sleutel"
+        },
+        "data_description": {
+          "api_token": "Gebruik alleen een sleutel waarvoor u toestemming heeft. Deel deze niet in probleemrapporten."
+        }
+      },
+      "afdc_reauth_confirm": {
+        "title": "AFDC-inloggegevens wijzigen",
+        "description": "Voer een vervangende NLR API-sleutel in. Vraag gratis een sleutel aan via het [NLR Developer Network]({afdc_api_url}).",
+        "data": {
+          "api_token": "NLR API-sleutel"
+        },
+        "data_description": {
+          "api_token": "De sleutel wordt in deze integratie opgeslagen en in diagnostiek afgeschermd."
+        }
       }
     },
     "error": {
@@ -143,6 +163,7 @@
       "invalid_entity_location": "Selecteer een entiteit die momenteel geldige breedte- en lengtegraad rapporteert.",
       "invalid_api_token": "Voer een niet-lege, afdrukbare ASCII-API-token in.",
       "invalid_nobil_api_key": "Voer een niet-lege, afdrukbare NOBIL API-sleutel in.",
+      "invalid_afdc_api_key": "Voer een niet-lege, afdrukbare NLR API-sleutel in.",
       "invalid_discovery_filters": "Voer geldige filters in. Het minimumvermogen moet een eindig positief getal zijn.",
       "invalid_response": "De provider heeft gegevens in een onverwacht formaat geretourneerd.",
       "location_not_configured": "De thuiscoördinaten zijn niet ingesteld in Home Assistant.",
@@ -154,7 +175,8 @@
       "location_not_configured": "De zoeklocatie is niet ingesteld.",
       "reconfigure_successful": "De zoeklocatie is bijgewerkt.",
       "reauth_successful": "De Eco-Movement-inloggegevens zijn bijgewerkt.",
-      "nobil_reauth_successful": "De NOBIL API-sleutel is bijgewerkt."
+      "nobil_reauth_successful": "De NOBIL API-sleutel is bijgewerkt.",
+      "afdc_reauth_successful": "De NLR API-sleutel is bijgewerkt."
     }
   },
   "options": {
@@ -314,7 +336,14 @@
         "iec_60309_2_single_16": "CEE 16 A (eenfase)",
         "iec_60309_2_three_16": "CEE 16 A (driefase)",
         "iec_60309_2_three_32": "CEE 32 A (driefase)",
-        "domestic_a": "Huishoudelijk type A (NEMA 1-15)"
+        "domestic_a": "Huishoudelijk type A (NEMA 1-15)",
+        "iec_62196_t1": "Type 1 (J1772)",
+        "iec_62196_t1_combo": "CCS Combo 1",
+        "tesla": "Tesla",
+        "nema_5_15": "NEMA 5-15",
+        "nema_5_20": "NEMA 5-20",
+        "nema_14_50": "NEMA 14-50",
+        "sae_j3271": "SAE J3271 (MCS)"
       }
     },
     "personalization_ranking_preset": {
@@ -337,7 +366,8 @@
         "ndw_dot_nl": "NDW DOT-NL",
         "eco_movement_be": "Eco-Movement België (preview)",
         "nobil_no": "NOBIL Noorwegen",
-        "nobil_se": "NOBIL Zweden"
+        "nobil_se": "NOBIL Zweden",
+        "afdc_us": "AFDC Verenigde Staten"
       }
     }
   },
