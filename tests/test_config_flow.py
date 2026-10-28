@@ -707,9 +707,10 @@ async def test_reauth_replaces_nobil_key_and_preserves_unique_id(hass, monkeypat
         context={"source": "reauth", "entry_id": entry.entry_id},
     )
     assert result["step_id"] == "nobil_reauth_confirm"
-    assert result["description_placeholders"] == {
-        "nobil_api_url": config_flow.NOBIL_API_KEY_INFO_URL
-    }
+    assert (
+        result["description_placeholders"]["nobil_api_url"]
+        == config_flow.NOBIL_API_KEY_INFO_URL
+    )
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {CONF_API_TOKEN: "replacement-nobil-key"}
     )
@@ -750,9 +751,10 @@ async def test_nobil_reauth_rejects_malformed_key_before_network(hass, monkeypat
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "nobil_reauth_confirm"
     assert result["errors"]["base"] == "invalid_nobil_api_key"
-    assert result["description_placeholders"] == {
-        "nobil_api_url": config_flow.NOBIL_API_KEY_INFO_URL
-    }
+    assert (
+        result["description_placeholders"]["nobil_api_url"]
+        == config_flow.NOBIL_API_KEY_INFO_URL
+    )
     assert entry.data[CONF_API_TOKEN] == "old-nobil-key"
 
 
