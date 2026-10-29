@@ -604,6 +604,16 @@ chosen by the user. See the
 - **A station disappeared:** Temporarily missing stations remain unavailable
   for two successful polls and are removed after the third. Saved favourites
   remain unavailable until returned or unfavourited.
+- **HACS shows a grey "icon not available" tile:** This is an upstream HACS
+  limitation, not a CurbCharge packaging problem. CurbCharge ships its icon
+  inside the integration as Home Assistant 2026.3 and later require, so it
+  renders correctly under **Settings → Devices & services** and on the device
+  pages. The HACS dashboard still resolves icons against the old brands CDN,
+  which no longer accepts entries for custom integrations and answers with a
+  placeholder image instead. See
+  [hacs/integration#5171](https://github.com/hacs/integration/issues/5171);
+  the Marketplace integration in Home Assistant 2026.11 shows the icon in the
+  list view. Nothing needs to be reinstalled or reconfigured.
 
 ## Privacy and diagnostics
 

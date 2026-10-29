@@ -3,6 +3,7 @@
 import json
 import os
 import stat
+import struct
 import tempfile
 import unittest
 import zipfile
@@ -66,6 +67,18 @@ class ReleasePackageTests(unittest.TestCase):
                 for name in inventory["files"]
             )
         )
+
+    def test_brand_icons_keep_the_required_dimensions(self) -> None:
+        for name, expected in (("brand/icon.png", 256), ("brand/icon@2x.png", 512)):
+            with self.subTest(name=name):
+                # ponytail: read the PNG IHDR header instead of adding Pillow;
+                # covers PNG only, which is the only format brand/ may contain.
+                header = (INTEGRATION / name).read_bytes()[:24]
+                self.assertEqual(header[:8], b"\x89PNG\r\n\x1a\n")
+                self.assertEqual(header[12:16], b"IHDR")
+                self.assertEqual(
+                    struct.unpack(">II", header[16:24]), (expected, expected)
+                )
 
     def test_hacs_release_asset_extracts_directly_into_integration_directory(
         self,
