@@ -89,6 +89,17 @@ The package tests reproduce direct release-asset extraction and verify the
 installed files. The committed `www/curbcharge-card.js` is already the runtime
 asset; there is no frontend build step.
 
+Brand images live in `custom_components/curbcharge/brand/` because Home
+Assistant 2026.3 and later serve custom-integration icons from the integration
+itself through `/api/brands/integration/curbcharge/icon.png`. `icon.png` must be
+256 by 256 pixels and `icon@2x.png` 512 by 512; `test_release_package.py`
+enforces both. That pair is the complete set: a missing logo falls back to the
+icon, and the square CurbCharge mark needs no separate `logo.png` or `dark_`
+variant. Do not open a pull request against `home-assistant/brands`; it
+auto-closes custom-integration submissions. The HACS dashboard still reads the
+old brands CDN and therefore shows a placeholder tile until Home Assistant
+2026.11 ([hacs/integration#5171](https://github.com/hacs/integration/issues/5171)).
+
 Build and validate locally:
 
 ```bash
