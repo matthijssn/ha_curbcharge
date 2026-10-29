@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import Any
 
 import pytest
@@ -680,7 +681,7 @@ async def test_finland_tariff_tax_excluded_adds_vat():
 
     station = result.nearby[0]
     assert station.tariff is not None
-    assert station.tariff.price_per_kwh == pytest.approx(1.2)
+    assert station.tariff.price_per_kwh == Decimal("1.2")
 
 
 @pytest.mark.asyncio
