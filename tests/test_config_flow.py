@@ -47,6 +47,7 @@ from custom_components.curbcharge.const import (
     NDW_CONNECTOR_TYPE_CODES,
     PERSONALIZATION_PROFILE_VERSION,
     PROVIDER_AFDC_US,
+    PROVIDER_DIGITRAFFIC_AFIR_FI,
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NDW_DOT_NL,
     PROVIDER_NOBIL_NO,
@@ -715,6 +716,70 @@ async def test_afdc_config_flow_keeps_key_form_open_on_auth_failure(hass, monkey
     assert result["errors"]["base"] == "auth"
     assert result["description_placeholders"]["afdc_api_url"] == (
         config_flow.AFDC_API_KEY_SIGNUP_URL
+    )
+
+
+@pytest.mark.asyncio
+async def test_finland_config_flow_creates_entry_without_credentials(hass, monkeypatch):
+    hass.config.latitude = 60.17
+    hass.config.longitude = 24.94
+    provider = FakeProvider()
+    calls: list[tuple[object, ...]] = []
+
+    def create_provider(*args):
+        calls.append(args)
+        return provider
+
+    monkeypatch.setattr(config_flow, "create_provider", create_provider)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_HOME}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _station_options(PROVIDER_DIGITRAFFIC_AFIR_FI)
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_PROVIDER] == PROVIDER_DIGITRAFFIC_AFIR_FI
+    assert CONF_API_TOKEN not in result["data"]
+    assert provider.validation_calls == [(60.17, 24.94, 500)]
+    assert calls[0][0] == PROVIDER_DIGITRAFFIC_AFIR_FI
+    assert calls[0][2:] == (hass, None)
+
+
+@pytest.mark.asyncio
+async def test_finland_config_flow_reshows_station_options_on_validation_failure(
+    hass, monkeypatch
+):
+    hass.config.latitude = 60.17
+    hass.config.longitude = 24.94
+    provider = FakeProvider()
+    provider.validation_error = ProviderConnectionError("private connection details")
+    monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_HOME}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _station_options(PROVIDER_DIGITRAFFIC_AFIR_FI)
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "station_options"
+    assert result["errors"]["base"] == "cannot_connect"
+    assert (
+        result["data_schema"](
+            {
+                CONF_SEARCH_RADIUS: 500,
+                CONF_MAX_STATIONS: 10,
+            }
+        )[CONF_PROVIDER]
+        == PROVIDER_DIGITRAFFIC_AFIR_FI
     )
 
 

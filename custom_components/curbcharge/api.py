@@ -30,6 +30,7 @@ from .const import (
     NOBIL_PROVIDER_IDS,
     PROVIDER_AFDC_US,
     PROVIDER_API_URL,
+    PROVIDER_DIGITRAFFIC_AFIR_FI,
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NAME,
     PROVIDER_NDW_DOT_NL,
@@ -37,6 +38,7 @@ from .const import (
     TARIFF_FEED_URL,
     TARIFF_REQUEST_TIMEOUT,
 )
+from .finland import create_finland_provider
 from .geography import distance_m
 from .models import (
     ChargingConnector,
@@ -435,6 +437,8 @@ def create_provider(
         if not token:
             raise AuthenticationError("A NOBIL API key is required")
         return create_nobil_provider(session, provider_id, token, hass)
+    if provider_id == PROVIDER_DIGITRAFFIC_AFIR_FI:
+        return create_finland_provider(session, hass)
     raise UnsupportedProviderError("The configured charging provider is unsupported")
 
 
