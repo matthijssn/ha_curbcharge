@@ -118,6 +118,8 @@ post-release verifier, which downloads and validates the attached asset. The
 existing manual version-preparation job remains separately write-enabled to
 push its reviewed manifest branch; tag artifact creation uses read-only
 permissions, and only the draft-release job needs write permission.
+The draft-release step selects its repository through `GH_REPO`, so it can
+promote the validated artifact without checking out or rebuilding the source.
 
 The HACS ZIP settings are versioned with the selected release. Earlier source
 releases remain unchanged and have no custom ZIP asset; the first release whose
