@@ -17,6 +17,8 @@ from custom_components.curbcharge.const import (
     PROVIDER_DIGITRAFFIC_AFIR_FI,
 )
 from custom_components.curbcharge.models import (
+    ChargingStation,
+    ChargingTariff,
     ConnectorStatus,
     ConnectorTypeId,
     EVSEStatus,
@@ -719,3 +721,313 @@ def test_finland_factory_shares_limiter_via_hass(hass: HomeAssistant):
 def test_finland_factory_rejects_unsupported_provider():
     with pytest.raises(UnsupportedProviderError):
         create_provider("unknown_provider", FakeSession([]))
+
+
+def test_finland_shared_limiter_rejects_invalid_stored_type(hass: HomeAssistant):
+    hass.data.setdefault("curbcharge", {})["finland_request_limiter"] = object()
+    with pytest.raises(RuntimeError):
+        finland._shared_request_limiter(hass)
+
+
+@pytest.mark.asyncio
+async def test_finland_pagination_raises_when_page_bound_exceeded():
+    responses = [FakeResponse(_page("features", [], f"cursor-{i}")) for i in range(60)]
+    session = FakeSession(responses)
+    provider = _provider(session)
+
+    with pytest.raises(InvalidProviderResponseError, match="expected page bound"):
+        await provider.async_get_stations(60.1699, 24.9384, 500, 10)
+
+
+@pytest.mark.asyncio
+async def test_finland_rejects_non_list_tariff_ids():
+    bad_connector = {**_connector(), "tariffIds": "not-a-list"}
+    session = FakeSession(
+        _full_payloads(
+            features=[_location_feature(evses=[_evse(connectors=[bad_connector])])],
+            tariffs=[],
+            statuses=[],
+        )
+    )
+    provider = _provider(session)
+
+    with pytest.raises(InvalidProviderResponseError):
+        await provider.async_get_stations(60.1699, 24.9384, 500, 10)
+
+
+@pytest.mark.asyncio
+async def test_finland_evse_without_connectors_reports_not_reported_tariff():
+    session = FakeSession(
+        _full_payloads(
+            features=[_location_feature(evses=[_evse(connectors=[])])],
+            tariffs=[],
+            statuses=[],
+        )
+    )
+    provider = _provider(session)
+
+    result = await provider.async_get_stations(60.1699, 24.9384, 500, 10)
+
+    assert result.nearby[0].tariff_status is TariffStatus.NOT_REPORTED
+
+
+@pytest.mark.asyncio
+async def test_finland_station_tariff_ambiguous_when_connectors_disagree():
+    evse = _evse(
+        connectors=[
+            _connector(tariff_ids=["t1"]),
+            _connector(tariff_ids=["t2"]),
+        ]
+    )
+    session = FakeSession(
+        _full_payloads(
+            features=[_location_feature(evses=[evse])],
+            tariffs=[
+                _tariff(tariff_id="t1", price=0.5),
+                _tariff(tariff_id="t2", price=0.6),
+            ],
+            statuses=[],
+        )
+    )
+    provider = _provider(session)
+
+    result = await provider.async_get_stations(60.1699, 24.9384, 500, 10)
+
+    station = result.nearby[0]
+    assert station.tariff_status is TariffStatus.AMBIGUOUS
+    assert station.tariff is None
+
+
+def test_with_station_tariff_without_connectors_is_not_reported():
+    station = ChargingStation(
+        provider_id="x",
+        name="x",
+        latitude=0.0,
+        longitude=0.0,
+        address=None,
+        operator=None,
+        distance_m=0,
+        connectors=(),
+        tariff=None,
+        last_updated=None,
+    )
+    result = finland._with_station_tariff(station)
+    assert result.tariff_status is TariffStatus.NOT_REPORTED
+
+
+def test_connector_tariff_status_prioritizes_conditional_over_available():
+    conditional = ChargingTariff(
+        currency="EUR",
+        price_per_kwh=None,
+        session_fee=None,
+        price_per_minute=None,
+        description=None,
+        source=None,
+        status=TariffStatus.CONDITIONAL,
+    )
+    available = ChargingTariff(
+        currency="EUR",
+        price_per_kwh=Decimal("0.5"),
+        session_fee=None,
+        price_per_minute=None,
+        description=None,
+        source=None,
+        status=TariffStatus.AVAILABLE,
+    )
+    status = finland._connector_tariff_status(("a", "b"), (conditional, available))
+    assert status is TariffStatus.CONDITIONAL
+
+
+def test_connector_tariff_status_ambiguous_when_available_tariffs_differ():
+    first = ChargingTariff(
+        currency="EUR",
+        price_per_kwh=Decimal("0.5"),
+        session_fee=None,
+        price_per_minute=None,
+        description=None,
+        source=None,
+        status=TariffStatus.AVAILABLE,
+    )
+    second = ChargingTariff(
+        currency="EUR",
+        price_per_kwh=Decimal("0.6"),
+        session_fee=None,
+        price_per_minute=None,
+        description=None,
+        source=None,
+        status=TariffStatus.AVAILABLE,
+    )
+    status = finland._connector_tariff_status(("a", "b"), (first, second))
+    assert status is TariffStatus.AMBIGUOUS
+
+
+def test_tariff_description_extracts_first_text():
+    assert finland._tariff_description(None) is None
+    assert finland._tariff_description([{"language": "en"}]) is None
+    assert finland._tariff_description([{"language": "en", "text": "hello"}]) == "hello"
+
+
+def test_tariff_element_status_evaluates_date_restrictions():
+    now = datetime(2026, 6, 15, tzinfo=UTC)
+    assert finland._tariff_element_status(None, now) is TariffStatus.AVAILABLE
+    assert (
+        finland._tariff_element_status({"startDate": "2026-07-01"}, now)
+        is TariffStatus.INACTIVE
+    )
+    assert (
+        finland._tariff_element_status({"endDate": "2026-01-01"}, now)
+        is TariffStatus.INACTIVE
+    )
+    assert (
+        finland._tariff_element_status(
+            {"startDate": "2026-01-01", "endDate": "2026-12-31"}, now
+        )
+        is TariffStatus.AVAILABLE
+    )
+
+
+def test_restriction_date_rejects_invalid_value():
+    with pytest.raises(InvalidProviderResponseError):
+        finland._restriction_date("not-a-date", "start date")
+
+
+def test_tariff_is_active_checks_start_and_end_window():
+    now = datetime(2026, 6, 15, tzinfo=UTC)
+    assert finland._tariff_is_active({}, now) is True
+    assert (
+        finland._tariff_is_active({"startDateTime": "2027-01-01T00:00:00Z"}, now)
+        is False
+    )
+    assert (
+        finland._tariff_is_active({"endDateTime": "2020-01-01T00:00:00Z"}, now) is False
+    )
+
+
+def test_parse_tariff_record_rejects_invalid_currency():
+    with pytest.raises(InvalidProviderResponseError):
+        finland._parse_tariff_record(
+            {"currency": "EU", "taxIncluded": "NO", "elements": []},
+            datetime.now(UTC),
+        )
+
+
+def test_parse_tariff_record_rejects_invalid_tax_information():
+    with pytest.raises(InvalidProviderResponseError):
+        finland._parse_tariff_record(
+            {"currency": "EUR", "taxIncluded": "MAYBE", "elements": []},
+            datetime.now(UTC),
+        )
+
+
+def test_parse_tariff_record_rejects_non_list_elements():
+    with pytest.raises(InvalidProviderResponseError):
+        finland._parse_tariff_record(
+            {"currency": "EUR", "taxIncluded": "NO", "elements": "oops"},
+            datetime.now(UTC),
+        )
+
+
+def test_unique_component_price_returns_none_when_ambiguous():
+    components = [
+        {"type": "ENERGY", "price": 0.5, "vat": None},
+        {"type": "ENERGY", "price": 0.6, "vat": None},
+    ]
+    price, vat = finland._unique_component_price(components, "ENERGY", "YES")
+    assert price is None
+    assert vat is None
+
+
+def test_unique_time_price_converts_step_size_to_per_minute():
+    components = [{"type": "TIME", "price": 1.2, "vat": None, "stepSize": 60}]
+    assert finland._unique_time_price(components, "YES") == Decimal("1.2")
+
+
+def test_unique_time_price_rejects_invalid_step_size():
+    components = [{"type": "TIME", "price": 1.2, "vat": None, "stepSize": 0}]
+    assert finland._unique_time_price(components, "YES") is None
+
+
+def test_gross_component_price_tax_included_keeps_price_as_is():
+    price, vat = finland._gross_component_price({"price": 1.0, "vat": 20}, "YES")
+    assert price == Decimal("1.0")
+    assert vat == Decimal("20")
+
+
+def test_gross_component_price_without_vat_and_tax_excluded_is_unknown():
+    price, _vat = finland._gross_component_price({"price": 1.0, "vat": None}, "NO")
+    assert price is None
+
+
+def test_decimal_price_rejects_invalid_values():
+    with pytest.raises(InvalidProviderResponseError):
+        finland._decimal_price(True, "price")
+    with pytest.raises(InvalidProviderResponseError):
+        finland._decimal_price("abc", "price")
+    with pytest.raises(InvalidProviderResponseError):
+        finland._decimal_price(float("inf"), "price")
+    assert finland._decimal_price("1.5", "price") == Decimal("1.5")
+
+
+def test_evse_status_defaults_to_unknown_for_non_string():
+    assert finland._evse_status(None) is EVSEStatus.UNKNOWN
+    assert finland._evse_status(123) is EVSEStatus.UNKNOWN
+
+
+def test_optional_nonnegative_power_rejects_invalid_values():
+    assert finland._optional_nonnegative_power(None) is None
+    with pytest.raises(InvalidProviderResponseError):
+        finland._optional_nonnegative_power(True)
+    with pytest.raises(InvalidProviderResponseError):
+        finland._optional_nonnegative_power(-1)
+
+
+def test_format_address_handles_missing_parts():
+    assert finland._format_address(None) is None
+    assert (
+        finland._format_address({"street": None, "postalCode": None, "city": None})
+        is None
+    )
+    assert (
+        finland._format_address({"street": "Main 1", "city": "Helsinki"})
+        == "Main 1, Helsinki"
+    )
+
+
+def test_geometry_coordinates_rejects_invalid_shapes():
+    with pytest.raises(InvalidProviderResponseError):
+        finland._geometry_coordinates({"coordinates": [1]}, "geometry")
+    with pytest.raises(InvalidProviderResponseError):
+        finland._geometry_coordinates({"coordinates": [200, 10]}, "geometry")
+
+
+def test_parse_datetime_rejects_invalid_and_naive_values():
+    with pytest.raises(InvalidProviderResponseError):
+        finland._parse_datetime("not-a-timestamp")
+    with pytest.raises(InvalidProviderResponseError, match="timezone-naive"):
+        finland._parse_datetime("2026-01-01T00:00:00")
+
+
+def test_optional_datetime_rejects_non_string():
+    assert finland._optional_datetime(None, "field") is None
+    with pytest.raises(InvalidProviderResponseError):
+        finland._optional_datetime(123, "field")
+
+
+def test_list_field_rejects_non_list():
+    assert finland._list_field({}, "features") == []
+    with pytest.raises(InvalidProviderResponseError):
+        finland._list_field({"features": "not-a-list"}, "features")
+
+
+def test_required_string_rejects_blank_and_non_string():
+    with pytest.raises(InvalidProviderResponseError):
+        finland._required_string("  ", "field")
+    with pytest.raises(InvalidProviderResponseError):
+        finland._required_string(123, "field")
+
+
+def test_optional_string_rejects_non_string():
+    assert finland._optional_string(None, "field") is None
+    assert finland._optional_string("  ", "field") is None
+    with pytest.raises(InvalidProviderResponseError):
+        finland._optional_string(123, "field")
