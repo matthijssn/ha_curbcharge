@@ -58,10 +58,7 @@ class ReleasePackageTests(unittest.TestCase):
             inventory["version"],
             json.loads((INTEGRATION / "manifest.json").read_text())["version"],
         )
-        self.assertIn(
-            "curbcharge-release/custom_components/curbcharge/www/curbcharge-card.js",
-            _read_archive(self.archive),
-        )
+        self.assertIn("www/curbcharge-card.js", _read_archive(self.archive))
         self.assertNotIn("quality_scale.yaml", inventory["files"])
         self.assertFalse(
             any(
@@ -70,21 +67,52 @@ class ReleasePackageTests(unittest.TestCase):
             )
         )
 
+    def test_hacs_release_asset_extracts_directly_into_integration_directory(
+        self,
+    ) -> None:
+        target = self.directory / "custom_components" / "curbcharge"
+        with zipfile.ZipFile(self.archive_path) as archive:
+            archive.extractall(target)
+        manifest = json.loads((target / "manifest.json").read_text())
+        self.assertEqual(manifest["domain"], "curbcharge")
+        self.assertEqual(
+            manifest["version"],
+            json.loads((INTEGRATION / "manifest.json").read_text())["version"],
+        )
+        members = _read_archive(self.archive)
+        for name in self._validate()["files"]:
+            with self.subTest(name=name):
+                installed = target / name
+                self.assertEqual(
+                    installed.read_bytes(), (INTEGRATION / name).read_bytes()
+                )
+        for name in (
+            "__init__.py",
+            "config_flow.py",
+            "translations/en.json",
+            "brand/icon.png",
+            "www/curbcharge-card.js",
+        ):
+            self.assertIn(name, members)
+            self.assertTrue((target / name).is_file())
+        self.assertFalse((target / "curbcharge-release").exists())
+        self.assertFalse((target / "custom_components").exists())
+
     def test_missing_runtime_module_is_rejected(self) -> None:
         members = _read_archive(self.archive)
-        del members["curbcharge-release/custom_components/curbcharge/api.py"]
+        del members["api.py"]
         with self.assertRaisesRegex(ValueError, "inventory mismatch"):
             self._validate(_make_archive(members))
 
     def test_invalid_manifest_json_is_rejected(self) -> None:
         members = _read_archive(self.archive)
-        members["curbcharge-release/custom_components/curbcharge/manifest.json"] = b"{"
+        members["manifest.json"] = b"{"
         with self.assertRaises(json.JSONDecodeError):
             self._validate(_make_archive(members))
 
     def test_manifest_without_dependency_lists_is_rejected(self) -> None:
         members = _read_archive(self.archive)
-        name = "curbcharge-release/custom_components/curbcharge/manifest.json"
+        name = "manifest.json"
         manifest = json.loads(members[name])
         del manifest["requirements"]
         members[name] = json.dumps(manifest).encode()
@@ -95,31 +123,42 @@ class ReleasePackageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "does not match"):
             self._validate(tag="v0.0.0")
 
-    def test_flat_archive_layout_is_rejected(self) -> None:
+    def test_prefixed_archive_layouts_are_rejected(self) -> None:
         members = _read_archive(self.archive)
-        flattened = {
-            name.removeprefix("curbcharge-release/"): contents
-            for name, contents in members.items()
-        }
-        with self.assertRaisesRegex(ValueError, "HACS layout"):
-            self._validate(_make_archive(flattened))
+        for prefix in (
+            "curbcharge-release/custom_components/curbcharge/",
+            "custom_components/curbcharge/",
+            "curbcharge/",
+            "curbcharge-release/",
+        ):
+            with self.subTest(prefix=prefix):
+                prefixed = {
+                    prefix + name: contents for name, contents in members.items()
+                }
+                with self.assertRaisesRegex(ValueError, "inventory mismatch"):
+                    self._validate(_make_archive(prefixed))
 
     def test_path_traversal_is_rejected(self) -> None:
-        members = _read_archive(self.archive)
-        members["curbcharge-release/custom_components/curbcharge/../escape.py"] = b""
-        with self.assertRaisesRegex(ValueError, "Unsafe archive path"):
-            self._validate(_make_archive(members))
+        for path in (
+            "../escape.py",
+            "www/../escape.py",
+            "/escape.py",
+            "C:/escape.py",
+        ):
+            with self.subTest(path=path):
+                members = _read_archive(self.archive)
+                members[path] = b""
+                with self.assertRaisesRegex(ValueError, "Unsafe archive path"):
+                    self._validate(_make_archive(members))
 
     def test_development_files_are_rejected(self) -> None:
         members = _read_archive(self.archive)
-        members[
-            "curbcharge-release/custom_components/curbcharge/tests/test_extra.py"
-        ] = b""
+        members["tests/test_extra.py"] = b""
         with self.assertRaisesRegex(ValueError, "Development file"):
             self._validate(_make_archive(members))
 
     def test_symlinks_are_rejected(self) -> None:
-        name = "curbcharge-release/custom_components/curbcharge/__init__.py"
+        name = "__init__.py"
         with self.assertRaisesRegex(ValueError, "Symlink"):
             self._validate(_make_archive({name: b"target"}, symlink=name))
 

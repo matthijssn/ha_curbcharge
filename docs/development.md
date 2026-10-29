@@ -79,10 +79,14 @@ replace this install/upgrade smoke test.
 
 ## Release ZIP packaging
 
-The release package is a stdlib-built `dist/curbcharge.zip`. Its entries use
-the HACS ZIP layout: a wrapper directory followed by
-`custom_components/curbcharge/`. HACS removes those prefixes when installing
-the integration. The committed `www/curbcharge-card.js` is already the runtime
+The release package is a stdlib-built `dist/curbcharge.zip`. Its entries are
+relative to the integration root: `manifest.json`, `__init__.py`, other runtime
+modules, and the `translations/`, `brand/`, and `www/` directories.
+HACS extracts release assets directly into `custom_components/curbcharge/`;
+do not include a wrapper or `custom_components/curbcharge/` prefix in the ZIP.
+Prefix stripping applies to repository source archives, not release assets.
+The package tests reproduce direct release-asset extraction and verify the
+installed files. The committed `www/curbcharge-card.js` is already the runtime
 asset; there is no frontend build step.
 
 Build and validate locally:
@@ -135,6 +139,23 @@ if the previous installation state is needed, and do not downgrade across a
 documented data migration unless the release notes confirm compatibility.
 Published assets are immutable: do not replace `curbcharge.zip` on a public
 stable release. Correct a bad release with a higher patch version.
+
+### Recovering from the v0.6.0 ZIP layout error
+
+The published v0.6.0 ZIP incorrectly nests the integration beneath
+`curbcharge-release/custom_components/curbcharge/`. After extraction, Home
+Assistant cannot find the integration-root manifest and may report
+`Integration 'curbcharge' not found`.
+
+Publish the corrected package in a new patch release (v0.6.1), following the
+normal version-preparation PR, tag validation, and draft publication steps.
+Do not replace the v0.6.0 asset or move its published tag. Back up Home Assistant,
+then use HACS to upgrade to the corrective release (or redownload that version
+if HACS already reports it installed), and restart Home Assistant. Do not delete
+the CurbCharge config entry or edit `.storage`; packaging recovery does not
+require recreating configuration. Verify the config entry, options, devices,
+entity IDs, and bundled card using the smoke checklist above. Record the live
+result separately; archive extraction tests cannot prove a real HACS upgrade.
 
 ## Versioning and upgrade compatibility
 
