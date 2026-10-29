@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-SUPPORTED_LANGUAGES = ("en", "nl", "fr", "de", "nb", "sv")
+SUPPORTED_LANGUAGES = ("en", "nl", "fr", "de", "nb", "sv", "fi")
 AFDC_CONNECTOR_TRANSLATION_KEYS = (
     "iec_62196_t1",
     "iec_62196_t1_combo",

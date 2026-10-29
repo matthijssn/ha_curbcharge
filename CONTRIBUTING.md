@@ -14,11 +14,11 @@ for environment setup, test and formatting commands, and release workflow. The
   and free of credentials or private provider data.
 - Update user-facing strings in
   [`custom_components/curbcharge/strings.json`](custom_components/curbcharge/strings.json)
-  and keep all six locales (`en`, `nl`, `fr`, `de`, `nb`, `sv`) in
+  and keep all seven locales (`en`, `nl`, `fr`, `de`, `nb`, `sv`, `fi`) in
   [`custom_components/curbcharge/translations/`](custom_components/curbcharge/translations/)
   aligned, with identical keys, nonempty values, and matching placeholders.
   Keep `en.json` identical to `strings.json`. For card-facing changes, update
-  all six dictionaries in
+  all seven dictionaries in
   [`curbcharge-card.js`](custom_components/curbcharge/www/curbcharge-card.js)
   and the applicable cases in
   [`tests/curbcharge-card.test.mjs`](tests/curbcharge-card.test.mjs).

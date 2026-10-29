@@ -1,0 +1,454 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Määritä CurbCharge",
+        "description": "Valitse, käyttääkö CurbCharge Home Assistantin kotisijaintia, manuaalisia koordinaatteja vai entiteettiä.",
+        "data": {
+          "location_source": "Sijaintilähde"
+        },
+        "data_description": {
+          "location_source": "Käytä Home Assistantin kotikoordinaatteja, syötä koordinaatit tai valitse entiteetti, joka ilmoittaa sijainnin."
+        }
+      },
+      "entity_location": {
+        "title": "Valitse sijaintientiteetti",
+        "description": "Valitse mikä tahansa entiteetti, joka ilmoittaa tällä hetkellä kelvolliset leveys- ja pituuspiiriattribuutit. Vain entiteetin tunnus tallennetaan.",
+        "data": {
+          "location_entity": "Sijaintientiteetti"
+        },
+        "data_description": {
+          "location_entity": "Entiteetin on ilmoitettava tällä hetkellä kelvolliset leveys- ja pituuspiirikoordinaatit."
+        }
+      },
+      "reconfigure": {
+        "title": "Muuta hakusijaintia",
+        "description": "Valitse, käytetäänkö Home Assistantin kotisijaintia, manuaalisia koordinaatteja vai entiteettiä.",
+        "data": {
+          "location_source": "Sijaintilähde"
+        },
+        "data_description": {
+          "location_source": "Hakualueen muuttaminen voi muuttaa, mitkä lähellä olevat asemat sisältyvät hakuun."
+        }
+      },
+      "reconfigure_entity_location": {
+        "title": "Valitse uusi sijaintientiteetti",
+        "description": "Valitse entiteetti, joka ilmoittaa tällä hetkellä kelvolliset sijaintikoordinaatit. CurbCharge tallentaa entiteetin tunnuksen, ei sen koordinaatteja.",
+        "data": {
+          "location_entity": "Sijaintientiteetti"
+        },
+        "data_description": {
+          "location_entity": "Jos edellinen entiteetti ei ole käytettävissä tai se on poistettu, valitse korvaava."
+        }
+      },
+      "reconfigure_manual_location": {
+        "title": "Anna uusi hakusijainti",
+        "description": "CurbCharge tarkistaa palveluntarjoajan ennen tämän sijainnin tallentamista.",
+        "data": {
+          "latitude": "Leveysaste",
+          "longitude": "Pituusaste"
+        },
+        "data_description": {
+          "latitude": "Latauspisteiden hakualueen keskipisteen leveysaste.",
+          "longitude": "Latauspisteiden hakualueen keskipisteen pituusaste."
+        }
+      },
+      "manual_location": {
+        "title": "Anna hakusijainti",
+        "description": "Koordinaatit tallennetaan vain, jos valitset manuaalisen sijainnin.",
+        "data": {
+          "latitude": "Leveysaste",
+          "longitude": "Pituusaste"
+        },
+        "data_description": {
+          "latitude": "Latauspisteiden hakualueen keskipisteen leveysaste.",
+          "longitude": "Latauspisteiden hakualueen keskipisteen pituusaste."
+        }
+      },
+      "station_options": {
+        "title": "Valitse lähellä olevat asemat",
+        "description": "CurbCharge tarkistaa palveluntarjoajan yhteyden ennen kohteen luomista.",
+        "data": {
+          "search_radius": "Hakusäde (m)",
+          "max_stations": "Asemien enimmäismäärä",
+          "scan_interval": "Päivitysväli (minuuttia)",
+          "provider": "Palveluntarjoaja"
+        },
+        "data_description": {
+          "search_radius": "Mukaan otetaan vain tämän etäisyyden sisällä olevat julkiset latauspisteet.",
+          "max_stations": "Rajoita asemien ja niiden entiteettien määrää.",
+          "scan_interval": "Kuinka usein Home Assistant päivittää latauspisteiden tiedot.",
+          "provider": "Asemien ja saatavuuden selvittämiseen käytetty tietolähde."
+        }
+      },
+      "discovery_filters": {
+        "title": "Suodata lähellä olevat asemat",
+        "description": "Voit valinnaisesti suodattaa NDW-asemia niiden liitinryhmien mukaan. Suodattimet käytetään ennen asemarajaa.",
+        "data": {
+          "connector_types": "Liitintyypit",
+          "min_power_kw": "Vähimmäisteho (kW)",
+          "require_available": "Edellytä vapaata liitintä"
+        },
+        "data_description": {
+          "connector_types": "Jätä tyhjäksi, jos mikä tahansa tyyppi kelpaa. Täsmäävän liitinryhmän, jolla on jokin valituista tyypeistä, on täytettävä myös muut suodattimet.",
+          "min_power_kw": "Valinnainen. Täsmäävän liitinryhmän on ilmoitettava vähintään tämä teho.",
+          "require_available": "Ota asemat mukaan vain, jos täsmäävä liitinryhmä ilmoittaa vapaita liittimiä."
+        }
+      },
+      "belgium_credentials": {
+        "title": "Yhdistä Eco-Movement Belgiaan",
+        "description": "Syötä Eco-Movementin sinulle myöntämä API-tunnus. Tunnus tallennetaan tähän asetuskohteeseen ja piilotetaan diagnostiikasta.",
+        "data": {
+          "api_token": "Eco-Movement API-tunnus"
+        },
+        "data_description": {
+          "api_token": "Käytä vain tunnusta, jonka käyttöön sinulla on oikeus. Älä jaa sitä vikailmoituksissa."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Päivitä Eco-Movement-tunnistetiedot",
+        "description": "Syötä Eco-Movementin myöntämä korvaava API-tunnus.",
+        "data": {
+          "api_token": "Eco-Movement API-tunnus"
+        },
+        "data_description": {
+          "api_token": "Tunnus tallennetaan tähän asetuskohteeseen ja piilotetaan diagnostiikasta."
+        }
+      },
+      "nobil_credentials": {
+        "title": "Yhdistä NOBILiin",
+        "description": "Syötä oma NOBIL API-avaimesi. Lisätietoja avaimen hankkimisesta löydät [NOBILin API-sivulta]({nobil_api_url}). Se tallennetaan vain tähän asetuskohteeseen ja piilotetaan diagnostiikasta.",
+        "data": {
+          "api_token": "NOBIL API-avain"
+        },
+        "data_description": {
+          "api_token": "Käytä vain avainta, jonka käyttöön sinulla on oikeus. Älä jaa sitä vikailmoituksissa."
+        }
+      },
+      "nobil_reauth_confirm": {
+        "title": "Päivitä NOBIL-tunnistetiedot",
+        "description": "Syötä korvaava NOBIL API-avain. Lisätietoja avaimen hankkimisesta löydät [NOBILin API-sivulta]({nobil_api_url}).",
+        "data": {
+          "api_token": "NOBIL API-avain"
+        },
+        "data_description": {
+          "api_token": "Avain tallennetaan tähän asetuskohteeseen ja piilotetaan diagnostiikasta."
+        }
+      },
+      "afdc_credentials": {
+        "title": "Yhdistä AFDC:hen (Yhdysvallat)",
+        "description": "Syötä oma NLR API-avaimesi. Rekisteröidy maksutta [NLR Developer Networkissa]({afdc_api_url}). Se tallennetaan vain tähän asetuskohteeseen ja piilotetaan diagnostiikasta.",
+        "data": {
+          "api_token": "NLR API-avain"
+        },
+        "data_description": {
+          "api_token": "Käytä vain avainta, jonka käyttöön sinulla on oikeus. Älä jaa sitä vikailmoituksissa."
+        }
+      },
+      "afdc_reauth_confirm": {
+        "title": "Päivitä AFDC-tunnistetiedot",
+        "description": "Syötä korvaava NLR API-avain. Hanki maksuton avain [NLR Developer Networkista]({afdc_api_url}).",
+        "data": {
+          "api_token": "NLR API-avain"
+        },
+        "data_description": {
+          "api_token": "Avain tallennetaan tähän asetuskohteeseen ja piilotetaan diagnostiikasta."
+        }
+      }
+    },
+    "error": {
+      "auth": "Palveluntarjoaja hylkäsi tunnistautumisen.",
+      "cannot_connect": "Latauspalveluntarjoajaan ei saatu yhteyttä.",
+      "invalid_location": "Anna kelvolliset koordinaatit ja tuettu hakualue.",
+      "invalid_entity_location": "Valitse entiteetti, joka ilmoittaa tällä hetkellä kelvolliset leveys- ja pituuspiirikoordinaatit.",
+      "invalid_api_token": "Anna ei-tyhjä, tulostettavissa oleva ASCII-API-tunnus.",
+      "invalid_nobil_api_key": "Anna ei-tyhjä, tulostettavissa oleva NOBIL API-avain.",
+      "invalid_afdc_api_key": "Anna ei-tyhjä, tulostettavissa oleva NLR API-avain.",
+      "invalid_discovery_filters": "Anna kelvolliset hakusuodattimet. Vähimmäistehon on oltava äärellinen positiivinen luku.",
+      "invalid_response": "Palveluntarjoaja palautti tietoja odottamattomassa muodossa.",
+      "location_not_configured": "Kotikoordinaatteja ei ole määritetty Home Assistantissa.",
+      "rate_limited": "Palveluntarjoaja rajoittaa pyyntöjen määrää. Yritä myöhemmin uudelleen.",
+      "unsupported_provider": "Valittua palveluntarjoajaa ei tueta."
+    },
+    "abort": {
+      "already_configured": "Tämä palveluntarjoaja ja hakualue on jo määritetty.",
+      "location_not_configured": "Hakusijaintia ei ole määritetty.",
+      "reconfigure_successful": "Hakusijainti päivitetty.",
+      "reauth_successful": "Eco-Movement-tunnistetiedot päivitetty.",
+      "nobil_reauth_successful": "NOBIL API-avain päivitetty.",
+      "afdc_reauth_successful": "NLR API-avain päivitetty."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "CurbCharge-asetukset",
+        "menu_options": {
+          "general": "Yleiset asetukset",
+          "personalization": "Personointi"
+        }
+      },
+      "general": {
+        "title": "Yleiset asetukset",
+        "data": {
+          "scan_interval": "Päivitysväli (minuuttia)",
+          "search_radius": "Hakusäde (m)",
+          "max_stations": "Asemien enimmäismäärä",
+          "provider": "Palveluntarjoaja",
+          "include_unknown": "Sisällytä asemat ilman saatavuustietoa",
+          "connector_types": "Liitintyypit",
+          "min_power_kw": "Vähimmäisteho (kW)",
+          "require_available": "Edellytä vapaata liitintä",
+          "favourites": "Suosikkilatauspisteet",
+          "location_movement_threshold": "Sijainnin liikekynnys (m)"
+        },
+        "data_description": {
+          "scan_interval": "Kuinka usein Home Assistant päivittää latauspisteiden tiedot.",
+          "search_radius": "Mukaan otetaan vain tämän etäisyyden sisällä olevat julkiset latauspisteet.",
+          "max_stations": "Rajoita asemien ja niiden entiteettien määrää.",
+          "provider": "Asemien ja saatavuuden selvittämiseen käytetty tietolähde.",
+          "include_unknown": "Sisällytä asemat, kun palveluntarjoaja ei ilmoita liitinsaatavuutta.",
+          "connector_types": "Jätä tyhjäksi, jos mikä tahansa tyyppi kelpaa. Täsmäävän liitinryhmän, jolla on jokin valituista tyypeistä, on täytettävä myös muut suodattimet.",
+          "min_power_kw": "Valinnainen. Täsmäävän liitinryhmän on ilmoitettava vähintään tämä teho.",
+          "require_available": "Ota asemat mukaan vain, jos täsmäävä liitinryhmä ilmoittaa vapaita liittimiä.",
+          "favourites": "Valitse latauspisteet nimen perusteella. Suosikit pysyvät käytettävissä hakusäteen ulkopuolella ja lisätään lähialueen asemarajan ylittävinä.",
+          "location_movement_threshold": "Vähimmäisetäisyys, jonka valitun entiteetin on liikuttava, ennen kuin hakusijainti päivitetään. Aseta arvoksi 0 poistaaksesi kynnyksen käytöstä."
+        }
+      },
+      "personalization": {
+        "title": "Personointi",
+        "data": {
+          "enabled": "Ota personointi käyttöön",
+          "connector_type_ids": "Yhteensopivat liitintyypit",
+          "minimum_power_kw": "Liittimen vähimmäisteho (kW)",
+          "preferred_operators": "Suositellut operaattorit",
+          "excluded_operators": "Poissuljetut operaattorit",
+          "maximum_price": "Enimmäishinta per kWh",
+          "maximum_price_currency": "Enimmäishinnan valuutta",
+          "ranking_preset": "Järjestyksen esiasetus",
+          "allow_fallback": "Salli varavaihtoehto",
+          "unknown_data_policy": "Tuntemattoman tiedon käytäntö"
+        },
+        "data_description": {
+          "enabled": "Ota tämä tallennettu profiili käyttöön personoituja suosituksia varten. Kunnes personoinnin arviointi on käytettävissä, nykyiset suositukset pysyvät ennallaan.",
+          "connector_type_ids": "Valitse vakiomuotoiset liitinstandardit. Jätä tyhjäksi hyväksyäksesi minkä tahansa liitintyypin.",
+          "minimum_power_kw": "Valinnainen vähimmäisarvo täsmäävälle liitinryhmälle; käytä äärellistä, ei-negatiivista arvoa.",
+          "preferred_operators": "Syötä yksi palveluntarjoajakohtainen viite riviä kohden, esimerkiksi ndw_dot_nl:NLX, eco_movement_be:Example CPO tai nobil_no:Synthetic CPO. NDW-tunnukset ja NOBIL-nimet täsmäävät tarkasti; Belgian nimet typistetään, välilyönnit tiivistetään eikä kirjainkokoa huomioida. Tallennetut valinnat säilytetään, vaikka ne eivät olisi lähellä.",
+          "excluded_operators": "Syötä yksi palveluntarjoajakohtainen viite riviä kohden samassa muodossa kuin suositelluissa operaattoreissa. Täsmääviä poissulkemisia ei koskaan ohiteta varavaihtoehdolla.",
+          "maximum_price": "Valinnainen ei-negatiivinen desimaaliarvo. Jätä tyhjäksi, jos hintakattoa ei haluta.",
+          "maximum_price_currency": "Vaaditaan enimmäishinnan kanssa; syötä kolmikirjaiminen valuuttakoodi, kuten EUR.",
+          "ranking_preset": "Valitse kiinteä järjestystavoite; mukautettuja painotuksia ei tueta.",
+          "allow_fallback": "Salli kelvolliset ei-suositellut ehdokkaat vain, jos täydellistä täsmäystä ei löydy.",
+          "unknown_data_policy": "Valitse, voivatko tuntemattomat liitin-, teho- tai operaattoriarvot päätyä varavaihtoehtoihin. Tuntematonta saatavuutta ja tunnettuja pakollisten ehtojen rikkomuksia ei koskaan lievennetä."
+        }
+      }
+    },
+    "error": {
+      "invalid_discovery_filters": "Anna kelvolliset hakusuodattimet. Vähimmäistehon on oltava äärellinen positiivinen luku.",
+      "invalid_favourites": "Yksi tai useampi valittu suosikki ei ole enää käytettävissä. Päivitä asetukset ja yritä uudelleen.",
+      "invalid_personalization_profile": "Anna kelvollinen profiili. Tehon ja hinnan on oltava äärellisiä ja ei-negatiivisia, enimmäishinta vaatii kolmikirjaimisen valuutan, operaattoriviitteet vaativat tuetun palveluntarjoajan etuliitteen, eikä operaattori voi olla sekä suositeltu että poissuljettu.",
+      "invalid_saved_personalization_profile": "Tallennettu personointiprofiili on virheellinen tai käyttää ei-tuettua skeemaversiota. Tarkista kentät ja tallenna kelvollinen profiili sen korvaamiseksi."
+    }
+  },
+  "services": {
+    "add_favorite": {
+      "name": "Lisää suosikki",
+      "description": "Tallenna juuri löydetty latauspiste suosikiksi.",
+      "fields": {
+        "config_entry_id": {
+          "name": "CurbCharge-asetuskohde",
+          "description": "Valitse päivitettävä, ladattu CurbCharge-kohde."
+        },
+        "station_id": {
+          "name": "Aseman tunnus",
+          "description": "Palveluntarjoajakohtainen aseman tunnus uusimmasta onnistuneesta lähihausta."
+        }
+      }
+    },
+    "remove_favorite": {
+      "name": "Poista suosikki",
+      "description": "Poista tallennettu suosikki CurbCharge-asetuskohteesta.",
+      "fields": {
+        "config_entry_id": {
+          "name": "CurbCharge-asetuskohde",
+          "description": "Valitse ladattu CurbCharge-kohde, joka sisältää suosikin."
+        },
+        "station_id": {
+          "name": "Aseman tunnus",
+          "description": "Poistettavan tallennetun suosikin palveluntarjoajakohtainen tunnus. Se voi olla vanhentunut tai puuttua palveluntarjoajalta."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "authentication_failed": {
+      "message": "Tunnistautuminen latauspalveluntarjoajan kanssa epäonnistui."
+    },
+    "invalid_config": {
+      "message": "CurbChargen asetukset ovat virheelliset."
+    },
+    "location_not_configured": {
+      "message": "Määritetty latauksen hakusijainti ei ole käytettävissä."
+    },
+    "rate_limited": {
+      "message": "Latauspalveluntarjoaja rajoittaa pyyntöjen määrää. Odota, että rajoitus nollautuu, ja yritä uudelleen."
+    },
+    "unsupported_provider": {
+      "message": "Määritettyä latauspalveluntarjoajaa ei tueta."
+    },
+    "config_entry_not_loaded": {
+      "message": "Valitse ladattu CurbCharge-asetuskohde."
+    },
+    "favorite_not_found": {
+      "message": "Aseman tunnus ei ole tämän asetuskohteen tallennettu suosikki."
+    },
+    "invalid_station_id": {
+      "message": "Anna ei-tyhjä aseman tunnus."
+    },
+    "station_not_discovered": {
+      "message": "Asema on ensin löydettävä tällä asetuskohteella tuoreena, ennen kuin se voidaan lisätä suosikiksi."
+    }
+  },
+  "selector": {
+    "location_source": {
+      "options": {
+        "home": "Home Assistantin kotikoordinaatit",
+        "manual": "Manuaalinen leveys- ja pituuspiiri",
+        "entity": "Home Assistant -entiteetti"
+      }
+    },
+    "ndw_connector_type": {
+      "options": {
+        "type-2": "Type 2 (Mennekes)",
+        "ccs-combo-2": "CCS (Combo 2)",
+        "chademo": "CHAdeMO",
+        "cee-16a-single-phase": "CEE 16 A (yksivaihe)",
+        "cee-16a-three-phase": "CEE 16 A (kolmivaihe)",
+        "cee-32a-three-phase": "CEE 32 A (kolmivaihe)",
+        "domestic-a": "Kotitalouspistoke A (NEMA 1-15)"
+      }
+    },
+    "personalization_connector_type": {
+      "options": {
+      "iec_62196_t2": "Type 2 (Mennekes)",
+      "iec_62196_t2_combo": "CCS Combo 2",
+      "chademo": "CHAdeMO",
+      "iec_60309_2_single_16": "CEE 16 A (yksivaihe)",
+      "iec_60309_2_three_16": "CEE 16 A (kolmivaihe)",
+      "iec_60309_2_three_32": "CEE 32 A (kolmivaihe)",
+      "domestic_a": "Kotitalouspistoke A (NEMA 1-15)",
+      "iec_62196_t1": "Type 1 (J1772)",
+      "iec_62196_t1_combo": "CCS Combo 1",
+      "tesla": "Tesla",
+      "nema_5_15": "NEMA 5-15",
+      "nema_5_20": "NEMA 5-20",
+      "nema_14_50": "NEMA 14-50",
+      "sae_j3271": "SAE J3271 (MCS)"
+      }
+    },
+    "personalization_ranking_preset": {
+      "options": {
+        "balanced": "Tasapainotettu",
+        "lowest_price": "Alin hinta",
+        "shortest_distance": "Lyhin etäisyys",
+        "highest_availability": "Eniten vapaita liittimiä",
+        "highest_power": "Suurin liitinteho"
+      }
+    },
+    "personalization_unknown_data_policy": {
+      "options": {
+        "exclude": "Sulje pois tuntemattomat mieltymysarvot (suositus)",
+        "allow_fallback": "Salli tuntemattomat arvot vain varavaihtoehtona"
+      }
+    },
+    "provider": {
+      "options": {
+        "ndw_dot_nl": "NDW DOT-NL",
+        "eco_movement_be": "Eco-Movement Belgia (esikatselu)",
+        "nobil_no": "NOBIL Norja",
+        "nobil_se": "NOBIL Ruotsi",
+        "afdc_us": "AFDC Yhdysvallat",
+        "digitraffic_afir_fi": "Digitraffic AFIR Suomi"
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "available": {
+        "name": "Käytettävissä"
+      }
+    },
+    "sensor": {
+      "available_connectors": {
+        "name": "Vapaat liittimet"
+      },
+      "availability_percentage": {
+        "name": "Saatavuusprosentti"
+      },
+      "occupied_connectors": {
+        "name": "Varatut liittimet"
+      },
+      "unavailable_connectors": {
+        "name": "Ei käytettävissä olevat liittimet"
+      },
+      "total_connectors": {
+        "name": "Liittimet yhteensä"
+      },
+      "connector_group": {
+        "name": "{connector_type}-liittimet"
+      },
+      "maximum_charging_power": {
+        "name": "Enimmäislatausteho"
+      },
+      "price_per_kwh": {
+        "name": "Hinta per kWh"
+      },
+      "distance": {
+        "name": "Etäisyys"
+      },
+      "status_summary": {
+        "name": "Tilayhteenveto",
+        "state": {
+          "available": "Käytettävissä",
+          "none_available": "Ei vapaita",
+          "unknown": "Tuntematon"
+        }
+      },
+      "favorite_status": {
+        "name": "Suosikin tila",
+        "state": {
+          "available": "Käytettävissä",
+          "none_available": "Ei vapaita",
+          "unknown": "Tuntematon"
+        }
+      },
+      "favorite_summary": {
+        "name": "Suosikkiyhteenveto"
+      },
+      "best_nearby_charger": {
+        "name": "Paras lähellä oleva laturi"
+      },
+      "nearest_available_charger": {
+        "name": "Lähin vapaa laturi"
+      },
+      "cheapest_available_charger": {
+        "name": "Halvin vapaa laturi"
+      },
+      "fastest_available_charger": {
+        "name": "Nopein vapaa laturi"
+      },
+      "top_nearby_chargers": {
+        "name": "Parhaat lähellä olevat laturit"
+      },
+      "nearby_charging_units": {
+        "name": "Lähellä olevat latausyksiköt"
+      },
+      "nearby_available_connectors": {
+        "name": "Lähellä olevat vapaat liittimet"
+      },
+      "nearby_availability_percentage": {
+        "name": "Lähialueen liitinsaatavuus"
+      }
+    }
+  }
+}
