@@ -75,7 +75,65 @@ jobs:
       - name: Validate release integration archive
         env:
           RELEASE_TAG: ${{ github.ref_name }}
-        run: python3 -m unittest discover -s tests -p test_release_package.py
+        run: |
+          python3 scripts/release_package.py build --tag "$RELEASE_TAG"
+          python3 -m unittest discover -s tests -p test_release_package.py
+
+      - name: Upload validated release ZIP
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: curbcharge-zip-${{ github.run_id }}
+          path: dist/curbcharge.zip
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+          overwrite: true
+
+  stage_draft_release:
+    if: github.event_name == 'push'
+    needs: verify_tag
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Download validated release ZIP
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: curbcharge-zip-${{ github.run_id }}
+          path: ${{ runner.temp }}/release-artifact
+
+      - name: Create or verify draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          ZIP_PATH: ${{ runner.temp }}/release-artifact/curbcharge.zip
+        run: |
+          set -euo pipefail
+          if release_json="$(gh release view "$RELEASE_TAG" --json isDraft,assets 2>/dev/null)"; then
+            if [[ "$(jq -r '.isDraft' <<<"$release_json")" != "true" ]]; then
+              echo "Refusing to modify published release $RELEASE_TAG."
+              exit 1
+            fi
+            if jq -e '[.assets[].name] | index("curbcharge.zip") != null' <<<"$release_json" >/dev/null; then
+              mkdir "$RUNNER_TEMP/existing-release-asset"
+              gh release download "$RELEASE_TAG" --pattern curbcharge.zip \
+                --dir "$RUNNER_TEMP/existing-release-asset"
+              if ! cmp -s "$ZIP_PATH" "$RUNNER_TEMP/existing-release-asset/curbcharge.zip"; then
+                echo "Draft release already has a different curbcharge.zip; refusing to replace it."
+                exit 1
+              fi
+            else
+              gh release upload "$RELEASE_TAG" "$ZIP_PATH"
+            fi
+          else
+            version="${RELEASE_TAG#v}"
+            gh release create "$RELEASE_TAG" "$ZIP_PATH" \
+              --draft \
+              --verify-tag \
+              --title "CurbCharge $version" \
+              --generate-notes
+          fi
+          echo "Draft release $RELEASE_TAG contains the validated curbcharge.zip."
 
   prepare:
     if: github.event_name == 'workflow_dispatch'
@@ -252,4 +310,23 @@ jobs:
       - name: Revalidate published integration archive
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: python3 -m unittest discover -s tests -p test_release_package.py
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          release_json="$(gh release view "$RELEASE_TAG" --json isDraft,isPrerelease,assets)"
+          if [[ "$(jq -r '.isDraft' <<<"$release_json")" != "false" \
+            || "$(jq -r '.isPrerelease' <<<"$release_json")" != "false" ]]; then
+            echo "Expected a published stable release for $RELEASE_TAG."
+            exit 1
+          fi
+          if ! jq -e '[.assets[].name] | index("curbcharge.zip") != null' <<<"$release_json" >/dev/null; then
+            echo "Published release $RELEASE_TAG has no curbcharge.zip asset."
+            exit 1
+          fi
+          mkdir "$RUNNER_TEMP/published-release"
+          gh release download "$RELEASE_TAG" --pattern curbcharge.zip \
+            --dir "$RUNNER_TEMP/published-release"
+          python3 scripts/release_package.py validate \
+            "$RUNNER_TEMP/published-release/curbcharge.zip" \
+            --tag "$RELEASE_TAG"
+          python3 -m unittest discover -s tests -p test_release_package.py

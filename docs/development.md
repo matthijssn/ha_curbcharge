@@ -65,15 +65,40 @@ Run this on a clean Home Assistant instance for a full published release:
 
 - [ ] Install the previous full release from the HACS default catalog, restart,
   and verify the integration sets up with the expected entities.
+- [ ] Confirm the GitHub Release is published, `curbcharge.zip` is attached,
+  and the downloaded ZIP passes the package validator.
 - [ ] Upgrade to the target full release through HACS, restart, and verify the
   config entry, options, devices, and entity IDs are preserved without
-  duplicates.
+  duplicates. Verify the bundled Lovelace card still loads.
 - [ ] Record the Home Assistant version, source and target release tags, date,
   result, and any relevant logs in the release PR or issue. Remove credentials,
   coordinates, and personal data before attaching evidence.
 
 HACS and Hassfest CI validate repository layout and metadata; they do not
 replace this install/upgrade smoke test.
+
+## Release ZIP packaging
+
+The release package is a stdlib-built `dist/curbcharge.zip`. Its entries use
+the HACS ZIP layout: a wrapper directory followed by
+`custom_components/curbcharge/`. HACS removes those prefixes when installing
+the integration. The committed `www/curbcharge-card.js` is already the runtime
+asset; there is no frontend build step.
+
+Build and validate locally:
+
+```bash
+python3 scripts/release_package.py build
+python3 scripts/release_package.py validate dist/curbcharge.zip
+python3 -m unittest discover -s tests -p test_release_package.py
+```
+
+For a release tag, include `--tag vX.Y.Z` in either command. Validation checks
+the ZIP layout and file inventory, manifest/tag version, JSON, Python syntax,
+translations, card asset, and development-file exclusions. The inventory and
+sizes are printed for review. The same ZIP built and validated by the tag
+workflow is uploaded as a workflow artifact and attached to its draft GitHub
+Release; it is not rebuilt for publication.
 
 ## Preparing a release
 
@@ -85,10 +110,20 @@ such as `v0.1.2`. The workflow validates the tag, updates the manifest on a
 
 Review and merge that PR before creating a stable tag on `main`. Pushing the tag
 runs `verify_tag`, which checks its exact commit SHA, manifest version, main
-ancestry, and the integration archive contract. The normal `test`, `hassfest`,
-and `hacs` workflows also run for that tag. Publish the GitHub release only
-after all four tag checks pass; publication then runs the existing post-release
-verification as a second check.
+ancestry, and builds/validates `curbcharge.zip`. It then stages the exact
+validated ZIP on a draft GitHub Release. The normal `test`, `hassfest`, and
+`hacs` workflows also run for that tag. Publish the draft only after
+`verify_tag`, `test`, `hassfest`, and `hacs` pass. Publishing triggers the
+post-release verifier, which downloads and validates the attached asset. The
+existing manual version-preparation job remains separately write-enabled to
+push its reviewed manifest branch; tag artifact creation uses read-only
+permissions, and only the draft-release job needs write permission.
+
+The HACS ZIP settings are versioned with the selected release. Earlier source
+releases remain unchanged and have no custom ZIP asset; the first release whose
+`hacs.json` enables `zip_release` must include the matching `curbcharge.zip`
+before it is published. Do not publish that release manually before the draft
+asset is ready.
 
 Before upgrading an installation, make a Home Assistant backup that includes
 the configuration and `.storage`. If a published release causes a regression,
@@ -96,6 +131,8 @@ pause further promotion, document the affected version, and prepare a corrective
 release with a new tag; never move or reuse a published tag. Restore the backup
 if the previous installation state is needed, and do not downgrade across a
 documented data migration unless the release notes confirm compatibility.
+Published assets are immutable: do not replace `curbcharge.zip` on a public
+stable release. Correct a bad release with a higher patch version.
 
 ## Versioning and upgrade compatibility
 

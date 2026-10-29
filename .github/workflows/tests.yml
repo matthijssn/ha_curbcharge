@@ -25,6 +25,10 @@ jobs:
           --constraint https://raw.githubusercontent.com/home-assistant/core/2024.12.0/homeassistant/package_constraints.txt
           pytest-homeassistant-custom-component==0.13.190
           pycares==4.8.0
+      - name: Build and validate HACS release ZIP
+        run: python3 scripts/release_package.py build
+      - name: Test release package validation
+        run: python3 -m unittest discover -s tests -p test_release_package.py
       - name: Test minimum Home Assistant 2024.12.0
         run: pytest
       - name: Set up current supported Python 3.14.2
