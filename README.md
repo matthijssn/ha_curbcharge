@@ -56,6 +56,12 @@ directory at `custom_components/curbcharge`, then restart Home Assistant.
 - [Copyable YAML examples](examples/)
 - [Favorite services and automation guide](docs/dashboards-and-automations.md#favorite-services-and-automations)
 
+## Community
+
+Questions, ideas, or show-and-tell? Head to
+[GitHub Discussions](https://github.com/matthijssn/ha_curbcharge/discussions).
+Found a bug? [Open an issue](https://github.com/matthijssn/ha_curbcharge/issues) instead.
+
 ## Support
 
 [Support CurbCharge on Ko-fi](https://ko-fi.com/matthijssn).
