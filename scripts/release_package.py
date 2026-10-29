@@ -12,7 +12,6 @@ from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parents[1]
 INTEGRATION = ROOT / "custom_components" / "curbcharge"
-PREFIX = "curbcharge-release/custom_components/curbcharge/"
 OUTPUT = ROOT / "dist" / "curbcharge.zip"
 VERSION_RE = re.compile(r"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)")
 ALLOWED_SUFFIXES = {".js", ".json", ".png", ".py", ".yaml"}
@@ -117,23 +116,19 @@ def validate_archive(
             raise ValueError("Archive is empty or contains duplicate paths")
 
         contents: dict[str, bytes] = {}
-        roots: set[str] = set()
         for member in members:
             name = member.filename
             path = PurePosixPath(name)
             if (
                 "\\" in name
+                or ":" in name
                 or path.is_absolute()
                 or any(part in {"", ".", ".."} for part in name.split("/"))
                 or member.is_dir()
             ):
                 raise ValueError(f"Unsafe archive path: {name}")
-            parts = path.parts
-            if len(parts) < 4 or parts[1:3] != ("custom_components", "curbcharge"):
-                raise ValueError(f"Archive path does not match HACS layout: {name}")
-            roots.add(parts[0])
-            relative = PurePosixPath(*parts[3:]).as_posix()
-            if any(part.lower() in EXCLUDED_DIRECTORIES for part in parts[3:]):
+            relative = path.as_posix()
+            if any(part.lower() in EXCLUDED_DIRECTORIES for part in path.parts):
                 raise ValueError(f"Development file in archive: {name}")
             if any(part in path.name.lower() for part in SENSITIVE_NAME_PARTS):
                 raise ValueError(f"Secret-like file in archive: {name}")
@@ -148,8 +143,6 @@ def validate_archive(
                 raise ValueError(f"Non-regular archive member: {name}")
             contents[relative] = archive.read(member)
 
-    if len(roots) != 1:
-        raise ValueError("Archive must contain exactly one wrapper directory")
     if set(contents) != expected:
         missing = sorted(expected - contents.keys())
         extra = sorted(contents.keys() - expected)
@@ -202,7 +195,7 @@ def build_archive(
     output.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_STORED) as archive:
         for relative, path in files.items():
-            info = zipfile.ZipInfo(PREFIX + relative, date_time=(1980, 1, 1, 0, 0, 0))
+            info = zipfile.ZipInfo(relative, date_time=(1980, 1, 1, 0, 0, 0))
             info.create_system = 3
             info.external_attr = (stat.S_IFREG | 0o644) << 16
             archive.writestr(info, path.read_bytes())
