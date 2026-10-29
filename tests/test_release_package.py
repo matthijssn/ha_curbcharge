@@ -1,105 +1,131 @@
-"""Verify the exact CurbCharge integration subtree in a source archive."""
+"""Verify the HACS release ZIP builder and archive validation."""
 
 import json
 import os
-import re
-import subprocess
+import stat
+import tempfile
 import unittest
 import zipfile
 from io import BytesIO
 from pathlib import Path
 
-_PREFIX = "custom_components/curbcharge/"
-_ROOT = Path(__file__).resolve().parents[1]
+from scripts.release_package import INTEGRATION, build_archive, validate_archive
 
 
-def _validate_archive(
-    archive_bytes: bytes, expected_files: set[str], release_tag: str | None = None
-) -> str:
-    """Validate the integration subtree and its manifest in a source archive."""
-    with zipfile.ZipFile(BytesIO(archive_bytes)) as archive:
-        members = {
-            member.filename for member in archive.infolist() if not member.is_dir()
-        }
-        if not members or any(not member.startswith(_PREFIX) for member in members):
-            raise ValueError("Archive does not contain only the CurbCharge subtree")
-
-        files = {member.removeprefix(_PREFIX) for member in members}
-        if files != expected_files:
-            raise ValueError("Archive files do not match the tracked integration tree")
-
-        for path in files:
-            if path.endswith(".json"):
-                json.loads(archive.read(f"{_PREFIX}{path}"))
-        manifest = json.loads(archive.read(f"{_PREFIX}manifest.json"))
-
-    if not isinstance(manifest, dict):
-        raise ValueError("Manifest is not a JSON object")
-    version = manifest.get("version")
-    if (
-        not isinstance(version, str)
-        or re.fullmatch(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)", version)
-        is None
-    ):
-        raise ValueError("Manifest version is not stable SemVer")
-    if release_tag is not None and release_tag != f"v{version}":
-        raise ValueError("Release tag does not match the archived manifest")
-    return version
+def _read_archive(data: bytes) -> dict[str, bytes]:
+    with zipfile.ZipFile(BytesIO(data)) as archive:
+        return {member.filename: archive.read(member) for member in archive.infolist()}
 
 
-def _make_archive(files: dict[str, bytes]) -> bytes:
+def _make_archive(members: dict[str, bytes], symlink: str | None = None) -> bytes:
     output = BytesIO()
     with zipfile.ZipFile(output, "w") as archive:
-        for path, content in files.items():
-            archive.writestr(f"{_PREFIX}{path}", content)
+        for name, contents in members.items():
+            info = zipfile.ZipInfo(name, date_time=(1980, 1, 1, 0, 0, 0))
+            info.create_system = 3
+            mode = stat.S_IFLNK | 0o777 if name == symlink else stat.S_IFREG | 0o644
+            info.external_attr = mode << 16
+            archive.writestr(info, contents)
     return output.getvalue()
 
 
 class ReleasePackageTests(unittest.TestCase):
     def setUp(self) -> None:
-        self.tracked_files = {
-            path.removeprefix(_PREFIX)
-            for path in subprocess.check_output(
-                ["git", "ls-files", "--", "custom_components/curbcharge"],
-                text=True,
-                cwd=_ROOT,
-            ).splitlines()
-        }
-        self.files = {
-            path: (_ROOT / _PREFIX / path).read_bytes() for path in self.tracked_files
-        }
-        self.archive = _make_archive(self.files)
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary_directory.cleanup)
+        self.directory = Path(self.temporary_directory.name)
+        self.archive_path = self.directory / "curbcharge.zip"
+        build_archive(self.archive_path)
+        self.archive = self.archive_path.read_bytes()
 
-    def test_tracked_archive_matches_manifest_and_release_tag(self) -> None:
-        version = _validate_archive(
-            self.archive, self.tracked_files, os.environ.get("RELEASE_TAG")
+    def _validate(
+        self, data: bytes | None = None, tag: str | None = None
+    ) -> dict[str, object]:
+        if data is not None:
+            self.archive_path.write_bytes(data)
+        return validate_archive(
+            self.archive_path,
+            INTEGRATION,
+            tag if tag is not None else os.environ.get("RELEASE_TAG"),
         )
-        self.assertRegex(
-            version, r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"
+
+    def test_build_is_deterministic_and_matches_hacs_layout(self) -> None:
+        second = self.directory / "second.zip"
+        build_archive(second)
+        self.assertEqual(self.archive, second.read_bytes())
+        inventory = self._validate()
+        self.assertEqual(
+            inventory["version"],
+            json.loads((INTEGRATION / "manifest.json").read_text())["version"],
+        )
+        self.assertIn(
+            "curbcharge-release/custom_components/curbcharge/www/curbcharge-card.js",
+            _read_archive(self.archive),
+        )
+        self.assertNotIn("quality_scale.yaml", inventory["files"])
+        self.assertFalse(
+            any(
+                "__pycache__" in name or name.endswith(".pyc")
+                for name in inventory["files"]
+            )
         )
 
     def test_missing_runtime_module_is_rejected(self) -> None:
-        files = dict(self.files)
-        del files["api.py"]
-        with self.assertRaisesRegex(ValueError, "tracked integration tree"):
-            _validate_archive(_make_archive(files), self.tracked_files)
+        members = _read_archive(self.archive)
+        del members["curbcharge-release/custom_components/curbcharge/api.py"]
+        with self.assertRaisesRegex(ValueError, "inventory mismatch"):
+            self._validate(_make_archive(members))
 
-    def test_invalid_json_is_rejected(self) -> None:
-        files = dict(self.files)
-        files["manifest.json"] = b"{"
+    def test_invalid_manifest_json_is_rejected(self) -> None:
+        members = _read_archive(self.archive)
+        members["curbcharge-release/custom_components/curbcharge/manifest.json"] = b"{"
         with self.assertRaises(json.JSONDecodeError):
-            _validate_archive(_make_archive(files), self.tracked_files)
+            self._validate(_make_archive(members))
+
+    def test_manifest_without_dependency_lists_is_rejected(self) -> None:
+        members = _read_archive(self.archive)
+        name = "curbcharge-release/custom_components/curbcharge/manifest.json"
+        manifest = json.loads(members[name])
+        del manifest["requirements"]
+        members[name] = json.dumps(manifest).encode()
+        with self.assertRaisesRegex(ValueError, "requirements"):
+            self._validate(_make_archive(members))
 
     def test_release_tag_mismatch_is_rejected(self) -> None:
         with self.assertRaisesRegex(ValueError, "does not match"):
-            _validate_archive(self.archive, self.tracked_files, "not-a-release-tag")
+            self._validate(tag="v0.0.0")
 
-    def test_wrong_archive_layout_is_rejected(self) -> None:
-        output = BytesIO()
-        with zipfile.ZipFile(output, "w") as archive:
-            archive.writestr("curbcharge/manifest.json", self.files["manifest.json"])
-        with self.assertRaisesRegex(ValueError, "subtree"):
-            _validate_archive(output.getvalue(), self.tracked_files)
+    def test_flat_archive_layout_is_rejected(self) -> None:
+        members = _read_archive(self.archive)
+        flattened = {
+            name.removeprefix("curbcharge-release/"): contents
+            for name, contents in members.items()
+        }
+        with self.assertRaisesRegex(ValueError, "HACS layout"):
+            self._validate(_make_archive(flattened))
+
+    def test_path_traversal_is_rejected(self) -> None:
+        members = _read_archive(self.archive)
+        members["curbcharge-release/custom_components/curbcharge/../escape.py"] = b""
+        with self.assertRaisesRegex(ValueError, "Unsafe archive path"):
+            self._validate(_make_archive(members))
+
+    def test_development_files_are_rejected(self) -> None:
+        members = _read_archive(self.archive)
+        members[
+            "curbcharge-release/custom_components/curbcharge/tests/test_extra.py"
+        ] = b""
+        with self.assertRaisesRegex(ValueError, "Development file"):
+            self._validate(_make_archive(members))
+
+    def test_symlinks_are_rejected(self) -> None:
+        name = "curbcharge-release/custom_components/curbcharge/__init__.py"
+        with self.assertRaisesRegex(ValueError, "Symlink"):
+            self._validate(_make_archive({name: b"target"}, symlink=name))
+
+    def test_malformed_zip_is_rejected(self) -> None:
+        with self.assertRaises(zipfile.BadZipFile):
+            self._validate(b"not a ZIP archive")
 
 
 if __name__ == "__main__":
