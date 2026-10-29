@@ -105,6 +105,7 @@ jobs:
       - name: Create or verify draft release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
           ZIP_PATH: ${{ runner.temp }}/release-artifact/curbcharge.zip
         run: |
