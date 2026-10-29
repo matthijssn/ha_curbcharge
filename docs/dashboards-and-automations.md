@@ -114,7 +114,8 @@ The card reads only the selected Home Assistant entity; it makes no provider
 requests. It displays the station name and operator when available, address,
 availability, connector counts, maximum power, distance, price/currency when
 known, and update times. Labels follow the Home Assistant language in English,
-Dutch, French, German, Norwegian Bokmål (`nb`), or Swedish (`sv`). Language is
+Dutch, French, German, Norwegian Bokmål (`nb`), Swedish (`sv`), or Finnish
+(`fi`). Language is
 independent of the selected provider country; station names and reported
 currencies are preserved, and prices are not converted.
 When configured with **Top nearby chargers**, it renders the backend-ordered
@@ -148,6 +149,18 @@ country/key prompts, entity/state/action labels, card details/navigation, and
 the visual editor. Also check Norwegian-provider data in Swedish and
 Swedish-provider data in Norwegian, including a language switch on an existing
 card/editor without changing saved IDs or customized names.
+
+### Finnish release smoke check
+
+Owner-run Home Assistant UI validation for `fi` remains an outstanding release
+gate tracked in [#291](https://github.com/matthijssn/ha_curbcharge/issues/291);
+automated translation and card tests do not replace it. On a safe instance,
+switch the profile language to Finnish and inspect setup, options, the
+Digitraffic AFIR Finland provider choice, entity/state/action labels, card
+details/navigation, and the visual editor. Also check Finnish UI with a
+non-Finland provider's data and a non-Finnish UI with Finland's data,
+including a language switch on an existing card/editor without changing
+saved IDs or customized names.
 
 Use safe positive, zero, unknown, and unavailable data, and inspect
 `{connector_type}` substitution, accented characters, and longer labels. Record
