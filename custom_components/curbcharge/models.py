@@ -354,6 +354,8 @@ class ProviderTimestampSource(StrEnum):
     BELGIUM_STATIC_FALLBACK = "belgium_static_fallback"
     NOBIL = "nobil"
     AFDC = "afdc"
+    FINLAND_EVSE_STATUS = "finland_evse_status"
+    FINLAND_STATIC_FALLBACK = "finland_static_fallback"
 
 
 class TariffStatus(StrEnum):
@@ -565,6 +567,7 @@ class ChargingStation:
                 ProviderTimestampSource.BELGIUM_EVSE_STATUS,
                 ProviderTimestampSource.NOBIL,
                 ProviderTimestampSource.AFDC,
+                ProviderTimestampSource.FINLAND_EVSE_STATUS,
             )
             or self.last_updated.utcoffset() is None
             or now.utcoffset() is None

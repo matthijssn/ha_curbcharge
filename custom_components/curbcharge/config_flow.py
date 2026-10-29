@@ -68,6 +68,7 @@ from .const import (
     NOBIL_PROVIDER_IDS,
     PERSONALIZATION_PROFILE_VERSION,
     PROVIDER_AFDC_US,
+    PROVIDER_DIGITRAFFIC_AFIR_FI,
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NDW_DOT_NL,
     PROVIDER_NOBIL_NO,
@@ -201,6 +202,7 @@ def station_options_schema(
     radius: int = DEFAULT_SEARCH_RADIUS_M,
     max_stations: int = DEFAULT_MAX_STATIONS,
     scan_interval_minutes: int = DEFAULT_SCAN_INTERVAL_MINUTES,
+    provider_id: str = PROVIDER_NDW_DOT_NL,
 ) -> FlowSchema:
     """Return the initial provider and station-search schema."""
     scan_interval_key, scan_interval_selector = _scan_interval_field(
@@ -227,9 +229,7 @@ def station_options_schema(
                     mode=selector.NumberSelectorMode.BOX,
                 )
             ),
-            vol.Required(
-                CONF_PROVIDER, default=PROVIDER_NDW_DOT_NL
-            ): selector.SelectSelector(
+            vol.Required(CONF_PROVIDER, default=provider_id): selector.SelectSelector(
                 selector.SelectSelectorConfig(
                     options=[
                         PROVIDER_NDW_DOT_NL,
@@ -237,6 +237,7 @@ def station_options_schema(
                         PROVIDER_NOBIL_NO,
                         PROVIDER_NOBIL_SE,
                         PROVIDER_AFDC_US,
+                        PROVIDER_DIGITRAFFIC_AFIR_FI,
                     ],
                     mode=selector.SelectSelectorMode.DROPDOWN,
                     translation_key="provider",
@@ -1089,13 +1090,18 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return await self.async_step_nobil_credentials()
             if provider_id == PROVIDER_AFDC_US:
                 return await self.async_step_afdc_credentials()
-            return await self.async_step_discovery_filters()
+            if provider_id == PROVIDER_NDW_DOT_NL:
+                return await self.async_step_discovery_filters()
+            return await self._async_validate_and_create_entry()
 
         return _show_form(
             self,
             step_id="station_options",
             data_schema=station_options_schema(
-                scan_interval_minutes=self._scan_interval
+                scan_interval_minutes=self._scan_interval,
+                radius=self._search_radius,
+                max_stations=self._max_stations,
+                provider_id=self._provider_id,
             ),
         )
 
@@ -1235,11 +1241,23 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     errors={"base": _flow_error(err)},
                     description_placeholders={"afdc_api_url": AFDC_API_KEY_SIGNUP_URL},
                 )
+            if self._provider_id == PROVIDER_NDW_DOT_NL:
+                return _show_form(
+                    self,
+                    step_id="discovery_filters",
+                    data_schema=vol.Schema(
+                        _discovery_filter_fields(self._discovery_filters)
+                    ),
+                    errors={"base": _flow_error(err)},
+                )
             return _show_form(
                 self,
-                step_id="discovery_filters",
-                data_schema=vol.Schema(
-                    _discovery_filter_fields(self._discovery_filters)
+                step_id="station_options",
+                data_schema=station_options_schema(
+                    scan_interval_minutes=self._scan_interval,
+                    radius=self._search_radius,
+                    max_stations=self._max_stations,
+                    provider_id=self._provider_id,
                 ),
                 errors={"base": _flow_error(err)},
             )

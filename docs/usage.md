@@ -107,6 +107,34 @@ provided to end users. NOBIL data are licensed under [CC BY 4.0][cc-by-4.0]:
 charging-station information is provided by [NOBIL][nobil] and [Enova][enova],
 normalized by CurbCharge, with no endorsement implied.
 
+### Finland (Fintraffic/Digitraffic AFIR)
+
+The Finland provider uses Fintraffic's [Digitraffic AFIR REST API][afir-api],
+open data published under the EU Alternative Fuels Infrastructure Regulation.
+No API key or account is required; requests are anonymous and send a
+`Digitraffic-User` header identifying the integration. CurbCharge fetches all
+Finnish (`operatorCountryCode=FI`) locations, EVSE statuses, and tariffs using
+the documented cursor pagination, and defensively drops any record outside
+Finland since the API is a shared multi-country dataset, not Finland-only.
+
+Locations and tariffs are cached for 15 minutes per Home Assistant instance to
+stay well under Digitraffic's documented 60-requests-per-minute-per-IP
+guidance; EVSE statuses are always fetched fresh on each poll. Each EVSE
+becomes one CurbCharge station; connectors without a per-connector status
+report an unknown connector state, with overall availability taken from the
+EVSE-level status. EVSEs reported as `REMOVED` are excluded. Pricing uses the
+same OCPI-style tariff elements and price components as the NDW DOT-NL
+provider; a tariff with usage-dependent restrictions (power, duration, energy,
+reservation, or time-of-day) remains unknown rather than guessed, and a
+tariff's own active date window is honored.
+
+Digitraffic's open data, including AFIR, is licensed under
+[CC BY 4.0][cc-by-4.0]: charging-point information is provided by
+[Fintraffic/Digitraffic][digitraffic], normalized by CurbCharge, with no
+endorsement implied. See the
+[Finland provider research note][finland-research] for verified source
+constraints.
+
 ### United States AFDC
 
 The U.S. provider uses the Alternative Fuels Data Center (AFDC) station API
@@ -147,10 +175,11 @@ select a replacement if an Entity source was renamed or removed.
 
 Choose a polling interval in minutes (default 5; minimum 1), a search radius
 from 100 to 10,000 metres, and a maximum of 1 to 50 stations (default 10), then
-select NDW DOT-NL, the Belgium preview, NOBIL Norway, NOBIL Sweden, or AFDC
-United States. Belgium setup asks for the Eco-Movement API token, NOBIL asks for
-a NOBIL API key, and the U.S. AFDC source asks for an NLR API key; each is
-validated before creating the entry.
+select NDW DOT-NL, the Belgium preview, NOBIL Norway, NOBIL Sweden, AFDC
+United States, or Digitraffic AFIR Finland. Belgium setup asks for the
+Eco-Movement API token, NOBIL asks for a NOBIL API key, and the U.S. AFDC
+source asks for an NLR API key; Finland requires no credentials. Each
+provider is validated before creating the entry.
 You can change the polling interval, radius, station limit, and whether to
 include stations without availability data later in Options. For Entity
 sources, Options also offers a movement threshold that defaults to 100 metres;
@@ -176,9 +205,9 @@ Missing or unknown group data does not satisfy an active filter. The existing
 by default; turning it off excludes NDW stations with no availability report
 before the station cap. The search radius remains the distance limit, and the
 maximum-station cap selects the nearest matching stations (with provider
-station ID as the tie-breaker). These filters are NDW-only; Belgium preview and
-NOBIL have no discovery-filter step or options. There is no provider-side operator
-discovery filter or separate maximum-distance setting.
+station ID as the tie-breaker). These filters are NDW-only; Belgium preview,
+NOBIL, and Finland AFIR have no discovery-filter step or options. There is no
+provider-side operator discovery filter or separate maximum-distance setting.
 
 The separate **Personalization** options page stores one optional, versioned
 profile in the config entry's Options. It is disabled by default and supports
@@ -624,3 +653,6 @@ and restart Home Assistant.
 [afdc-api-key]: https://developer.nlr.gov/signup/
 [enova]: https://enova.no/english
 [cc-by-4.0]: https://creativecommons.org/licenses/by/4.0/
+[afir-api]: https://www.digitraffic.fi/en/road-traffic/afir/
+[digitraffic]: https://www.digitraffic.fi/en/
+[finland-research]: https://github.com/matthijssn/ha_curbcharge/blob/main/docs/provider-research/finland.md
