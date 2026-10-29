@@ -575,7 +575,10 @@ def _connector_tariff_status(
         for status in _TARIFF_STATUS_PRIORITY:
             if status in statuses:
                 return status
-        return TariffStatus.INCOMPLETE
+        # ponytail: every effective_status this module produces is already one
+        # of the priority values above, so this is a defensive fallback, not a
+        # reachable outcome; kept in case a future tariff status is added.
+        return TariffStatus.INCOMPLETE  # pragma: no cover
     status = next(iter(statuses))
     if status is not TariffStatus.AVAILABLE:
         return status

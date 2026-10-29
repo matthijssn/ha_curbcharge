@@ -1031,3 +1031,89 @@ def test_optional_string_rejects_non_string():
     assert finland._optional_string("  ", "field") is None
     with pytest.raises(InvalidProviderResponseError):
         finland._optional_string(123, "field")
+
+
+def test_string_mapping_rejects_non_dict_and_non_string_keys():
+    with pytest.raises(InvalidProviderResponseError):
+        finland._string_mapping("not-a-dict", "field")
+    with pytest.raises(InvalidProviderResponseError):
+        finland._string_mapping({1: "a"}, "field")
+
+
+def test_validate_search_rejects_invalid_coordinates():
+    with pytest.raises(UnsupportedLocationError):
+        finland._validate_search(float("nan"), 25.0, 500, 10)
+
+
+def test_validate_search_rejects_invalid_station_limit():
+    with pytest.raises(UnsupportedLocationError, match="station limit"):
+        finland._validate_search(60.0, 25.0, 500, 0)
+
+
+@pytest.mark.asyncio
+async def test_finland_station_tariff_incomplete_when_mixing_reported_and_unreported():
+    evse = _evse(
+        connectors=[
+            _connector(tariff_ids=["t1"]),
+            _connector(tariff_ids=[]),
+        ]
+    )
+    session = FakeSession(
+        _full_payloads(
+            features=[_location_feature(evses=[evse])],
+            tariffs=[_tariff(tariff_id="t1")],
+            statuses=[],
+        )
+    )
+    provider = _provider(session)
+
+    result = await provider.async_get_stations(60.1699, 24.9384, 500, 10)
+
+    assert result.nearby[0].tariff_status is TariffStatus.INCOMPLETE
+
+
+@pytest.mark.asyncio
+async def test_finland_tariff_element_date_restriction_marks_tariff_inactive():
+    future_start = (
+        datetime.now(UTC).date().replace(year=datetime.now(UTC).year + 1).isoformat()
+    )
+    session = FakeSession(
+        _full_payloads(
+            tariffs=[_tariff(restrictions={"startDate": future_start})],
+        )
+    )
+    provider = _provider(session)
+
+    result = await provider.async_get_stations(60.1699, 24.9384, 500, 10)
+
+    assert result.nearby[0].tariff_status is TariffStatus.INACTIVE
+    assert result.nearby[0].tariff is None
+
+
+@pytest.mark.asyncio
+async def test_finland_tariff_mixes_conditional_and_unconditional_elements():
+    tariff_record = _tariff()
+    conditional_element = {
+        "priceComponents": [{"type": "ENERGY", "price": 1.0, "vat": None}],
+        "restrictions": {"minKwh": 1},
+    }
+    tariff_record["elements"].append(conditional_element)
+    session = FakeSession(_full_payloads(tariffs=[tariff_record]))
+    provider = _provider(session)
+
+    result = await provider.async_get_stations(60.1699, 24.9384, 500, 10)
+
+    assert result.nearby[0].tariff_status is TariffStatus.CONDITIONAL
+    assert result.nearby[0].tariff is None
+
+
+def test_unique_component_price_returns_none_when_gross_price_is_unresolved():
+    components = [{"type": "ENERGY", "price": 0.5, "vat": None}]
+    price, vat = finland._unique_component_price(components, "ENERGY", "NO")
+    assert price is None
+    assert vat is None
+
+
+def test_unique_time_price_returns_none_when_gross_price_is_unresolved():
+    components = [{"type": "TIME", "price": 1.2, "vat": None, "stepSize": 60}]
+    assert finland._unique_time_price(components, "NO") is None
