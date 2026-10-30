@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640">
+  <rect width="1280" height="640" fill="#0f3d33"/>
+  <circle cx="1180" cy="60" r="300" fill="#145a49" opacity="0.55"/>
+
+  <image href="../../custom_components/curbcharge/brand/icon@2x.png" x="80" y="133" width="120" height="120"/>
+  <text x="224" y="217" fill="#f6f6ec" font-family="Arial, sans-serif" font-size="64" font-weight="700">CurbCharge</text>
+
+  <text x="80" y="331" fill="#f6f6ec" font-family="Arial, sans-serif" font-size="38" font-weight="700">Find the best public EV charger</text>
+  <text x="80" y="381" fill="#f6f6ec" font-family="Arial, sans-serif" font-size="38" font-weight="700">near you, right in Home Assistant.</text>
+  <text x="80" y="439" fill="#b1d8c8" font-family="Arial, sans-serif" font-size="26">Provider-reported availability, power, distance and</text>
+  <text x="80" y="475" fill="#b1d8c8" font-family="Arial, sans-serif" font-size="26">tariffs, plus a recommended best nearby station.</text>
+
+  <rect x="740" y="116" width="460" height="408" rx="24" fill="#f6f6ec"/>
+  <text x="776" y="176" fill="#18212f" font-family="Arial, sans-serif" font-size="30" font-weight="700">Best nearby</text>
+  <rect x="1048" y="144" width="120" height="40" rx="20" fill="#e8f5ef" stroke="#3c9a69"/>
+  <text x="1108" y="171" text-anchor="middle" fill="#267147" font-family="Arial, sans-serif" font-size="18" font-weight="700">Selected</text>
+  <text x="776" y="232" fill="#18212f" font-family="Arial, sans-serif" font-size="32" font-weight="700">Example Station</text>
+  <line x1="776" y1="260" x2="1164" y2="260" stroke="#d8dee8"/>
+
+  <g font-family="Arial, sans-serif" font-size="22">
+    <text x="776" y="312" fill="#586579">Available / total</text>
+    <text x="1164" y="312" text-anchor="end" fill="#18212f" font-weight="700">2 / 4</text>
+    <text x="776" y="366" fill="#586579">Distance</text>
+    <text x="1164" y="366" text-anchor="end" fill="#18212f" font-weight="700">240 m</text>
+    <text x="776" y="420" fill="#586579">Maximum power</text>
+    <text x="1164" y="420" text-anchor="end" fill="#18212f" font-weight="700">150 kW</text>
+    <text x="776" y="474" fill="#586579">Price</text>
+    <text x="1164" y="474" text-anchor="end" fill="#18212f" font-weight="700">0.42 EUR/kWh</text>
+  </g>
+</svg>
