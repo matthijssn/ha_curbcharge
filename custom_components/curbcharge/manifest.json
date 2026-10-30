@@ -1,6 +1,9 @@
 {
   "domain": "curbcharge",
   "name": "CurbCharge",
+  "categories": [
+    "energy.ev_charging"
+  ],
   "codeowners": [
     "@matthijssn"
   ],
