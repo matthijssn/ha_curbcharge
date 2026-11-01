@@ -3,11 +3,11 @@
 This research note records the source-specific constraints for the Germany
 provider work tracked by [#313](https://github.com/matthijssn/ha_curbcharge/issues/313).
 It is not a claim that Germany is release-ready — on the contrary, it
-identifies a structural blocker (see "Access model" below) that the original
-issue did not anticipate. Mobilithek was checked on 2026-11-01 while logged
-in to a newly registered maintainer account; recheck before provider release,
-since offers, schemas, and terms are independently published per data
-provider and can change.
+identifies structural blockers (see "Access model" and "Authentication
+mechanism" below) that the original issue did not anticipate. Mobilithek was
+checked on 2026-11-01 while logged in to a newly registered maintainer
+account; recheck before provider release, since offers, schemas, and terms
+are independently published per data provider and can change.
 
 ## Platform
 
@@ -39,14 +39,17 @@ German charge point.
 Access additionally requires, per offer:
 1. A Mobilithek organisation account (free registration; already completed
    for this research).
-2. An explicit **subscription request** submitted by the organisation's
+2. A separate **machine account with a client TLS certificate** (see
+   "Authentication mechanism" below) — distinct from the organisation
+   account itself.
+3. An explicit **subscription request** submitted by the organisation's
    order manager.
-3. **Manual approval by the data provider** (the CPO), not just by
+4. **Manual approval by the data provider** (the CPO), not just by
    Mobilithek. The platform states: "The content data is only available to
    your organisation after it has been explicitly approved by the data
    provider... the data provider can also restrict the maximum number of
    downloads and a period during which downloads are possible."
-4. Confirmed: "Individual data access via the portal allowed for anonymous
+5. Confirmed: "Individual data access via the portal allowed for anonymous
    users: No" and "Data access via the API is only allowed after approval of
    the subscription: Yes" (verified on the innocept mobility dynamic offer,
    ID `1026876702612758528`).
@@ -58,6 +61,52 @@ subscription for every individual CPO whose coverage is wanted, with
 turnaround time outside the maintainer's or CurbCharge's control. Reaching
 useful multi-region coverage would mean requesting and waiting on approval
 from several unrelated companies, not a one-time setup.
+
+## Authentication mechanism (critical finding, corrects "unknown" below)
+
+The Mobilithek portal UI does not document the actual consumer pull
+mechanism; it only appears in Mobilithek's technical interface description
+and in independent client implementations. A reviewed open-source Go client
+([Karte-Bayern/Mobilithek](https://github.com/Karte-Bayern/Mobilithek),
+MIT-licensed, written for a different Mobilithek dataset but against the
+same subscription-pull infrastructure) confirms:
+
+- **Authentication is mutual TLS (mTLS) with a client certificate**, not a
+  bearer token or API-key header. Access requires a **machine account**
+  that issues a PKCS#12 (`.p12`/`.pfx`) certificate bundle, converted to a
+  PEM certificate + private key pair for the HTTP client. This is a
+  distinct credential type from the organisation-account login used to
+  browse and subscribe to offers in the portal.
+- **Base URL**: `https://mobilithek.info:8443` — a dedicated port separate
+  from the public portal (`:443`), used only for authenticated
+  machine-to-machine subscription pulls.
+- **Known endpoint shapes** (the reviewed client tries several, since the
+  canonical shape is not uniformly documented across datasets):
+  - `/mobilithek/api/V1.0/subscription?subscriptionID=<id>` (generic v1)
+  - `/mobilithek/api/v1.0/subscription/<id>/clientPullService?subscriptionID=<id>` (DATEX II v2 client-pull)
+  - `/mobilithek/api/v1.0/subscription/datexv3?subscriptionID=<id>` (DATEX II v3)
+  - `/mobilithek/api/v1.0/container/subscription?subscriptionID=<id>` (container)
+- The numeric subscription ID (not the public offer ID shown in the portal
+  URL) identifies which approved subscription's content to pull.
+- Response `Accept` is negotiated across `application/xml, text/xml,
+  application/json, text/json` — some data is pulled as DATEX II **XML**
+  even though the innocept mobility charging offer's portal metadata states
+  "Syntax: JSON". Whether the AFIR charging profile specifically is served
+  as JSON, XML, or either is **unverified** and must be confirmed with an
+  actual approved subscription before implementation.
+- Conditional requests (`ETag`/`If-Modified-Since` → HTTP `304`) are
+  supported; `429`/`5xx` warrant backoff retries.
+
+This materially changes the implementation picture versus every existing
+CurbCharge provider (Belgium/NOBIL/AFDC all use a simple bearer token or
+query-string API key): it requires a **new credential type** (client
+certificate + private key, not a single string token) in the config flow,
+secure storage of a private key in config-entry data, a dedicated
+aiohttp/SSL client context per config entry (not the shared HA websession
+every other provider injects), and likely its own machine-account
+request/approval step with Mobilithek, separate from and in addition to the
+per-CPO subscription approval above. None of this has been implemented
+anywhere in CurbCharge before.
 
 ## License and fixtures
 
@@ -175,20 +224,36 @@ found.
 ## Release status and open blocker
 
 The schema is well-documented and license terms (CC BY 4.0) are favorable,
-but **the fragmented, per-CPO, provider-approved subscription model is a
-structural blocker that the original issue did not anticipate** (it assumed
-a single national feed akin to Finland's AFIR aggregator). Before any
-implementation proceeds, a scope decision is needed on **which specific
-CPO(s) to target** for an initial "preview" (mirroring how Belgium's preview
-covers only Eco-Movement's own network, not all Belgian chargers) — this is
-a product decision, not something to guess unilaterally, since it determines
-which company's approval the maintainer must obtain and how limited the
-resulting coverage will be.
+but **two compounding structural blockers** exist that the original issue
+did not anticipate (it assumed a single national feed with a simple token,
+akin to Finland's AFIR aggregator):
 
-No subscription has been requested or approved as part of this research;
-no real operator payloads have been captured. All schema findings above
-come from Mobilithek's publicly downloadable JSON Schema files, not from
-live content data.
+1. **Fragmented, per-CPO, provider-approved subscriptions** — no single
+   feed covers all of Germany; a specific CPO must be chosen and that
+   CPO must individually approve access (see "Access model" above).
+2. **Mutual-TLS client-certificate authentication** — not a bearer
+   token/API key like every existing CurbCharge provider, requiring a
+   separate Mobilithek machine-account certificate, new config-flow
+   credential handling (certificate + private key, not a single string),
+   and a dedicated per-entry TLS client context (see "Authentication
+   mechanism" above).
+
+Before any implementation proceeds, two decisions are needed:
+
+- **Which specific CPO(s) to target** for an initial "preview" (mirroring
+  how Belgium's preview covers only Eco-Movement's own network) — this
+  determines which company's approval must be obtained and how limited
+  resulting coverage will be.
+- **Whether to pursue mTLS client-certificate support at all** given it is
+  a new credential type and security surface for the whole codebase, not
+  an incremental change to an existing pattern. This is a maintainer
+  product/architecture decision, not something to guess unilaterally.
+
+No subscription or machine-account certificate has been requested as part
+of this research; no real operator payloads have been captured. All schema
+and endpoint findings above come from Mobilithek's publicly downloadable
+JSON Schema files and a reviewed independent open-source client, not from
+live content data or private correspondence.
 
 ## Sources
 
@@ -203,3 +268,8 @@ live content data.
   - [AFIR-Recharging-Dynamic-01-00-00_Delta / DATEXII_3_AfirEnergyInfrastructure.json](https://mobilithek.info/mdp-api/files/aux/schemas/DATEX_2_V3/AFIR-Recharging-Dynamic-01-00-00_Delta/DATEXII_3_AfirEnergyInfrastructure.json)
   - [AFIR-Recharging-Dynamic-01-00-00_Delta / DATEXII_3_AfirFacilities.json](https://mobilithek.info/mdp-api/files/aux/schemas/DATEX_2_V3/AFIR-Recharging-Dynamic-01-00-00_Delta/DATEXII_3_AfirFacilities.json)
 - [Creative Commons Attribution 4.0 International legal code](https://creativecommons.org/licenses/by/4.0/legalcode)
+- [Karte-Bayern/Mobilithek](https://github.com/Karte-Bayern/Mobilithek) — MIT-licensed
+  independent Go client confirming the mTLS client-certificate authentication
+  mechanism, base URL, and endpoint shapes (built for a different Mobilithek
+  dataset, not AFIR charging specifically, but against the same subscription
+  pull infrastructure)
