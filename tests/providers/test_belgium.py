@@ -12,12 +12,6 @@ from typing import Any
 
 import pytest
 
-from custom_components.curbcharge import belgium
-from custom_components.curbcharge.belgium import (
-    BelgiumChargingProvider,
-    BelgiumDatexClient,
-    BelgiumRequestLimiter,
-)
 from custom_components.curbcharge.const import PROVIDER_ECO_MOVEMENT_BE
 from custom_components.curbcharge.models import (
     ConnectorStatus,
@@ -27,12 +21,18 @@ from custom_components.curbcharge.models import (
     FavouriteStationReference,
     ProviderTimestampSource,
 )
-from custom_components.curbcharge.provider import (
+from custom_components.curbcharge.providers import belgium
+from custom_components.curbcharge.providers.base import (
     AuthenticationError,
     InvalidProviderResponseError,
     ProviderConnectionError,
     ProviderRateLimitError,
     UnsupportedLocationError,
+)
+from custom_components.curbcharge.providers.belgium import (
+    BelgiumChargingProvider,
+    BelgiumDatexClient,
+    BelgiumRequestLimiter,
 )
 
 
@@ -98,7 +98,7 @@ def _locations_document(
 ) -> dict[str, Any]:
     document = json.loads(
         (
-            Path(__file__).parent / "fixtures" / "belgium_locations_example.json"
+            Path(__file__).parent.parent / "fixtures" / "belgium_locations_example.json"
         ).read_text(encoding="utf-8")
     )
     point = document["payload"]["aegiEnergyInfrastructureTablePublication"][
@@ -149,9 +149,9 @@ def _status_document(
     evse_id: str = "evse-internal-1",
 ) -> dict[str, Any]:
     document = json.loads(
-        (Path(__file__).parent / "fixtures" / "belgium_status_example.json").read_text(
-            encoding="utf-8"
-        )
+        (
+            Path(__file__).parent.parent / "fixtures" / "belgium_status_example.json"
+        ).read_text(encoding="utf-8")
     )
     point_status = document["messageContainer"]["payload"][0][
         "aegiEnergyInfrastructureStatusPublication"

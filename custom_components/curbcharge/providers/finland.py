@@ -14,7 +14,7 @@ from typing import cast
 import aiohttp
 from homeassistant.core import HomeAssistant
 
-from .const import (
+from ..const import (
     COUNTRY_FI,
     DOMAIN,
     MAX_MAX_STATIONS,
@@ -24,8 +24,8 @@ from .const import (
     PROVIDER_DIGITRAFFIC_AFIR_FI,
     PROVIDER_DIGITRAFFIC_AFIR_FI_NAME,
 )
-from .geography import distance_m
-from .models import (
+from ..geography import distance_m
+from ..models import (
     ChargingConnector,
     ChargingLocation,
     ChargingStation,
@@ -39,7 +39,7 @@ from .models import (
     StationDiscoveryResult,
     TariffStatus,
 )
-from .provider import (
+from .base import (
     BaseChargingProvider,
     InvalidProviderResponseError,
     ProviderConnectionError,

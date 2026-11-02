@@ -50,7 +50,7 @@ from custom_components.curbcharge.models import (
     StationDiscoveryResult,
     parse_favourite_references,
 )
-from custom_components.curbcharge.provider import (
+from custom_components.curbcharge.providers.base import (
     ChargingProviderError,
     ProviderRateLimitError,
 )

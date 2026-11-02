@@ -113,7 +113,7 @@ class ReleasePackageTests(unittest.TestCase):
 
     def test_missing_runtime_module_is_rejected(self) -> None:
         members = _read_archive(self.archive)
-        del members["api.py"]
+        del members["providers/ndw_nl.py"]
         with self.assertRaisesRegex(ValueError, "inventory mismatch"):
             self._validate(_make_archive(members))
 

@@ -12,8 +12,7 @@ import aiohttp
 import pytest
 from homeassistant.core import HomeAssistant
 
-import custom_components.curbcharge.afdc as afdc
-from custom_components.curbcharge.api import create_provider
+import custom_components.curbcharge.providers.afdc as afdc
 from custom_components.curbcharge.const import PROVIDER_AFDC_US
 from custom_components.curbcharge.models import (
     ConnectorStatus,
@@ -22,7 +21,8 @@ from custom_components.curbcharge.models import (
     ProviderTimestampSource,
     TariffStatus,
 )
-from custom_components.curbcharge.provider import (
+from custom_components.curbcharge.providers import create_provider
+from custom_components.curbcharge.providers.base import (
     AuthenticationError,
     InvalidProviderResponseError,
     ProviderConnectionError,
@@ -81,7 +81,7 @@ class FakeSession:
 
 
 def _sample_payload() -> dict[str, Any]:
-    path = Path(__file__).parent / "fixtures" / "afdc_stations_synthetic.json"
+    path = Path(__file__).parent.parent / "fixtures" / "afdc_stations_synthetic.json"
     return json.loads(path.read_text(encoding="utf-8"))
 
 

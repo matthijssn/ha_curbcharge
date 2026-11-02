@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 import aiohttp
 from homeassistant.core import HomeAssistant
 
-from .const import (
+from ..const import (
     COUNTRY_US,
     DOMAIN,
     MAX_MAX_STATIONS,
@@ -22,8 +22,8 @@ from .const import (
     PROVIDER_AFDC_US,
     PROVIDER_AFDC_US_NAME,
 )
-from .geography import distance_m
-from .models import (
+from ..geography import distance_m
+from ..models import (
     ChargingConnector,
     ChargingLocation,
     ChargingStation,
@@ -35,7 +35,7 @@ from .models import (
     StationDiscoveryResult,
     TariffStatus,
 )
-from .provider import (
+from .base import (
     AuthenticationError,
     BaseChargingProvider,
     InvalidProviderResponseError,

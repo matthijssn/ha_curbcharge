@@ -1,4 +1,4 @@
-"""Charging provider factory and NDW DOT-NL API client."""
+"""Async client for NDW DOT-NL's Netherlands charge-point GeoJSON API."""
 
 import asyncio
 import gzip
@@ -19,28 +19,21 @@ from zoneinfo import ZoneInfo
 import aiohttp
 from homeassistant.core import HomeAssistant
 
-from .afdc import create_afdc_provider
-from .belgium import create_belgium_provider
-from .const import (
+from ..const import (
     COUNTRY_NL,
     DOMAIN,
     GEOJSON_REQUEST_TIMEOUT,
     MAX_BBOX_AREA_DEG2,
     MIN_SEARCH_RADIUS_M,
-    NOBIL_PROVIDER_IDS,
-    PROVIDER_AFDC_US,
     PROVIDER_API_URL,
-    PROVIDER_DIGITRAFFIC_AFIR_FI,
-    PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NAME,
     PROVIDER_NDW_DOT_NL,
     TARIFF_CACHE_TTL,
     TARIFF_FEED_URL,
     TARIFF_REQUEST_TIMEOUT,
 )
-from .finland import create_finland_provider
-from .geography import distance_m
-from .models import (
+from ..geography import distance_m
+from ..models import (
     ChargingConnector,
     ChargingLocation,
     ChargingStation,
@@ -53,15 +46,13 @@ from .models import (
     StationDiscoveryResult,
     TariffStatus,
 )
-from .nobil import create_nobil_provider
-from .provider import (
+from .base import (
     AuthenticationError,
     BaseChargingProvider,
     InvalidProviderResponseError,
     ProviderConnectionError,
     ProviderRateLimitError,
     UnsupportedLocationError,
-    UnsupportedProviderError,
     retry_after_seconds,
 )
 
@@ -417,29 +408,13 @@ class NdwDotNlProvider(BaseChargingProvider):
             raise ProviderConnectionError("Could not connect to NDW DOT-NL") from None
 
 
-def create_provider(
-    provider_id: str,
+def create_ndw_nl_provider(
     session: aiohttp.ClientSession,
     hass: HomeAssistant | None = None,
-    token: str | None = None,
-) -> BaseChargingProvider:
-    """Return the requested implemented provider."""
-    if provider_id == PROVIDER_AFDC_US:
-        if not token:
-            raise AuthenticationError("An AFDC API key is required")
-        return create_afdc_provider(session, token, hass)
-    if provider_id == PROVIDER_NDW_DOT_NL:
-        limiter = _shared_ndw_request_limiter(hass) if hass is not None else None
-        return NdwDotNlProvider(session, limiter)
-    if provider_id == PROVIDER_ECO_MOVEMENT_BE and hass is not None and token:
-        return create_belgium_provider(hass, session, token)
-    if provider_id in NOBIL_PROVIDER_IDS:
-        if not token:
-            raise AuthenticationError("A NOBIL API key is required")
-        return create_nobil_provider(session, provider_id, token, hass)
-    if provider_id == PROVIDER_DIGITRAFFIC_AFIR_FI:
-        return create_finland_provider(session, hass)
-    raise UnsupportedProviderError("The configured charging provider is unsupported")
+) -> NdwDotNlProvider:
+    """Return the NDW DOT-NL provider, sharing a request limiter across entries."""
+    limiter = _shared_ndw_request_limiter(hass) if hass is not None else None
+    return NdwDotNlProvider(session, limiter)
 
 
 def _feature_collection(payload: object) -> GeoJSONFeatureCollection:

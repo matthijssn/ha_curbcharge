@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 
-from .models import (
+from ..models import (
     DiscoveryFilterSettings,
     FavouriteStationReference,
     StationDiscoveryResult,

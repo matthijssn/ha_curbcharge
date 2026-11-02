@@ -195,13 +195,16 @@ release notes.
 
 ## Provider architecture
 
-`provider.py` defines provider errors and the normalized provider contract;
-`models.py` holds immutable stations, connectors, tariffs, and discovery
-settings. `api.py` implements NDW, while `belgium.py` and `nobil.py` keep
-source-specific behavior in their own adapters. `coordinator.py` owns one
-provider update cycle, and `sensor.py`/`binary_sensor.py` expose normalized
-data. Follow a provider's published terms and limits, add synthetic fixtures
-and offline tests under `tests/`, and do not add live credentials or private
+`providers/base.py` defines provider errors and the normalized provider
+contract; `models.py` holds immutable stations, connectors, tariffs, and
+discovery settings. `providers/__init__.py` is the factory that selects a
+backend by provider ID. `providers/ndw_nl.py` implements NDW, while
+`providers/belgium.py`, `providers/finland.py`, `providers/nobil.py`, and
+`providers/afdc.py` keep source-specific behavior in their own adapters.
+`coordinator.py` owns one provider update cycle, and `sensor.py`/
+`binary_sensor.py` expose normalized data. Follow a provider's published terms
+and limits, add synthetic fixtures and offline tests under `tests/providers/`,
+and do not add live credentials or private
 payloads to tests, issues, or logs.
 
 ## Security and external tooling
