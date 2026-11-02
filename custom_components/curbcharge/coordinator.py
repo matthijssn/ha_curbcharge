@@ -29,7 +29,7 @@ from .models import (
     DiscoveryFilterSettings,
     FavouriteStationReference,
 )
-from .provider import (
+from .providers.base import (
     AuthenticationError,
     BaseChargingProvider,
     ChargingProviderError,

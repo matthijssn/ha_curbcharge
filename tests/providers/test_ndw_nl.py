@@ -15,15 +15,7 @@ from typing import Any
 import aiohttp
 import pytest
 
-import custom_components.curbcharge.api as api
-from custom_components.curbcharge.api import (
-    NdwDotNlProvider,
-    _parse_tariff,
-    _station_from_feature,
-    _with_station_tariff,
-    create_provider,
-)
-from custom_components.curbcharge.belgium import BelgiumChargingProvider
+import custom_components.curbcharge.providers.ndw_nl as ndw_nl
 from custom_components.curbcharge.const import (
     DOMAIN,
     PROVIDER_ECO_MOVEMENT_BE,
@@ -38,7 +30,8 @@ from custom_components.curbcharge.models import (
     ProviderTimestampSource,
     TariffStatus,
 )
-from custom_components.curbcharge.provider import (
+from custom_components.curbcharge.providers import create_provider
+from custom_components.curbcharge.providers.base import (
     AuthenticationError,
     InvalidProviderResponseError,
     ProviderConnectionError,
@@ -46,6 +39,13 @@ from custom_components.curbcharge.provider import (
     UnsupportedLocationError,
     UnsupportedProviderError,
     retry_after_seconds,
+)
+from custom_components.curbcharge.providers.belgium import BelgiumChargingProvider
+from custom_components.curbcharge.providers.ndw_nl import (
+    NdwDotNlProvider,
+    _parse_tariff,
+    _station_from_feature,
+    _with_station_tariff,
 )
 
 
@@ -281,9 +281,11 @@ async def test_get_stations_recalculates_radius_and_limit_for_moved_center(
 
         assert [station.provider_id for station in stations] == expected_ids
         assert stations[0].distance_m == 0
-        assert session.requests[0][1] == {"bbox": api._bounding_box(*center, radius_m)}
+        assert session.requests[0][1] == {
+            "bbox": ndw_nl._bounding_box(*center, radius_m)
+        }
         assert session.requests[0][1] != {
-            "bbox": api._bounding_box(52.0, 5.0, radius_m)
+            "bbox": ndw_nl._bounding_box(52.0, 5.0, radius_m)
         }
 
 
@@ -388,8 +390,8 @@ async def test_ndw_remote_favorite_request_count_and_spacing(
         waits.append(delay)
         current_time[0] += delay
 
-    monkeypatch.setattr(api.time, "monotonic", monotonic)
-    monkeypatch.setattr(api.asyncio, "sleep", sleep)
+    monkeypatch.setattr(ndw_nl.time, "monotonic", monotonic)
+    monkeypatch.setattr(ndw_nl.asyncio, "sleep", sleep)
 
     template = _without_tariffs(
         {"type": "FeatureCollection", "features": [sample_geojson["features"][0]]}
@@ -418,14 +420,16 @@ async def test_ndw_remote_favorite_request_count_and_spacing(
         )
 
     session = FakeSession(responses)
-    provider = NdwDotNlProvider(session, api.NdwRequestLimiter())
+    provider = NdwDotNlProvider(session, ndw_nl.NdwRequestLimiter())
     result = await provider.async_get_stations(52.0, 5.0, 500, 10, tuple(favourites))
 
     assert result.nearby == ()
     assert len(result.favourites) == favorite_count
     assert len(session.requests) == 1 + favorite_count
-    assert current_time[0] == pytest.approx(api._NDW_REQUEST_INTERVAL * favorite_count)
-    assert waits == pytest.approx([api._NDW_REQUEST_INTERVAL] * favorite_count)
+    assert current_time[0] == pytest.approx(
+        ndw_nl._NDW_REQUEST_INTERVAL * favorite_count
+    )
+    assert waits == pytest.approx([ndw_nl._NDW_REQUEST_INTERVAL] * favorite_count)
 
 
 @pytest.mark.asyncio
@@ -447,7 +451,7 @@ async def test_provider_rejects_favourite_from_a_different_provider(sample_geojs
 
 @pytest.mark.asyncio
 async def test_ndw_rate_limit_deferral_retries_waiting_requests(monkeypatch):
-    limiter = api.NdwRequestLimiter()
+    limiter = ndw_nl.NdwRequestLimiter()
     limiter._last_request = 0.0
     clock = [0.0]
     sleeps = 0
@@ -462,8 +466,8 @@ async def test_ndw_rate_limit_deferral_retries_waiting_requests(monkeypatch):
         if sleeps == 1:
             limiter.defer_requests(1)
 
-    monkeypatch.setattr(api.time, "monotonic", monotonic)
-    monkeypatch.setattr(api.asyncio, "sleep", sleep)
+    monkeypatch.setattr(ndw_nl.time, "monotonic", monotonic)
+    monkeypatch.setattr(ndw_nl.asyncio, "sleep", sleep)
 
     await limiter.async_wait()
 
@@ -472,16 +476,16 @@ async def test_ndw_rate_limit_deferral_retries_waiting_requests(monkeypatch):
 
 
 def test_shared_ndw_limiter_rejects_invalid_hass_data(hass):
-    hass.data.setdefault(DOMAIN, {})[api._NDW_REQUEST_LIMITER_DATA_KEY] = object()
+    hass.data.setdefault(DOMAIN, {})[ndw_nl._NDW_REQUEST_LIMITER_DATA_KEY] = object()
 
     with pytest.raises(RuntimeError, match="NDW request limiter"):
-        api._shared_ndw_request_limiter(hass)
+        ndw_nl._shared_ndw_request_limiter(hass)
 
 
 def test_ndw_provider_exposes_stable_country_identity():
     provider = NdwDotNlProvider(FakeSession([]))
 
-    assert provider.provider_name == api.PROVIDER_NAME
+    assert provider.provider_name == ndw_nl.PROVIDER_NAME
     assert provider.provider_id == "ndw_dot_nl"
     assert provider.country_code == "NL"
 
@@ -833,7 +837,7 @@ async def test_tariff_refresh_runs_in_executor_and_refreshes_cached_tariffs(
     monkeypatch,
 ):
     parser_threads: list[int] = []
-    parse_tariff_feed = api._parse_tariff_feed
+    parse_tariff_feed = ndw_nl._parse_tariff_feed
 
     def record_parser_thread(
         body: bytes, lookup_ids: set[str], now: datetime
@@ -841,7 +845,7 @@ async def test_tariff_refresh_runs_in_executor_and_refreshes_cached_tariffs(
         parser_threads.append(threading.get_ident())
         return parse_tariff_feed(body, lookup_ids, now)
 
-    monkeypatch.setattr(api, "_parse_tariff_feed", record_parser_thread)
+    monkeypatch.setattr(ndw_nl, "_parse_tariff_feed", record_parser_thread)
     records = [
         {
             "id": tariff_id,
@@ -961,7 +965,7 @@ def test_missing_ndw_timestamp_preserves_valid_availability(
 )
 def test_feature_collection_rejects_malformed_payloads(payload):
     with pytest.raises(InvalidProviderResponseError):
-        api._feature_collection(payload)
+        ndw_nl._feature_collection(payload)
 
 
 @pytest.mark.parametrize(
@@ -1007,9 +1011,9 @@ def test_bounding_box_rejects_out_of_bounds_searches():
         (0, 0, 100_000),
     ):
         with pytest.raises(UnsupportedLocationError):
-            api._bounding_box(latitude, longitude, radius_m)
+            ndw_nl._bounding_box(latitude, longitude, radius_m)
 
-    assert api._bounding_box(90, 0, 100)
+    assert ndw_nl._bounding_box(90, 0, 100)
 
 
 @pytest.mark.parametrize(
@@ -1027,15 +1031,15 @@ def test_retry_after_accepts_delta_seconds_or_http_dates(value, expected):
 
 
 def test_pagination_links_must_remain_on_the_provider_endpoint():
-    current_url = api.PROVIDER_API_URL
-    assert api._next_page_url(None, current_url) is None
+    current_url = ndw_nl.PROVIDER_API_URL
+    assert ndw_nl._next_page_url(None, current_url) is None
     next_url = f"{current_url}?cursor=next"
-    assert api._next_page_url(f"<{next_url}>; rel=next", current_url) == next_url
+    assert ndw_nl._next_page_url(f"<{next_url}>; rel=next", current_url) == next_url
 
     previous = "<https://example.com/page>; rel=previous"
-    assert api._next_page_url(previous, current_url) is None
+    assert ndw_nl._next_page_url(previous, current_url) is None
     with pytest.raises(InvalidProviderResponseError):
-        api._next_page_url(
+        ndw_nl._next_page_url(
             "<https://example.com/page>; rel=next",
             current_url,
         )
@@ -1046,7 +1050,7 @@ async def test_pagination_rejects_invalid_metadata_missing_pages_loops_and_dupli
     sample_geojson,
 ):
     features = sample_geojson["features"]
-    next_url = f"{api.PROVIDER_API_URL}?cursor=next"
+    next_url = f"{ndw_nl.PROVIDER_API_URL}?cursor=next"
     next_link = f'<{next_url}>; rel="next"'
     cases = (
         [
@@ -1352,11 +1356,11 @@ def test_connector_with_conflicting_tariffs_is_ambiguous(sample_stations):
 
 def test_provider_factory_rejects_unimplemented_providers():
     with pytest.raises(UnsupportedProviderError):
-        api.create_provider("unknown", FakeSession([]))
+        create_provider("unknown", FakeSession([]))
 
 
 def test_provider_factory_creates_belgium_with_home_assistant_limiter(hass):
-    provider = api.create_provider(
+    provider = create_provider(
         PROVIDER_ECO_MOVEMENT_BE,
         FakeSession([]),
         hass,

@@ -26,7 +26,7 @@ from custom_components.curbcharge.models import (
     ProviderTimestampSource,
     TariffStatus,
 )
-from custom_components.curbcharge.provider import ChargingProviderError
+from custom_components.curbcharge.providers.base import ChargingProviderError
 from custom_components.curbcharge.sensor import (
     AvailabilityPercentageSensor,
     AvailableConnectorsSensor,

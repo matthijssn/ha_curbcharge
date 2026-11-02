@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 import aiohttp
 from homeassistant.core import HomeAssistant
 
-from .const import (
+from ..const import (
     COUNTRY_NO,
     COUNTRY_SE,
     DOMAIN,
@@ -27,8 +27,8 @@ from .const import (
     PROVIDER_NOBIL_SE,
     PROVIDER_NOBIL_SE_NAME,
 )
-from .geography import distance_m
-from .models import (
+from ..geography import distance_m
+from ..models import (
     ChargingConnector,
     ChargingLocation,
     ChargingStation,
@@ -40,7 +40,7 @@ from .models import (
     StationDiscoveryResult,
     TariffStatus,
 )
-from .provider import (
+from .base import (
     AuthenticationError,
     BaseChargingProvider,
     InvalidProviderResponseError,

@@ -14,8 +14,7 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 import custom_components.curbcharge as curbcharge
-import custom_components.curbcharge.nobil as nobil
-from custom_components.curbcharge.api import create_provider
+import custom_components.curbcharge.providers.nobil as nobil
 from custom_components.curbcharge.const import (
     CONF_API_TOKEN,
     CONF_LOCATION_SOURCE,
@@ -34,7 +33,8 @@ from custom_components.curbcharge.models import (
     ProviderTimestampSource,
     TariffStatus,
 )
-from custom_components.curbcharge.provider import (
+from custom_components.curbcharge.providers import create_provider
+from custom_components.curbcharge.providers.base import (
     AuthenticationError,
     InvalidProviderResponseError,
     ProviderConnectionError,
@@ -88,7 +88,9 @@ class FakeSession:
 
 
 def _sample_payload() -> dict[str, Any]:
-    fixture_path = Path(__file__).parent / "fixtures" / "nobil_stations_synthetic.json"
+    fixture_path = (
+        Path(__file__).parent.parent / "fixtures" / "nobil_stations_synthetic.json"
+    )
     return json.loads(fixture_path.read_text(encoding="utf-8"))
 
 

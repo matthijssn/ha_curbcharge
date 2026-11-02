@@ -21,7 +21,7 @@ from custom_components.curbcharge.models import (
     ProviderTimestampSource,
     StationDiscoveryResult,
 )
-from custom_components.curbcharge.provider import (
+from custom_components.curbcharge.providers.base import (
     AuthenticationError,
     ProviderConnectionError,
     ProviderRateLimitError,

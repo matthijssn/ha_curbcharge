@@ -62,7 +62,7 @@ from custom_components.curbcharge.models import (
     PersonalizationRankingPreset,
     PersonalizationUnknownDataPolicy,
 )
-from custom_components.curbcharge.provider import (
+from custom_components.curbcharge.providers.base import (
     AuthenticationError,
     ChargingProviderError,
     InvalidProviderResponseError,

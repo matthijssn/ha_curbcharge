@@ -10,10 +10,6 @@ import pytest
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.curbcharge.belgium import (
-    BelgiumChargingProvider,
-    BelgiumDatexClient,
-)
 from custom_components.curbcharge.const import (
     CONF_API_TOKEN,
     CONF_FAVOURITES,
@@ -42,9 +38,13 @@ from custom_components.curbcharge.models import (
     PersonalizationProfile,
     ProviderTimestampSource,
 )
-from custom_components.curbcharge.provider import ProviderConnectionError
+from custom_components.curbcharge.providers.base import ProviderConnectionError
+from custom_components.curbcharge.providers.belgium import (
+    BelgiumChargingProvider,
+    BelgiumDatexClient,
+)
 from tests.conftest import FakeProvider
-from tests.test_belgium import (
+from tests.providers.test_belgium import (
     FakeResponse,
     FakeSession,
     NoWaitLimiter,

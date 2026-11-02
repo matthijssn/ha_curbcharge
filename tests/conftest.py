@@ -7,12 +7,12 @@ from typing import Any
 
 import pytest
 
-from custom_components.curbcharge.api import _station_from_feature
 from custom_components.curbcharge.models import (
     DiscoveryFilterSettings,
     FavouriteStationReference,
     StationDiscoveryResult,
 )
+from custom_components.curbcharge.providers.ndw_nl import _station_from_feature
 
 pytest_plugins = ["pytest_homeassistant_custom_component"]
 

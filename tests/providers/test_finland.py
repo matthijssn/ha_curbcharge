@@ -10,8 +10,7 @@ from typing import Any
 import pytest
 from homeassistant.core import HomeAssistant
 
-import custom_components.curbcharge.finland as finland
-from custom_components.curbcharge.api import create_provider
+import custom_components.curbcharge.providers.finland as finland
 from custom_components.curbcharge.const import (
     COUNTRY_FI,
     PROVIDER_DIGITRAFFIC_AFIR_FI,
@@ -26,7 +25,8 @@ from custom_components.curbcharge.models import (
     ProviderTimestampSource,
     TariffStatus,
 )
-from custom_components.curbcharge.provider import (
+from custom_components.curbcharge.providers import create_provider
+from custom_components.curbcharge.providers.base import (
     InvalidProviderResponseError,
     ProviderConnectionError,
     ProviderRateLimitError,

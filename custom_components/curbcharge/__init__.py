@@ -19,7 +19,6 @@ if TYPE_CHECKING:
 else:
     from homeassistant.components.http import StaticPathConfig
 
-from .api import create_provider
 from .const import (
     CONF_API_TOKEN,
     CONF_FAVOURITES,
@@ -53,7 +52,8 @@ from .const import (
 from .coordinator import CurbChargeCoordinator
 from .location import resolve_location
 from .models import DiscoveryFilterSettings, parse_favourite_references
-from .provider import ChargingProviderError
+from .providers import create_provider
+from .providers.base import ChargingProviderError
 from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)

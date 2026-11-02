@@ -18,9 +18,6 @@ if TYPE_CHECKING:
 else:
     from homeassistant.data_entry_flow import FlowResult
 
-from .afdc import is_valid_afdc_api_key
-from .api import create_provider
-from .belgium import is_valid_belgium_api_token
 from .const import (
     AFDC_API_KEY_SIGNUP_URL,
     CONF_ALLOW_FALLBACK,
@@ -88,8 +85,9 @@ from .models import (
     parse_favourite_references,
     parse_operator_reference_lines,
 )
-from .nobil import is_valid_nobil_api_key
-from .provider import (
+from .providers import create_provider
+from .providers.afdc import is_valid_afdc_api_key
+from .providers.base import (
     AuthenticationError,
     ChargingProviderError,
     InvalidProviderResponseError,
@@ -98,6 +96,8 @@ from .provider import (
     UnsupportedLocationError,
     UnsupportedProviderError,
 )
+from .providers.belgium import is_valid_belgium_api_token
+from .providers.nobil import is_valid_nobil_api_key
 from .schema import vol
 
 type FlowSchema = Any
