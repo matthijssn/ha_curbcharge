@@ -3,11 +3,13 @@
 This research note records the source-specific constraints for the Germany
 provider work tracked by [#313](https://github.com/matthijssn/ha_curbcharge/issues/313).
 It is not a claim that Germany is release-ready — on the contrary, it
-identifies structural blockers (see "Access model" and "Authentication
-mechanism" below) that the original issue did not anticipate. Mobilithek was
-checked on 2026-11-01 while logged in to a newly registered maintainer
-account; recheck before provider release, since offers, schemas, and terms
-are independently published per data provider and can change.
+identifies structural blockers (see "Access model" below; the
+authentication mechanism itself is now confirmed feasible, see
+"Implementing mTLS client certificates inside Home Assistant" below) that
+the original issue did not anticipate. Mobilithek was checked on
+2026-11-01 while logged in to a newly registered maintainer account;
+recheck before provider release, since offers, schemas, and terms are
+independently published per data provider and can change.
 
 ## Platform
 
@@ -107,6 +109,101 @@ every other provider injects), and likely its own machine-account
 request/approval step with Mobilithek, separate from and in addition to the
 per-CPO subscription approval above. None of this has been implemented
 anywhere in CurbCharge before.
+
+## Implementing mTLS client certificates inside Home Assistant (feasibility)
+
+This is feasible and has a direct, already-shipped precedent in Home
+Assistant core itself: **the built-in MQTT integration already supports
+client-certificate (mTLS) authentication**, confirmed by reading its source
+(`homeassistant/components/mqtt/util.py`, `client.py`, `config_flow.py` on
+the `dev` branch). The pattern below is not speculative; it is what HA core
+actually does today.
+
+### Collecting the certificate and key
+
+HA's MQTT config flow lets a user paste **unencrypted PEM content directly**
+into multiline text fields for the client certificate and client private
+key (not just a file path) — the raw PEM string is what gets stored in
+config-entry data. A known format quirk (documented in
+[home-assistant/core#142646](https://github.com/home-assistant/core/issues/142646)):
+EC (elliptic-curve) private keys in `-----BEGIN EC PRIVATE KEY-----` form
+may need conversion to PKCS#8 (`-----BEGIN PRIVATE KEY-----`, via
+`openssl pkcs8 -topk8 -nocrypt`) before HA accepts them; RSA keys in
+`-----BEGIN PRIVATE KEY-----`/`-----BEGIN RSA PRIVATE KEY-----` form work
+directly. This matters because Mobilithek issues machine-account
+certificates as a `.p12`/`.pfx` bundle; the key type it contains (RSA vs
+EC) is unverified and affects whether this conversion step is needed.
+
+### Turning PEM content into a usable `ssl.SSLContext`
+
+Python's stdlib `ssl.SSLContext.load_cert_chain()` only accepts **file
+paths**, not in-memory PEM strings (confirmed: still true as of current
+CPython; long-standing stdlib limitation, see
+[cpython#60691](https://github.com/python/cpython/issues/60691)). HA core's
+MQTT integration bridges this exact gap with a confirmed, reusable pattern
+in `mqtt/util.py`:
+
+1. `async_create_certificate_temp_files(hass, config)` runs in the executor
+   (`hass.async_add_executor_job`, off the event loop, since file I/O is
+   blocking) and writes each PEM string to a file inside a dedicated temp
+   directory created with **`mkdir(0o700)`** (owner-only permissions).
+2. `get_file_path(option, default)` returns the resulting file path, which
+   is passed to the TLS client as `certfile`/`keyfile` — exactly what
+   `ssl.SSLContext.load_cert_chain(certfile, keyfile)` requires.
+
+A Germany provider would need its own equivalent of this (not importing
+MQTT's internal `util.py`, which is private to that integration and not a
+public `homeassistant.helpers` API — reimplementing the same ~15-line
+pattern locally in `germany.py`/`config_flow.py` is correct and matches how
+every other CurbCharge provider keeps its logic self-contained).
+
+### Why the shared HA aiohttp session cannot be used
+
+Every existing CurbCharge provider uses
+`homeassistant.helpers.aiohttp_client.async_create_clientsession(hass, ...)`,
+which only exposes a boolean `verify_ssl` toggle — its connector is always
+built internally (`_async_get_connector`) and **cannot accept a custom
+`ssl.SSLContext` or client certificate**. This was confirmed by reading the
+helper's source
+(`homeassistant/helpers/aiohttp_client.py` on `dev`). A Germany provider
+must therefore create and manage **its own** `aiohttp.ClientSession` with
+`aiohttp.TCPConnector(ssl=ssl_context)`, mirroring the shape of:
+
+```python
+ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+ssl_context.load_cert_chain(certfile=cert_path, keyfile=key_path)
+connector = aiohttp.TCPConnector(ssl=ssl_context)
+session = aiohttp.ClientSession(connector=connector)
+```
+
+This is a deliberate, justified deviation from CurbCharge's
+`inject_websession` quality-scale pattern (currently `done` for every other
+provider, all of which share the HA-managed session) — not a violation of
+it, but it must be called out explicitly in code and documentation, and the
+provider must own the session's full lifecycle: create it in
+`async_setup_entry`, close it in `async_unload_entry` (HA's shared-session
+auto-cleanup does not apply to a self-managed session).
+
+### Diagnostics and storage
+
+Both the client certificate and especially the private key must be
+redacted in diagnostics output, following the same principle already
+applied to the Belgium/NOBIL/AFDC tokens. Config-entry data is not
+separately encrypted at rest regardless of value shape, so storing a PEM
+private key there carries the same risk profile as storing any other
+provider secret CurbCharge already handles — the new risk is the
+temp-file-on-disk step above, mitigated the same way HA core does it
+(`0o700` directory permissions, executor-job writes, cleanup on unload).
+
+### Conclusion
+
+Implementing mTLS is technically feasible in Home Assistant and has a
+direct, working precedent to copy the shape of (not guess at) in HA core's
+own MQTT integration. It is still a materially larger implementation than
+any existing CurbCharge provider: a new credential type in the config flow,
+a self-managed TLS session with its own lifecycle, and (per the "Access
+model" section above) a Mobilithek machine-account certificate that must
+still be obtained, separately from the per-CPO subscription approval.
 
 ## License and fixtures
 
@@ -238,22 +335,27 @@ akin to Finland's AFIR aggregator):
    and a dedicated per-entry TLS client context (see "Authentication
    mechanism" above).
 
-Before any implementation proceeds, two decisions are needed:
+**Blocker 2 is now resolved to "feasible, with a known implementation
+shape"** — see "Implementing mTLS client certificates inside Home
+Assistant (feasibility)" above, which reuses a pattern already shipped in
+HA core's own MQTT integration. It remains a larger lift than any existing
+CurbCharge provider (new credential type, self-managed TLS session), but is
+no longer an open technical unknown.
+
+Before any implementation proceeds, one decision remains:
 
 - **Which specific CPO(s) to target** for an initial "preview" (mirroring
   how Belgium's preview covers only Eco-Movement's own network) — this
   determines which company's approval must be obtained and how limited
-  resulting coverage will be.
-- **Whether to pursue mTLS client-certificate support at all** given it is
-  a new credential type and security surface for the whole codebase, not
-  an incremental change to an existing pattern. This is a maintainer
-  product/architecture decision, not something to guess unilaterally.
+  resulting coverage will be. A separate Mobilithek machine-account
+  certificate must still be obtained regardless of which CPO is chosen.
 
 No subscription or machine-account certificate has been requested as part
 of this research; no real operator payloads have been captured. All schema
 and endpoint findings above come from Mobilithek's publicly downloadable
-JSON Schema files and a reviewed independent open-source client, not from
-live content data or private correspondence.
+JSON Schema files, a reviewed independent open-source client, and Home
+Assistant's own core source code — not from live content data or private
+correspondence.
 
 ## Sources
 
@@ -273,3 +375,19 @@ live content data or private correspondence.
   mechanism, base URL, and endpoint shapes (built for a different Mobilithek
   dataset, not AFIR charging specifically, but against the same subscription
   pull infrastructure)
+- Home Assistant core source (`dev` branch), confirming the HA-side
+  implementation pattern for client-certificate auth:
+  - [`homeassistant/components/mqtt/util.py`](https://github.com/home-assistant/core/blob/dev/homeassistant/components/mqtt/util.py) —
+    `async_create_certificate_temp_files`/`get_file_path` (PEM content to
+    temp file to file path)
+  - [`homeassistant/components/mqtt/client.py`](https://github.com/home-assistant/core/blob/dev/homeassistant/components/mqtt/client.py) —
+    `tls_set(certfile=client_cert, keyfile=client_key, ...)` usage
+  - [`homeassistant/helpers/aiohttp_client.py`](https://github.com/home-assistant/core/blob/dev/homeassistant/helpers/aiohttp_client.py) —
+    confirms `async_create_clientsession` has no connector/SSL-context
+    override, only a `verify_ssl` boolean
+  - [home-assistant/core#142646](https://github.com/home-assistant/core/issues/142646) —
+    documents the EC-private-key PKCS#8 conversion quirk in HA's
+    certificate text fields
+  - [cpython#60691](https://github.com/python/cpython/issues/60691) —
+    confirms `ssl.SSLContext.load_cert_chain` has no in-memory/string
+    alternative to file paths in the stdlib
