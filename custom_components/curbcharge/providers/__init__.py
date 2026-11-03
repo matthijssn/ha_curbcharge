@@ -8,6 +8,7 @@ from ..const import (
     PROVIDER_AFDC_US,
     PROVIDER_DIGITRAFFIC_AFIR_FI,
     PROVIDER_ECO_MOVEMENT_BE,
+    PROVIDER_ICH_TANKE_STROM_CH,
     PROVIDER_NDW_DOT_NL,
 )
 from .afdc import create_afdc_provider
@@ -16,6 +17,7 @@ from .belgium import create_belgium_provider
 from .finland import create_finland_provider
 from .ndw_nl import create_ndw_nl_provider
 from .nobil import create_nobil_provider
+from .switzerland import create_switzerland_provider
 
 
 def create_provider(
@@ -39,4 +41,6 @@ def create_provider(
         return create_nobil_provider(session, provider_id, token, hass)
     if provider_id == PROVIDER_DIGITRAFFIC_AFIR_FI:
         return create_finland_provider(session, hass)
+    if provider_id == PROVIDER_ICH_TANKE_STROM_CH:
+        return create_switzerland_provider(session, hass)
     raise UnsupportedProviderError("The configured charging provider is unsupported")

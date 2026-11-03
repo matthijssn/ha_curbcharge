@@ -49,6 +49,7 @@ from custom_components.curbcharge.const import (
     PROVIDER_AFDC_US,
     PROVIDER_DIGITRAFFIC_AFIR_FI,
     PROVIDER_ECO_MOVEMENT_BE,
+    PROVIDER_ICH_TANKE_STROM_CH,
     PROVIDER_NDW_DOT_NL,
     PROVIDER_NOBIL_NO,
     PROVIDER_NOBIL_SE,
@@ -780,6 +781,72 @@ async def test_finland_config_flow_reshows_station_options_on_validation_failure
             }
         )[CONF_PROVIDER]
         == PROVIDER_DIGITRAFFIC_AFIR_FI
+    )
+
+
+@pytest.mark.asyncio
+async def test_switzerland_config_flow_creates_entry_without_credentials(
+    hass, monkeypatch
+):
+    hass.config.latitude = 46.95
+    hass.config.longitude = 7.45
+    provider = FakeProvider()
+    calls: list[tuple[object, ...]] = []
+
+    def create_provider(*args):
+        calls.append(args)
+        return provider
+
+    monkeypatch.setattr(config_flow, "create_provider", create_provider)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_HOME}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _station_options(PROVIDER_ICH_TANKE_STROM_CH)
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_PROVIDER] == PROVIDER_ICH_TANKE_STROM_CH
+    assert CONF_API_TOKEN not in result["data"]
+    assert provider.validation_calls == [(46.95, 7.45, 500)]
+    assert calls[0][0] == PROVIDER_ICH_TANKE_STROM_CH
+    assert calls[0][2:] == (hass, None)
+
+
+@pytest.mark.asyncio
+async def test_switzerland_config_flow_reshows_station_options_on_validation_failure(
+    hass, monkeypatch
+):
+    hass.config.latitude = 46.95
+    hass.config.longitude = 7.45
+    provider = FakeProvider()
+    provider.validation_error = ProviderConnectionError("private connection details")
+    monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_HOME}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _station_options(PROVIDER_ICH_TANKE_STROM_CH)
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "station_options"
+    assert result["errors"]["base"] == "cannot_connect"
+    assert (
+        result["data_schema"](
+            {
+                CONF_SEARCH_RADIUS: 500,
+                CONF_MAX_STATIONS: 10,
+            }
+        )[CONF_PROVIDER]
+        == PROVIDER_ICH_TANKE_STROM_CH
     )
 
 

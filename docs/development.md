@@ -199,7 +199,8 @@ release notes.
 contract; `models.py` holds immutable stations, connectors, tariffs, and
 discovery settings. `providers/__init__.py` is the factory that selects a
 backend by provider ID. `providers/ndw_nl.py` implements NDW, while
-`providers/belgium.py`, `providers/finland.py`, `providers/nobil.py`, and
+`providers/belgium.py`, `providers/finland.py`, `providers/nobil.py`,
+`providers/switzerland.py`, and
 `providers/afdc.py` keep source-specific behavior in their own adapters.
 `coordinator.py` owns one provider update cycle, and `sensor.py`/
 `binary_sensor.py` expose normalized data. Follow a provider's published terms
