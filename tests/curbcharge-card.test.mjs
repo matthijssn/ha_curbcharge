@@ -93,14 +93,14 @@ const cardSource = await readFile(
 const cardModule = await import(
   `data:text/javascript;base64,${Buffer.from(`${cardSource}\nexport { TEXT };`).toString("base64")}`
 );
-const SUPPORTED_LANGUAGES = ["en", "nl", "fr", "de", "nb", "sv", "fi"];
+const SUPPORTED_LANGUAGES = ["en", "nl", "fr", "de", "nb", "sv", "fi", "it"];
 
 function visibleText(element) {
   if (element.tagName === "style") return "";
   return [element.textContent, ...element.children.map(visibleText)].join(" ");
 }
 
-test("requires complete nonempty dictionaries for all seven languages", () => {
+test("requires complete nonempty dictionaries for all eight languages", () => {
   assert.deepEqual(Object.keys(cardModule.TEXT), SUPPORTED_LANGUAGES);
   const englishKeys = Object.keys(cardModule.TEXT.en).sort();
   for (const language of SUPPORTED_LANGUAGES) {
@@ -252,6 +252,17 @@ test("localizes editor controls in every supported language", () => {
       show_station_details: "Näytä asematiedot",
       show_update_times: "Näytä päivitysajat",
       details: "Lisätiedot",
+    },
+    it: {
+      entity: "Entità stazione",
+      layout: "Layout",
+      standard: "Standard",
+      compact: "Compatto",
+      show_price: "Mostra prezzo",
+      show_connector_details: "Mostra dettagli connettori",
+      show_station_details: "Mostra dettagli stazione",
+      show_update_times: "Mostra orari di aggiornamento",
+      details: "Maggiori dettagli",
     },
   };
   const Editor = elements.get("curbcharge-card-editor");
@@ -599,6 +610,14 @@ test("localizes Top N score and reason labels in every supported language", () =
       reason: "Peruste",
       bestNearbyRanking: "Järjestetty Paras lähellä olevan mukaan",
     },
+    it: {
+      topNearby: "Migliori colonnine nelle vicinanze",
+      recommendations: "Raccomandazioni",
+      rank: "Posizione",
+      score: "Punteggio",
+      reason: "Motivo",
+      bestNearbyRanking: "Ordinato per Migliore nelle vicinanze",
+    },
   };
 
   assert.deepEqual(Object.keys(labels), SUPPORTED_LANGUAGES);
@@ -766,6 +785,18 @@ test("localizes recommendation states, operator, and address in every supported 
       unavailable: "Ei käytettävissä",
       operator: "Operaattori",
       address: "Osoite",
+    },
+    it: {
+      selected: "Selezionato",
+      no_current_stations: "Nessuna stazione attuale",
+      unknown_availability: "Disponibilità sconosciuta",
+      none_available: "Nessuna disponibile",
+      no_comparable_price: "Prezzo non confrontabile",
+      no_positive_power: "Nessuna potenza positiva",
+      no_known_distance: "Distanza sconosciuta",
+      unavailable: "Non disponibile",
+      operator: "Operatore",
+      address: "Indirizzo",
     },
   };
 
@@ -1097,6 +1128,13 @@ test("localizes navigation disclosure and link labels in every supported languag
       "Navigointi Wazella",
       "Avaa karttasijainti (ei reittiohjeita)",
     ],
+    it: [
+      "Naviga",
+      "Indicazioni Google Maps",
+      "Indicazioni Apple Maps",
+      "Navigazione Waze",
+      "Apri posizione sulla mappa (senza indicazioni)",
+    ],
   };
 
   assert.deepEqual(Object.keys(labels), SUPPORTED_LANGUAGES);
@@ -1256,6 +1294,7 @@ test("renders a localized text favorite indicator only for explicit favorites", 
     nb: "Favoritt",
     sv: "Favorit",
     fi: "Suosikki",
+    it: "Preferito",
   };
   const sources = [
     {
@@ -1370,6 +1409,7 @@ test("localizes the provider open-status label in every supported language", () 
     nb: ["Åpningsstatus ifølge leverandøren", "Stengt"],
     sv: ["Öppningsstatus enligt leverantören", "Stängd"],
     fi: ["Palveluntarjoajan ilmoittama avoinna-tila", "Suljettu"],
+    it: ["Stato di apertura segnalato dal fornitore", "Chiuso"],
   };
 
   assert.deepEqual(Object.keys(labels), SUPPORTED_LANGUAGES);
@@ -1492,7 +1532,7 @@ test("switches existing cards and editors through HA locales independently of pr
       card.setConfig(config);
       editor.setConfig(config);
       let originalForm;
-      for (const language of ["en", "nb", "sv", "nb-NO", "sv-SE", "fi", "fi-FI", "es-ES", undefined]) {
+      for (const language of ["en", "nb", "sv", "nb-NO", "sv-SE", "fi", "fi-FI", "it", "it-CH", "es-ES", undefined]) {
         const hass = {
           ...(language
             ? property === "locale"

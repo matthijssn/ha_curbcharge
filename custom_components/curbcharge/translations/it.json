@@ -1,0 +1,455 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configura CurbCharge",
+        "description": "Scegli se CurbCharge usa la posizione casa di Home Assistant, coordinate manuali o un'entità.",
+        "data": {
+          "location_source": "Origine della posizione"
+        },
+        "data_description": {
+          "location_source": "Usa le coordinate casa di Home Assistant, inserisci coordinate o seleziona un'entità che riporta una posizione."
+        }
+      },
+      "entity_location": {
+        "title": "Seleziona un'entità di posizione",
+        "description": "Scegli un'entità che attualmente riporta attributi di latitudine e longitudine validi. Viene memorizzato solo l'ID dell'entità.",
+        "data": {
+          "location_entity": "Entità di posizione"
+        },
+        "data_description": {
+          "location_entity": "L'entità deve attualmente riportare coordinate di latitudine e longitudine valide."
+        }
+      },
+      "reconfigure": {
+        "title": "Modifica la posizione di ricerca",
+        "description": "Scegli se usare la posizione casa di Home Assistant, coordinate manuali o un'entità.",
+        "data": {
+          "location_source": "Origine della posizione"
+        },
+        "data_description": {
+          "location_source": "Modificare l'area di ricerca può cambiare quali stazioni vicine vengono incluse."
+        }
+      },
+      "reconfigure_entity_location": {
+        "title": "Seleziona una nuova entità di posizione",
+        "description": "Scegli un'entità che attualmente riporta coordinate di posizione valide. CurbCharge memorizza l'ID dell'entità, non le sue coordinate.",
+        "data": {
+          "location_entity": "Entità di posizione"
+        },
+        "data_description": {
+          "location_entity": "Se l'entità precedente non è disponibile o è stata rimossa, seleziona una sostituzione."
+        }
+      },
+      "reconfigure_manual_location": {
+        "title": "Inserisci una nuova posizione di ricerca",
+        "description": "CurbCharge verifica il fornitore prima di salvare questa posizione.",
+        "data": {
+          "latitude": "Latitudine",
+          "longitude": "Longitudine"
+        },
+        "data_description": {
+          "latitude": "Latitudine del centro dell'area di ricerca delle stazioni di ricarica.",
+          "longitude": "Longitudine del centro dell'area di ricerca delle stazioni di ricarica."
+        }
+      },
+      "manual_location": {
+        "title": "Inserisci una posizione di ricerca",
+        "description": "Le coordinate vengono memorizzate solo quando scegli una posizione manuale.",
+        "data": {
+          "latitude": "Latitudine",
+          "longitude": "Longitudine"
+        },
+        "data_description": {
+          "latitude": "Latitudine del centro dell'area di ricerca delle stazioni di ricarica.",
+          "longitude": "Longitudine del centro dell'area di ricerca delle stazioni di ricarica."
+        }
+      },
+      "station_options": {
+        "title": "Scegli le stazioni vicine",
+        "description": "CurbCharge verifica la connettività al fornitore prima di creare la voce.",
+        "data": {
+          "search_radius": "Raggio di ricerca (m)",
+          "max_stations": "Numero massimo di stazioni",
+          "scan_interval": "Intervallo di aggiornamento (minuti)",
+          "provider": "Fornitore"
+        },
+        "data_description": {
+          "search_radius": "Vengono incluse solo le stazioni di ricarica pubbliche entro questa distanza.",
+          "max_stations": "Limita il numero di stazioni e delle relative entità.",
+          "scan_interval": "Con quale frequenza Home Assistant aggiorna i dati delle stazioni di ricarica.",
+          "provider": "Il fornitore di dati usato per individuare stazioni e disponibilità."
+        }
+      },
+      "discovery_filters": {
+        "title": "Filtra le stazioni vicine",
+        "description": "Facoltativamente filtra le stazioni NDW in base ai gruppi di connettori. I filtri si applicano prima del limite di stazioni.",
+        "data": {
+          "connector_types": "Tipi di connettore",
+          "min_power_kw": "Potenza minima (kW)",
+          "require_available": "Richiedi un connettore disponibile"
+        },
+        "data_description": {
+          "connector_types": "Lascia vuoto per qualsiasi tipo. Un gruppo di connettori corrispondente con uno dei tipi selezionati deve soddisfare anche gli altri filtri.",
+          "min_power_kw": "Facoltativo. Un gruppo di connettori corrispondente deve riportare almeno questa potenza.",
+          "require_available": "Includi le stazioni solo quando un gruppo di connettori corrispondente riporta connettori disponibili."
+        }
+      },
+      "belgium_credentials": {
+        "title": "Connetti a Eco-Movement Belgio",
+        "description": "Inserisci il token API rilasciato a te da Eco-Movement. Il token è memorizzato in questa voce di configurazione e oscurato nella diagnostica.",
+        "data": {
+          "api_token": "Token API Eco-Movement"
+        },
+        "data_description": {
+          "api_token": "Usa solo un token che sei autorizzato a usare. Non condividerlo nelle segnalazioni di problemi."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Aggiorna le credenziali Eco-Movement",
+        "description": "Inserisci un token API sostitutivo rilasciato a te da Eco-Movement.",
+        "data": {
+          "api_token": "Token API Eco-Movement"
+        },
+        "data_description": {
+          "api_token": "Il token è memorizzato in questa voce di configurazione e oscurato nella diagnostica."
+        }
+      },
+      "nobil_credentials": {
+        "title": "Connetti a NOBIL",
+        "description": "Inserisci la tua chiave API NOBIL. Per informazioni su come ottenerla, visita la [pagina API di NOBIL]({nobil_api_url}). È memorizzata solo in questa voce di configurazione e oscurata nella diagnostica.",
+        "data": {
+          "api_token": "Chiave API NOBIL"
+        },
+        "data_description": {
+          "api_token": "Usa solo una chiave che sei autorizzato a usare. Non condividerla nelle segnalazioni di problemi."
+        }
+      },
+      "nobil_reauth_confirm": {
+        "title": "Aggiorna le credenziali NOBIL",
+        "description": "Inserisci una chiave API NOBIL sostitutiva. Per informazioni su come ottenerla, visita la [pagina API di NOBIL]({nobil_api_url}).",
+        "data": {
+          "api_token": "Chiave API NOBIL"
+        },
+        "data_description": {
+          "api_token": "La chiave è memorizzata in questa voce di configurazione e oscurata nella diagnostica."
+        }
+      },
+      "afdc_credentials": {
+        "title": "Connetti ad AFDC (Stati Uniti)",
+        "description": "Inserisci la tua chiave API NLR. Registrati per una chiave gratuita sul [NLR Developer Network]({afdc_api_url}). È memorizzata solo in questa voce di configurazione e oscurata nella diagnostica.",
+        "data": {
+          "api_token": "Chiave API NLR"
+        },
+        "data_description": {
+          "api_token": "Usa solo una chiave che sei autorizzato a usare. Non condividerla nelle segnalazioni di problemi."
+        }
+      },
+      "afdc_reauth_confirm": {
+        "title": "Aggiorna le credenziali AFDC",
+        "description": "Inserisci una chiave API NLR sostitutiva. Ottieni una chiave gratuita dal [NLR Developer Network]({afdc_api_url}).",
+        "data": {
+          "api_token": "Chiave API NLR"
+        },
+        "data_description": {
+          "api_token": "La chiave è memorizzata in questa voce di configurazione e oscurata nella diagnostica."
+        }
+      }
+    },
+    "error": {
+      "auth": "Il fornitore ha rifiutato l'autenticazione.",
+      "cannot_connect": "Impossibile connettersi al fornitore di ricarica.",
+      "invalid_location": "Inserisci coordinate valide e un'area di ricerca supportata.",
+      "invalid_entity_location": "Seleziona un'entità che attualmente riporta coordinate di latitudine e longitudine valide.",
+      "invalid_api_token": "Inserisci un token API ASCII stampabile non vuoto.",
+      "invalid_nobil_api_key": "Inserisci una chiave API NOBIL stampabile non vuota.",
+      "invalid_afdc_api_key": "Inserisci una chiave API NLR stampabile non vuota.",
+      "invalid_discovery_filters": "Inserisci filtri di ricerca validi. La potenza minima deve essere un numero positivo finito.",
+      "invalid_response": "Il fornitore ha restituito dati in un formato imprevisto.",
+      "location_not_configured": "Le coordinate casa non sono configurate in Home Assistant.",
+      "rate_limited": "Il fornitore sta limitando le richieste. Riprova più tardi.",
+      "unsupported_provider": "Il fornitore selezionato non è supportato."
+    },
+    "abort": {
+      "already_configured": "Questo fornitore e quest'area di ricerca sono già configurati.",
+      "location_not_configured": "La posizione di ricerca non è configurata.",
+      "reconfigure_successful": "Posizione di ricerca aggiornata.",
+      "reauth_successful": "Credenziali Eco-Movement aggiornate.",
+      "nobil_reauth_successful": "Chiave API NOBIL aggiornata.",
+      "afdc_reauth_successful": "Chiave API NLR aggiornata."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opzioni CurbCharge",
+        "menu_options": {
+          "general": "Impostazioni generali",
+          "personalization": "Personalizzazione"
+        }
+      },
+      "general": {
+        "title": "Impostazioni generali",
+        "data": {
+          "scan_interval": "Intervallo di aggiornamento (minuti)",
+          "search_radius": "Raggio di ricerca (m)",
+          "max_stations": "Numero massimo di stazioni",
+          "provider": "Fornitore",
+          "include_unknown": "Includi stazioni senza dati di disponibilità",
+          "connector_types": "Tipi di connettore",
+          "min_power_kw": "Potenza minima (kW)",
+          "require_available": "Richiedi un connettore disponibile",
+          "favourites": "Punti di ricarica preferiti",
+          "location_movement_threshold": "Soglia di spostamento della posizione (m)"
+        },
+        "data_description": {
+          "scan_interval": "Con quale frequenza Home Assistant aggiorna i dati delle stazioni di ricarica.",
+          "search_radius": "Vengono incluse solo le stazioni di ricarica pubbliche entro questa distanza.",
+          "max_stations": "Limita il numero di stazioni e delle relative entità.",
+          "provider": "Il fornitore di dati usato per individuare stazioni e disponibilità.",
+          "include_unknown": "Includi le stazioni quando il fornitore non riporta la disponibilità dei connettori.",
+          "connector_types": "Lascia vuoto per qualsiasi tipo. Un gruppo di connettori corrispondente con uno dei tipi selezionati deve soddisfare anche gli altri filtri.",
+          "min_power_kw": "Facoltativo. Un gruppo di connettori corrispondente deve riportare almeno questa potenza.",
+          "require_available": "Includi le stazioni solo quando un gruppo di connettori corrispondente riporta connettori disponibili.",
+          "favourites": "Seleziona i punti di ricarica per nome. I preferiti restano disponibili fuori dal raggio di ricerca e vengono aggiunti oltre il limite di stazioni vicine.",
+          "location_movement_threshold": "Distanza minima che l'entità selezionata deve percorrere prima che la posizione di ricerca venga aggiornata. Imposta 0 per disattivare la soglia."
+        }
+      },
+      "personalization": {
+        "title": "Personalizzazione",
+        "data": {
+          "enabled": "Attiva la personalizzazione",
+          "connector_type_ids": "Tipi di connettore compatibili",
+          "minimum_power_kw": "Potenza minima del connettore (kW)",
+          "preferred_operators": "Operatori preferiti",
+          "excluded_operators": "Operatori esclusi",
+          "maximum_price": "Prezzo massimo per kWh",
+          "maximum_price_currency": "Valuta del prezzo massimo",
+          "ranking_preset": "Criterio di classificazione",
+          "allow_fallback": "Consenti ripiego",
+          "unknown_data_policy": "Criterio per dati sconosciuti"
+        },
+        "data_description": {
+          "enabled": "Attiva questo profilo salvato per raccomandazioni personalizzate. Finché la valutazione personalizzata non è disponibile, le raccomandazioni esistenti restano invariate.",
+          "connector_type_ids": "Scegli gli standard di connettore canonici. Lascia vuoto per accettare qualsiasi tipo di connettore.",
+          "minimum_power_kw": "Minimo facoltativo per un gruppo di connettori corrispondente; usa un valore finito non negativo.",
+          "preferred_operators": "Inserisci un riferimento qualificato dal fornitore per riga, ad esempio ndw_dot_nl:NLX, eco_movement_be:Example CPO o nobil_no:Synthetic CPO. Gli ID NDW e i nomi NOBIL devono corrispondere esattamente; i nomi del Belgio vengono ripuliti dagli spazi, compattati e confrontati senza distinzione tra maiuscole e minuscole. Le scelte salvate vengono mantenute anche quando non sono nelle vicinanze.",
+          "excluded_operators": "Inserisci un riferimento qualificato dal fornitore per riga, con lo stesso formato degli operatori preferiti. Le esclusioni corrispondenti non vengono mai aggirate dal ripiego.",
+          "maximum_price": "Importo decimale facoltativo non negativo. Lascia vuoto per nessun limite di prezzo.",
+          "maximum_price_currency": "Obbligatorio con un prezzo massimo; inserisci un codice valuta di tre lettere come EUR.",
+          "ranking_preset": "Scegli un obiettivo di classificazione fisso; i pesi personalizzati non sono supportati.",
+          "allow_fallback": "Consenti candidati idonei non preferiti solo quando non esiste una corrispondenza completa.",
+          "unknown_data_policy": "Scegli se valori sconosciuti di connettore, potenza o operatore possono rientrare nei risultati di ripiego. La disponibilità sconosciuta e i vincoli rigidi non soddisfatti non vengono mai allentati."
+        }
+      }
+    },
+    "error": {
+      "invalid_discovery_filters": "Inserisci filtri di ricerca validi. La potenza minima deve essere un numero positivo finito.",
+      "invalid_favourites": "Uno o più preferiti selezionati non sono più disponibili. Aggiorna le opzioni e riprova.",
+      "invalid_personalization_profile": "Inserisci un profilo valido. Potenza e prezzo devono essere finiti e non negativi, un prezzo massimo richiede una valuta di tre lettere, i riferimenti agli operatori richiedono un prefisso di fornitore supportato e un operatore non può essere sia preferito sia escluso.",
+      "invalid_saved_personalization_profile": "Il profilo di personalizzazione salvato è malformato o usa una versione di schema non supportata. Controlla i campi e salva un profilo valido per sostituirlo."
+    }
+  },
+  "services": {
+    "add_favorite": {
+      "name": "Aggiungi preferito",
+      "description": "Salva come preferita una stazione di ricarica appena individuata.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Voce di configurazione CurbCharge",
+          "description": "Seleziona la voce CurbCharge caricata da aggiornare."
+        },
+        "station_id": {
+          "name": "ID stazione",
+          "description": "ID locale del fornitore di una stazione dall'ultima ricerca nelle vicinanze riuscita."
+        }
+      }
+    },
+    "remove_favorite": {
+      "name": "Rimuovi preferito",
+      "description": "Rimuovi un preferito salvato da una voce di configurazione CurbCharge.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Voce di configurazione CurbCharge",
+          "description": "Seleziona la voce CurbCharge caricata che contiene il preferito."
+        },
+        "station_id": {
+          "name": "ID stazione",
+          "description": "ID locale del fornitore del preferito salvato da rimuovere. Potrebbe essere obsoleto o non più presente a monte."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "authentication_failed": {
+      "message": "Autenticazione con il fornitore di ricarica non riuscita."
+    },
+    "invalid_config": {
+      "message": "La configurazione di CurbCharge non è valida."
+    },
+    "location_not_configured": {
+      "message": "La posizione di ricerca configurata non è disponibile."
+    },
+    "rate_limited": {
+      "message": "Il fornitore di ricarica sta limitando le richieste. Attendi il ripristino del limite e riprova."
+    },
+    "unsupported_provider": {
+      "message": "Il fornitore di ricarica configurato non è supportato."
+    },
+    "config_entry_not_loaded": {
+      "message": "Seleziona una voce di configurazione CurbCharge caricata."
+    },
+    "favorite_not_found": {
+      "message": "L'ID stazione non è un preferito salvato per questa voce di configurazione."
+    },
+    "invalid_station_id": {
+      "message": "Inserisci un ID stazione non vuoto."
+    },
+    "station_not_discovered": {
+      "message": "La stazione deve essere appena individuata da questa voce di configurazione prima di poter essere aggiunta ai preferiti."
+    }
+  },
+  "selector": {
+    "location_source": {
+      "options": {
+        "home": "Coordinate casa di Home Assistant",
+        "manual": "Latitudine e longitudine manuali",
+        "entity": "Entità Home Assistant"
+      }
+    },
+    "ndw_connector_type": {
+      "options": {
+        "type-2": "Tipo 2 (Mennekes)",
+        "ccs-combo-2": "CCS (Combo 2)",
+        "chademo": "CHAdeMO",
+        "cee-16a-single-phase": "CEE 16 A (monofase)",
+        "cee-16a-three-phase": "CEE 16 A (trifase)",
+        "cee-32a-three-phase": "CEE 32 A (trifase)",
+        "domestic-a": "Domestica A (NEMA 1-15)"
+      }
+    },
+    "personalization_connector_type": {
+      "options": {
+        "iec_62196_t2": "Tipo 2 (Mennekes)",
+        "iec_62196_t2_combo": "CCS Combo 2",
+        "chademo": "CHAdeMO",
+        "iec_60309_2_single_16": "CEE 16 A (monofase)",
+        "iec_60309_2_three_16": "CEE 16 A (trifase)",
+        "iec_60309_2_three_32": "CEE 32 A (trifase)",
+        "domestic_a": "Domestica A (NEMA 1-15)",
+        "iec_62196_t1": "Tipo 1 (J1772)",
+        "iec_62196_t1_combo": "CCS Combo 1",
+        "tesla": "Tesla",
+        "nema_5_15": "NEMA 5-15",
+        "nema_5_20": "NEMA 5-20",
+        "nema_14_50": "NEMA 14-50",
+        "sae_j3271": "SAE J3271 (MCS)"
+      }
+    },
+    "personalization_ranking_preset": {
+      "options": {
+        "balanced": "Bilanciato",
+        "lowest_price": "Prezzo più basso",
+        "shortest_distance": "Distanza più breve",
+        "highest_availability": "Più connettori disponibili",
+        "highest_power": "Potenza del connettore più alta"
+      }
+    },
+    "personalization_unknown_data_policy": {
+      "options": {
+        "exclude": "Escludi valori di preferenza sconosciuti (consigliato)",
+        "allow_fallback": "Consenti valori sconosciuti solo come ripiego"
+      }
+    },
+    "provider": {
+      "options": {
+        "ndw_dot_nl": "NDW DOT-NL",
+        "eco_movement_be": "Eco-Movement Belgio (anteprima)",
+        "nobil_no": "NOBIL Norvegia",
+        "nobil_se": "NOBIL Svezia",
+        "afdc_us": "AFDC Stati Uniti",
+        "digitraffic_afir_fi": "Digitraffic AFIR Finlandia",
+        "ich_tanke_strom_ch": "ich-tanke-strom Svizzera"
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "available": {
+        "name": "Disponibile"
+      }
+    },
+    "sensor": {
+      "available_connectors": {
+        "name": "Connettori disponibili"
+      },
+      "availability_percentage": {
+        "name": "Percentuale di disponibilità"
+      },
+      "occupied_connectors": {
+        "name": "Connettori occupati"
+      },
+      "unavailable_connectors": {
+        "name": "Connettori non disponibili"
+      },
+      "total_connectors": {
+        "name": "Connettori totali"
+      },
+      "connector_group": {
+        "name": "Connettori {connector_type}"
+      },
+      "maximum_charging_power": {
+        "name": "Potenza massima di ricarica"
+      },
+      "price_per_kwh": {
+        "name": "Prezzo per kWh"
+      },
+      "distance": {
+        "name": "Distanza"
+      },
+      "status_summary": {
+        "name": "Riepilogo stato",
+        "state": {
+          "available": "Disponibile",
+          "none_available": "Nessuna disponibile",
+          "unknown": "Sconosciuto"
+        }
+      },
+      "favorite_status": {
+        "name": "Stato preferito",
+        "state": {
+          "available": "Disponibile",
+          "none_available": "Nessuna disponibile",
+          "unknown": "Sconosciuto"
+        }
+      },
+      "favorite_summary": {
+        "name": "Riepilogo preferiti"
+      },
+      "best_nearby_charger": {
+        "name": "Migliore colonnina nelle vicinanze"
+      },
+      "nearest_available_charger": {
+        "name": "Colonnina disponibile più vicina"
+      },
+      "cheapest_available_charger": {
+        "name": "Colonnina disponibile più economica"
+      },
+      "fastest_available_charger": {
+        "name": "Colonnina disponibile più veloce"
+      },
+      "top_nearby_chargers": {
+        "name": "Migliori colonnine nelle vicinanze"
+      },
+      "nearby_charging_units": {
+        "name": "Unità di ricarica nelle vicinanze"
+      },
+      "nearby_available_connectors": {
+        "name": "Connettori disponibili nelle vicinanze"
+      },
+      "nearby_availability_percentage": {
+        "name": "Disponibilità dei connettori nelle vicinanze"
+      }
+    }
+  }
+}
