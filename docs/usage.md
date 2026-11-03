@@ -135,6 +135,47 @@ endorsement implied. See the
 [Finland provider research note][finland-research] for verified source
 constraints.
 
+### Switzerland (SFOE ich-tanke-strom, preview)
+
+The Switzerland provider uses the Swiss Federal Office of Energy's
+[ich-tanke-strom.ch OCPI API][ich-tanke-strom-api], the national aggregator of
+charging-point operator data. No API key or account is required; requests are
+anonymous and identify the integration with a `User-Agent` header. CurbCharge
+fetches all locations and tariffs using the documented `Link`-header
+pagination and keeps only locations whose `country` is `CHE`, so a site in
+Switzerland run by a foreign operator is included while Liechtenstein and other
+neighbours are not.
+
+**Preview coverage.** Operators are migrating to this API ahead of its
+December 2026 go-live; on 2026-11-03 it exposed about 4,300 charging points
+against roughly 21,000 in the legacy national feed. Coverage grows as
+operators connect. Treat an empty nearby result as "not yet migrated", not as
+"no chargers".
+
+Locations and tariffs are cached for 15 minutes per Home Assistant instance,
+and requests are paced to stay under SFOE's documented 60-requests-per-minute
+guidance. Live availability comes only from the separate OCPI EVSE Status API:
+the first poll loads every current status record and later polls request only
+records received since the previous poll, with a short overlap. The status
+embedded in the location catalogue is refreshed only a few times a day
+upstream and is never used as availability. Each EVSE becomes one CurbCharge
+station; an EVSE without a status record reports unknown availability. EVSEs
+reported as `REMOVED` are excluded. Pricing uses the same OCPI tariff elements
+as the Finland provider: prices are in CHF, Swiss VAT is applied when the
+tariff is published net, and tariffs with time-of-day, duration, or other
+usage-dependent restrictions remain unknown rather than guessed. Connectors
+that reference a tariff the API does not publish report a missing tariff.
+
+SFOE publishes the data as open data under terms that allow non-commercial
+use with attribution and require the data owner's permission for commercial
+use. CurbCharge is non-commercial open-source software; deployments that are
+commercial must obtain SFOE's permission separately. Attribution: charging
+data from the Swiss Federal Office of Energy SFOE,
+[ich-tanke-strom.ch][ich-tanke-strom] / [opendata.swiss][opendata-swiss],
+normalized by CurbCharge, with no endorsement implied. See the
+[Switzerland provider research note][switzerland-research] for verified
+source constraints.
+
 ### United States AFDC
 
 The U.S. provider uses the Alternative Fuels Data Center (AFDC) station API
@@ -176,9 +217,11 @@ select a replacement if an Entity source was renamed or removed.
 Choose a polling interval in minutes (default 5; minimum 1), a search radius
 from 100 to 10,000 metres, and a maximum of 1 to 50 stations (default 10), then
 select NDW DOT-NL, the Belgium preview, NOBIL Norway, NOBIL Sweden, AFDC
-United States, or Digitraffic AFIR Finland. Belgium setup asks for the
+United States, Digitraffic AFIR Finland, or the ich-tanke-strom Switzerland
+preview. Belgium setup asks for the
 Eco-Movement API token, NOBIL asks for a NOBIL API key, and the U.S. AFDC
-source asks for an NLR API key; Finland requires no credentials. Each
+source asks for an NLR API key; Finland and Switzerland require no
+credentials. Each
 provider is validated before creating the entry.
 You can change the polling interval, radius, station limit, and whether to
 include stations without availability data later in Options. For Entity
@@ -206,7 +249,8 @@ by default; turning it off excludes NDW stations with no availability report
 before the station cap. The search radius remains the distance limit, and the
 maximum-station cap selects the nearest matching stations (with provider
 station ID as the tie-breaker). These filters are NDW-only; Belgium preview,
-NOBIL, and Finland AFIR have no discovery-filter step or options. There is no
+NOBIL, Finland AFIR, and Switzerland have no discovery-filter step or
+options. There is no
 provider-side operator discovery filter or separate maximum-distance setting.
 
 The separate **Personalization** options page stores one optional, versioned
@@ -666,3 +710,7 @@ and restart Home Assistant.
 [afir-api]: https://www.digitraffic.fi/en/road-traffic/afir/
 [digitraffic]: https://www.digitraffic.fi/en/
 [finland-research]: https://github.com/matthijssn/ha_curbcharge/blob/main/docs/provider-research/finland.md
+[ich-tanke-strom-api]: https://github.com/SFOE/ichtankestrom_Documentation/blob/main/How%20to%20query%20ich%20tanke%20strom.md
+[ich-tanke-strom]: https://www.ich-tanke-strom.ch/
+[opendata-swiss]: https://opendata.swiss/dataset/ladestationen-fuer-elektroautos/
+[switzerland-research]: https://github.com/matthijssn/ha_curbcharge/blob/main/docs/provider-research/switzerland.md

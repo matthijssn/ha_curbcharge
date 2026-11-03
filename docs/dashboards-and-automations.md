@@ -114,8 +114,8 @@ The card reads only the selected Home Assistant entity; it makes no provider
 requests. It displays the station name and operator when available, address,
 availability, connector counts, maximum power, distance, price/currency when
 known, and update times. Labels follow the Home Assistant language in English,
-Dutch, French, German, Norwegian Bokmål (`nb`), Swedish (`sv`), or Finnish
-(`fi`). Language is
+Dutch, French, German, Norwegian Bokmål (`nb`), Swedish (`sv`), Finnish
+(`fi`), or Italian (`it`). Language is
 independent of the selected provider country; station names and reported
 currencies are preserved, and prices are not converted.
 When configured with **Top nearby chargers**, it renders the backend-ordered
