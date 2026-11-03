@@ -814,6 +814,20 @@ async def test_switzerland_validate_connection_requests_a_single_location():
 
 
 @pytest.mark.asyncio
+async def test_switzerland_validate_connection_skips_non_swiss_first_location():
+    """Validation parses whatever the first page holds; a foreign site is skipped."""
+    session = FakeSession([_page([_location(country="LIE")])])
+    provider = _provider(session)
+
+    await provider.async_validate_connection(*BERN, 500)
+
+    assert (
+        switzerland._stations_from_location(_location(country="LIE"), *BERN, {}, {})
+        == []
+    )
+
+
+@pytest.mark.asyncio
 async def test_switzerland_timeout_raises_connection_error():
     session = FakeSession([TimeoutError("synthetic timeout")])
     provider = _provider(session)
