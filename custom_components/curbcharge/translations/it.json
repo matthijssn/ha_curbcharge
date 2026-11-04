@@ -230,7 +230,7 @@
           "unknown_data_policy": "Criterio per dati sconosciuti"
         },
         "data_description": {
-          "enabled": "Attiva questo profilo salvato per raccomandazioni personalizzate. Finché la valutazione personalizzata non è disponibile, le raccomandazioni esistenti restano invariate.",
+          "enabled": "Attiva questo profilo salvato per le raccomandazioni Migliore nelle vicinanze e Top nelle vicinanze. I vincoli rigidi non vengono mai allentati; si applicano le regole di fallback e dei dati sconosciuti configurate.",
           "connector_type_ids": "Scegli gli standard di connettore canonici. Lascia vuoto per accettare qualsiasi tipo di connettore.",
           "minimum_power_kw": "Minimo facoltativo per un gruppo di connettori corrispondente; usa un valore finito non negativo.",
           "preferred_operators": "Inserisci un riferimento qualificato dal fornitore per riga, ad esempio ndw_dot_nl:NLX, eco_movement_be:Example CPO o nobil_no:Synthetic CPO. Gli ID NDW e i nomi NOBIL devono corrispondere esattamente; i nomi del Belgio vengono ripuliti dagli spazi, compattati e confrontati senza distinzione tra maiuscole e minuscole. Le scelte salvate vengono mantenute anche quando non sono nelle vicinanze.",

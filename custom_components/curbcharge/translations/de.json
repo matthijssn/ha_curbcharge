@@ -230,7 +230,7 @@
           "unknown_data_policy": "Richtlinie für unbekannte Daten"
         },
         "data_description": {
-          "enabled": "Dieses gespeicherte Profil für personalisierte Empfehlungen aktivieren. Bestehende Empfehlungen bleiben unverändert, bis die Personalisierungsauswertung verfügbar ist.",
+          "enabled": "Dieses gespeicherte Profil für die Empfehlungen „Beste Ladestation in der Nähe“ und „Top-Ladestationen in der Nähe“ aktivieren. Harte Bedingungen werden nie gelockert; die konfigurierten Fallback- und Richtlinien für unbekannte Daten gelten.",
           "connector_type_ids": "Kanonische Anschlussstandards auswählen. Leer lassen, um alle Typen zuzulassen.",
           "minimum_power_kw": "Optionaler Mindestwert für eine passende Anschlussgruppe; nur endliche, nicht negative Werte verwenden.",
           "preferred_operators": "Pro Zeile eine anbieterbezogene Referenz eingeben, zum Beispiel ndw_dot_nl:NLX oder eco_movement_be:Example CPO. NDW-IDs werden exakt verglichen; belgische Namen werden getrimmt, Leerzeichen zusammengefasst und ohne Beachtung der Groß-/Kleinschreibung verglichen. Gespeicherte Auswahl bleibt auch außerhalb des Suchradius erhalten.",

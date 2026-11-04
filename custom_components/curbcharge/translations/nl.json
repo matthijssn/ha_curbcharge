@@ -230,7 +230,7 @@
           "unknown_data_policy": "Beleid voor onbekende gegevens"
         },
         "data_description": {
-          "enabled": "Schakel dit opgeslagen profiel in voor gepersonaliseerde aanbevelingen. Bestaande aanbevelingen blijven ongewijzigd totdat personalisatie-evaluatie beschikbaar is.",
+          "enabled": "Schakel dit opgeslagen profiel in voor de aanbevelingen Beste in de buurt en Top in de buurt. Harde voorwaarden worden nooit versoepeld; de ingestelde terugval- en onbekende-gegevensregels gelden.",
           "connector_type_ids": "Kies canonieke connectorstandaarden. Laat leeg om elk connectortype toe te staan.",
           "minimum_power_kw": "Optioneel minimum voor een passende connectorgroep; gebruik een eindige, niet-negatieve waarde.",
           "preferred_operators": "Voer per regel één providerreferentie in, bijvoorbeeld ndw_dot_nl:NLX, eco_movement_be:Example CPO of nobil_no:Synthetic CPO. NDW-ID's en NOBIL-namen worden exact vergeleken; Belgische namen worden getrimd, witruimte samengevoegd en hoofdletterongevoelig vergeleken. Opgeslagen keuzes blijven bewaard als ze niet in de buurt zijn.",

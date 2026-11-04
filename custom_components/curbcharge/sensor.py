@@ -1144,15 +1144,58 @@ def _top_nearby_recommendations(
     if results is None:
         return None
 
-    ranked: list[tuple[int, float, int, ChargingStation]] = []
+    ranked: list[
+        tuple[
+            int,
+            int,
+            float,
+            int | None,
+            float | None,
+            int,
+            ChargingStation,
+        ]
+    ] = []
     for station in _current_stations(coordinator) or ():
-        rank, score, candidate_count = coordinator.best_nearby_rank_for(station)
-        if rank is not None and score is not None and candidate_count is not None:
-            ranked.append((rank, score, candidate_count, station))
+        objective_rank, objective_score, candidate_count = (
+            coordinator.best_nearby_rank_for(station)
+        )
+        personalized_rank, personalized_score, _personalized_count = (
+            coordinator.personalized_best_nearby_rank_for(station)
+        )
+        order_rank = (
+            personalized_rank
+            if coordinator.personalization_profile.enabled
+            else objective_rank
+        )
+        if (
+            order_rank is not None
+            and objective_rank is not None
+            and objective_score is not None
+            and candidate_count is not None
+        ):
+            ranked.append(
+                (
+                    order_rank,
+                    objective_rank,
+                    objective_score,
+                    personalized_rank,
+                    personalized_score,
+                    candidate_count,
+                    station,
+                )
+            )
     ranked.sort(key=lambda recommendation: recommendation[0])
 
     recommendations: list[dict[str, Any]] = []
-    for rank, score, candidate_count, station in ranked[:_TOP_NEARBY_LIMIT]:
+    for (
+        _order_rank,
+        rank,
+        score,
+        personalized_rank,
+        personalized_score,
+        candidate_count,
+        station,
+    ) in ranked[:_TOP_NEARBY_LIMIT]:
         payload = _station_selection_attributes(
             coordinator,
             RecommendationResult(
@@ -1176,6 +1219,9 @@ def _top_nearby_recommendations(
                 "ranking_reason": results.best_nearby.reason,
             }
         )
+        if coordinator.personalization_profile.enabled:
+            payload["personalized_rank"] = personalized_rank
+            payload["personalized_score"] = personalized_score
         recommendations.append(payload)
     return recommendations
 

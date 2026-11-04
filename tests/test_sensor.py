@@ -23,6 +23,8 @@ from custom_components.curbcharge.models import (
     ConnectorStatus,
     EVSEStatus,
     FavouriteStationReference,
+    OperatorReference,
+    PersonalizationProfile,
     ProviderTimestampSource,
     TariffStatus,
 )
@@ -61,6 +63,7 @@ def _coordinator(
     include_unknown=True,
     provider=None,
     favourites=(),
+    personalization_profile=None,
 ):
     if provider is None:
         provider = FakeProvider()
@@ -74,6 +77,7 @@ def _coordinator(
         5,
         include_unknown,
         favourites,
+        personalization_profile=personalization_profile,
     )
     coordinator.async_set_updated_data({station.provider_id: station})
     return coordinator
@@ -1178,6 +1182,8 @@ def test_top_nearby_sensor_returns_bounded_backend_ranked_payload(
     assert [item["score"] for item in recommendations] == pytest.approx(
         [100, 600 / 7, 500 / 7, 400 / 7, 300 / 7]
     )
+    assert all("personalized_rank" not in item for item in recommendations)
+    assert all("personalized_score" not in item for item in recommendations)
     assert recommendations[0]["reason"] == "best_nearby_rank"
     assert recommendations[0]["ranking_reason"] == attributes["reason"]
     assert recommendations[0]["score_components"] == {
@@ -1189,6 +1195,70 @@ def test_top_nearby_sensor_returns_bounded_backend_ranked_payload(
     }
     assert "Stale" not in [item["name"] for item in recommendations]
     assert provider.station_calls == []
+
+
+def test_top_nearby_sensor_uses_personalized_order_and_keeps_objective_scores(
+    hass, sample_stations
+):
+    base = sample_stations[0]
+    nonpreferred = replace(
+        _selection_station(base, distance=10, power=50, price="0.10"),
+        provider_id="NL-NONPREFERRED",
+        name="Nonpreferred",
+        operator_id="other",
+    )
+    preferred_cheaper = replace(
+        _selection_station(base, distance=100, power=50, price="0.30"),
+        provider_id="NL-PREFERRED-CHEAPER",
+        name="Preferred cheaper",
+        operator_id="preferred-a",
+    )
+    preferred_farther = replace(
+        _selection_station(base, distance=200, power=50, price="0.40"),
+        provider_id="NL-PREFERRED-FARTHER",
+        name="Preferred farther",
+        operator_id="preferred-b",
+    )
+    profile = PersonalizationProfile(
+        enabled=True,
+        preferred_operators=(
+            OperatorReference(base.provider, "preferred-a"),
+            OperatorReference(base.provider, "preferred-b"),
+        ),
+    )
+    coordinator = CurbChargeCoordinator(
+        hass,
+        FakeProvider(),
+        52.0,
+        5.0,
+        500,
+        10,
+        5,
+        True,
+        personalization_profile=profile,
+    )
+    coordinator.async_set_updated_data(
+        {
+            station.provider_id: station
+            for station in (nonpreferred, preferred_cheaper, preferred_farther)
+        }
+    )
+    sensor = TopNearbyChargersSensor(
+        coordinator, MockConfigEntry(domain=DOMAIN, unique_id="personalized-top")
+    )
+
+    recommendations = sensor.extra_state_attributes["recommendations"]
+
+    assert [item["name"] for item in recommendations] == [
+        "Preferred cheaper",
+        "Preferred farther",
+    ]
+    assert [item["rank"] for item in recommendations] == [2, 3]
+    assert [item["score"] for item in recommendations] == pytest.approx(
+        [200 / 3, 100 / 3]
+    )
+    assert [item["personalized_rank"] for item in recommendations] == [1, 2]
+    assert [item["personalized_score"] for item in recommendations] == [100, 50]
 
 
 def test_top_nearby_sensor_distinguishes_empty_unknown_and_none_available(

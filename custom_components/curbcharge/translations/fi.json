@@ -230,7 +230,7 @@
           "unknown_data_policy": "Tuntemattoman tiedon käytäntö"
         },
         "data_description": {
-          "enabled": "Ota tämä tallennettu profiili käyttöön personoituja suosituksia varten. Kunnes personoinnin arviointi on käytettävissä, nykyiset suositukset pysyvät ennallaan.",
+          "enabled": "Ota tämä tallennettu profiili käyttöön Parhaan lähellä olevan ja Top lähellä olevien suosituksissa. Kovista ehdoista ei jousteta; määritetyt varamenettelyt ja tuntemattoman tiedon käytännöt ovat voimassa.",
           "connector_type_ids": "Valitse vakiomuotoiset liitinstandardit. Jätä tyhjäksi hyväksyäksesi minkä tahansa liitintyypin.",
           "minimum_power_kw": "Valinnainen vähimmäisarvo täsmäävälle liitinryhmälle; käytä äärellistä, ei-negatiivista arvoa.",
           "preferred_operators": "Syötä yksi palveluntarjoajakohtainen viite riviä kohden, esimerkiksi ndw_dot_nl:NLX, eco_movement_be:Example CPO tai nobil_no:Synthetic CPO. NDW-tunnukset ja NOBIL-nimet täsmäävät tarkasti; Belgian nimet typistetään, välilyönnit tiivistetään eikä kirjainkokoa huomioida. Tallennetut valinnat säilytetään, vaikka ne eivät olisi lähellä.",

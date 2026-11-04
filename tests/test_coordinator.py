@@ -16,8 +16,11 @@ from custom_components.curbcharge.const import (
 from custom_components.curbcharge.coordinator import CurbChargeCoordinator
 from custom_components.curbcharge.geography import distance_m
 from custom_components.curbcharge.models import (
+    ConnectorStatus,
     DiscoveryFilterSettings,
     FavouriteStationReference,
+    OperatorReference,
+    PersonalizationProfile,
     ProviderTimestampSource,
     StationDiscoveryResult,
 )
@@ -38,6 +41,7 @@ def _coordinator(
     location_resolver=None,
     location_movement_threshold_m=DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
     discovery_filters=None,
+    personalization_profile=None,
 ):
     return CurbChargeCoordinator(
         hass,
@@ -52,6 +56,7 @@ def _coordinator(
         location_resolver=location_resolver,
         location_movement_threshold_m=location_movement_threshold_m,
         discovery_filters=discovery_filters,
+        personalization_profile=personalization_profile,
     )
 
 
@@ -122,6 +127,69 @@ async def test_recommendations_are_cached_once_and_cleared_after_failure(
     assert coordinator.best_station is None
     assert coordinator.best_station_reason is None
     assert coordinator.best_nearby_rank_for(station) == (None, None, None)
+    assert coordinator.personalized_best_nearby_rank_for(station) == (
+        None,
+        None,
+        None,
+    )
+    coordinator.recompute_cached_recommendations()
+    assert coordinator.recommendation_results is None
+
+
+@pytest.mark.asyncio
+async def test_personalized_ranks_use_personal_order_and_preserve_objective_scores(
+    hass, sample_stations
+):
+    def available_station(station, provider_id, distance, operator_id):
+        connectors = tuple(
+            replace(
+                connector,
+                status=ConnectorStatus.AVAILABLE,
+                available_count=connector.count,
+            )
+            for connector in station.connectors
+        )
+        return replace(
+            station,
+            provider_id=provider_id,
+            distance_m=distance,
+            connectors=connectors,
+            tariff=None,
+            operator_id=operator_id,
+        )
+
+    objective_winner = available_station(
+        sample_stations[0], "NL-OBJECTIVE", 10, "other"
+    )
+    preferred = available_station(sample_stations[1], "NL-PREFERRED", 100, "preferred")
+    profile = PersonalizationProfile(
+        enabled=True,
+        preferred_operators=(OperatorReference(preferred.provider, "preferred"),),
+    )
+    coordinator = _coordinator(
+        hass,
+        FakeProvider(),
+        personalization_profile=profile,
+    )
+
+    coordinator.async_set_updated_data(
+        {
+            objective_winner.provider_id: objective_winner,
+            preferred.provider_id: preferred,
+        }
+    )
+
+    assert coordinator.best_station == preferred
+    assert coordinator.best_nearby_rank_for(preferred) == (2, 50.0, 2)
+    assert coordinator.personalized_best_nearby_rank_for(preferred) == (1, 100.0, 1)
+    assert coordinator.best_nearby_rank_for(objective_winner) == (1, 100.0, 2)
+    assert coordinator.personalized_best_nearby_rank_for(objective_winner) == (
+        None,
+        None,
+        1,
+    )
+    absent = replace(preferred, provider_id="NL-ABSENT")
+    assert coordinator.personalized_best_nearby_rank_for(absent) == (None, None, 1)
 
 
 @pytest.mark.asyncio

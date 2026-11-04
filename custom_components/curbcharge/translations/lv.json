@@ -230,7 +230,7 @@
           "unknown_data_policy": "Nezināmu datu politika"
         },
         "data_description": {
-          "enabled": "Iespējojiet šo saglabāto profilu personalizētiem ieteikumiem. Kamēr personalizācijas novērtēšana nav pieejama, esošie ieteikumi nemainās.",
+          "enabled": "Iespējojiet šo saglabāto profilu ieteikumiem “Labākais tuvumā” un “Top tuvumā”. Stingrie ierobežojumi nekad netiek atviegloti; tiek piemēroti iestatītie atkāpšanās un nezināmu datu noteikumi.",
           "connector_type_ids": "Izvēlieties standarta savienotāju veidus. Atstājiet tukšu, lai pieņemtu jebkuru savienotāja veidu.",
           "minimum_power_kw": "Neobligāts minimums atbilstošai savienotāju grupai; ievadiet galīgu nenegatīvu vērtību.",
           "preferred_operators": "Katrā rindā ievadiet vienu operatora atsauci ar pakalpojumu sniedzēja prefiksu, piemēram, ndw_dot_nl:NLX, eco_movement_be:Example CPO vai nobil_no:Synthetic CPO. NDW ID un NOBIL nosaukumiem precīzi jāsakrīt; Beļģijas nosaukumiem atstarpes tiek apgrieztas un normalizētas, un reģistrs netiek ņemts vērā. Saglabātās izvēles tiek paturētas arī tad, ja operators nav tuvumā.",
