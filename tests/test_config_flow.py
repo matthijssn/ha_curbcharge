@@ -47,6 +47,7 @@ from custom_components.curbcharge.const import (
     NDW_CONNECTOR_TYPE_CODES,
     PERSONALIZATION_PROFILE_VERSION,
     PROVIDER_AFDC_US,
+    PROVIDER_CHARGY_LU,
     PROVIDER_DIGITRAFFIC_AFIR_FI,
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_ICH_TANKE_STROM_CH,
@@ -785,11 +786,17 @@ async def test_finland_config_flow_reshows_station_options_on_validation_failure
 
 
 @pytest.mark.asyncio
-async def test_switzerland_config_flow_creates_entry_without_credentials(
-    hass, monkeypatch
+@pytest.mark.parametrize(
+    ("provider_id", "coordinates"),
+    [
+        (PROVIDER_ICH_TANKE_STROM_CH, (46.95, 7.45)),
+        (PROVIDER_CHARGY_LU, (49.61, 6.13)),
+    ],
+)
+async def test_keyless_config_flow_creates_entry_without_credentials(
+    hass, monkeypatch, provider_id, coordinates
 ):
-    hass.config.latitude = 46.95
-    hass.config.longitude = 7.45
+    hass.config.latitude, hass.config.longitude = coordinates
     provider = FakeProvider()
     calls: list[tuple[object, ...]] = []
 
@@ -805,23 +812,29 @@ async def test_switzerland_config_flow_creates_entry_without_credentials(
         result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_HOME}
     )
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], _station_options(PROVIDER_ICH_TANKE_STROM_CH)
+        result["flow_id"], _station_options(provider_id)
     )
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["data"][CONF_PROVIDER] == PROVIDER_ICH_TANKE_STROM_CH
+    assert result["data"][CONF_PROVIDER] == provider_id
     assert CONF_API_TOKEN not in result["data"]
-    assert provider.validation_calls == [(46.95, 7.45, 500)]
-    assert calls[0][0] == PROVIDER_ICH_TANKE_STROM_CH
+    assert provider.validation_calls == [(*coordinates, 500)]
+    assert calls[0][0] == provider_id
     assert calls[0][2:] == (hass, None)
 
 
 @pytest.mark.asyncio
-async def test_switzerland_config_flow_reshows_station_options_on_validation_failure(
-    hass, monkeypatch
+@pytest.mark.parametrize(
+    ("provider_id", "coordinates"),
+    [
+        (PROVIDER_ICH_TANKE_STROM_CH, (46.95, 7.45)),
+        (PROVIDER_CHARGY_LU, (49.61, 6.13)),
+    ],
+)
+async def test_keyless_config_flow_reshows_station_options_on_validation_failure(
+    hass, monkeypatch, provider_id, coordinates
 ):
-    hass.config.latitude = 46.95
-    hass.config.longitude = 7.45
+    hass.config.latitude, hass.config.longitude = coordinates
     provider = FakeProvider()
     provider.validation_error = ProviderConnectionError("private connection details")
     monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
@@ -833,7 +846,7 @@ async def test_switzerland_config_flow_reshows_station_options_on_validation_fai
         result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_HOME}
     )
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], _station_options(PROVIDER_ICH_TANKE_STROM_CH)
+        result["flow_id"], _station_options(provider_id)
     )
 
     assert result["type"] is FlowResultType.FORM
@@ -846,7 +859,7 @@ async def test_switzerland_config_flow_reshows_station_options_on_validation_fai
                 CONF_MAX_STATIONS: 10,
             }
         )[CONF_PROVIDER]
-        == PROVIDER_ICH_TANKE_STROM_CH
+        == provider_id
     )
 
 

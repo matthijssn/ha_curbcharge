@@ -6,6 +6,7 @@ from homeassistant.core import HomeAssistant
 from ..const import (
     NOBIL_PROVIDER_IDS,
     PROVIDER_AFDC_US,
+    PROVIDER_CHARGY_LU,
     PROVIDER_DIGITRAFFIC_AFIR_FI,
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_ICH_TANKE_STROM_CH,
@@ -15,6 +16,7 @@ from .afdc import create_afdc_provider
 from .base import AuthenticationError, BaseChargingProvider, UnsupportedProviderError
 from .belgium import create_belgium_provider
 from .finland import create_finland_provider
+from .luxembourg import create_luxembourg_provider
 from .ndw_nl import create_ndw_nl_provider
 from .nobil import create_nobil_provider
 from .switzerland import create_switzerland_provider
@@ -43,4 +45,6 @@ def create_provider(
         return create_finland_provider(session, hass)
     if provider_id == PROVIDER_ICH_TANKE_STROM_CH:
         return create_switzerland_provider(session, hass)
+    if provider_id == PROVIDER_CHARGY_LU:
+        return create_luxembourg_provider(session, hass)
     raise UnsupportedProviderError("The configured charging provider is unsupported")

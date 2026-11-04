@@ -7,6 +7,8 @@ from typing import Any
 
 import pytest
 
+from custom_components.curbcharge.const import SUPPORTED_PROVIDER_IDS
+
 SUPPORTED_LANGUAGES = ("en", "nl", "fr", "de", "nb", "sv", "fi", "it")
 AFDC_CONNECTOR_TRANSLATION_KEYS = (
     "iec_62196_t1",
@@ -43,6 +45,7 @@ def test_english_translation_matches_strings():
     )
 
     assert source == english
+    assert set(source["selector"]["provider"]["options"]) == set(SUPPORTED_PROVIDER_IDS)
 
 
 @pytest.mark.parametrize("language", SUPPORTED_LANGUAGES)
