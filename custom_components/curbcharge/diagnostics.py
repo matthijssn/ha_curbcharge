@@ -83,6 +83,19 @@ async def async_get_config_entry_diagnostics(
         "include_unknown": entry.options.get(
             CONF_INCLUDE_UNKNOWN, coordinator.include_unknown
         ),
+        "personalization_profile": {
+            "enabled": coordinator.personalization_profile.enabled,
+            "preset": coordinator.personalization_profile.ranking_preset.value,
+            "connector_type_count": len(
+                coordinator.personalization_profile.connector_type_ids
+            ),
+            "preferred_operator_count": len(
+                coordinator.personalization_profile.preferred_operators
+            ),
+            "excluded_operator_count": len(
+                coordinator.personalization_profile.excluded_operators
+            ),
+        },
         "favourite_count": len(coordinator.favourite_ids),
         "coordinator_update_success": coordinator.last_update_success,
         "favourite_references_truncated": (

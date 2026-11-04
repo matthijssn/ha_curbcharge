@@ -56,6 +56,25 @@ const TEXT = {
     providerUpdated: "Provider station update",
     integrationUpdated: "Last successful update",
     details: "More details",
+    personalized: "Personalized",
+    preset: "Preset",
+    balancedPreset: "Balanced",
+    lowestPricePreset: "Lowest price",
+    shortestDistancePreset: "Shortest distance",
+    highestAvailabilityPreset: "Most available connectors",
+    highestPowerPreset: "Highest connector power",
+    fullMatch: "Full match",
+    partialMatch: "Partial match",
+    fallback: "Fallback",
+    noMatch: "No match",
+    noPersonalizedMatch: "No personalized match",
+    matchedConnectorGroup: "Matched connector group",
+    fallbackReason: "Fallback reason",
+    fallbackPreferredOperator: "Preferred operator not matched",
+    fallbackUnknownConnectorType: "Connector type unknown",
+    fallbackUnknownPower: "Connector power unknown",
+    fallbackUnknownOperator: "Operator unknown",
+    preferenceMismatch: "Preference not matched",
     navigate: "Navigate",
     googleDirections: "Google Maps directions",
     appleDirections: "Apple Maps directions",
@@ -106,6 +125,25 @@ const TEXT = {
     providerUpdated: "Laatste providerupdate",
     integrationUpdated: "Laatste geslaagde update",
     details: "Meer details",
+    personalized: "Gepersonaliseerd",
+    preset: "Rangschikking",
+    balancedPreset: "Gebalanceerd",
+    lowestPricePreset: "Laagste prijs",
+    shortestDistancePreset: "Kortste afstand",
+    highestAvailabilityPreset: "Meeste beschikbare connectoren",
+    highestPowerPreset: "Hoogste connectorvermogen",
+    fullMatch: "Volledige match",
+    partialMatch: "Gedeeltelijke match",
+    fallback: "Terugval",
+    noMatch: "Geen match",
+    noPersonalizedMatch: "Geen gepersonaliseerde match",
+    matchedConnectorGroup: "Passende connectorgroep",
+    fallbackReason: "Reden voor terugval",
+    fallbackPreferredOperator: "Voorkeursoperator komt niet overeen",
+    fallbackUnknownConnectorType: "Connectortype onbekend",
+    fallbackUnknownPower: "Vermogen onbekend",
+    fallbackUnknownOperator: "Operator onbekend",
+    preferenceMismatch: "Voorkeur komt niet overeen",
     navigate: "Navigeren",
     googleDirections: "Routebeschrijving in Google Maps",
     appleDirections: "Routebeschrijving in Apple Kaarten",
@@ -156,6 +194,25 @@ const TEXT = {
     providerUpdated: "Dernière mise à jour du fournisseur",
     integrationUpdated: "Dernière actualisation réussie",
     details: "Plus de détails",
+    personalized: "Personnalisé",
+    preset: "Préréglage",
+    balancedPreset: "Équilibré",
+    lowestPricePreset: "Prix le plus bas",
+    shortestDistancePreset: "Distance la plus courte",
+    highestAvailabilityPreset: "Le plus de connecteurs disponibles",
+    highestPowerPreset: "Puissance de connecteur la plus élevée",
+    fullMatch: "Correspondance complète",
+    partialMatch: "Correspondance partielle",
+    fallback: "Repli",
+    noMatch: "Aucune correspondance",
+    noPersonalizedMatch: "Aucune correspondance personnalisée",
+    matchedConnectorGroup: "Groupe de connecteurs correspondant",
+    fallbackReason: "Motif de repli",
+    fallbackPreferredOperator: "Opérateur préféré non trouvé",
+    fallbackUnknownConnectorType: "Type de connecteur inconnu",
+    fallbackUnknownPower: "Puissance inconnue",
+    fallbackUnknownOperator: "Opérateur inconnu",
+    preferenceMismatch: "Préférence non satisfaite",
     navigate: "Naviguer",
     googleDirections: "Itinéraire avec Google Maps",
     appleDirections: "Itinéraire avec Plans",
@@ -206,6 +263,25 @@ const TEXT = {
     providerUpdated: "Letzte Aktualisierung des Anbieters",
     integrationUpdated: "Letzte erfolgreiche Aktualisierung",
     details: "Weitere Details",
+    personalized: "Personalisiert",
+    preset: "Rangfolge",
+    balancedPreset: "Ausgewogen",
+    lowestPricePreset: "Niedrigster Preis",
+    shortestDistancePreset: "Kürzeste Entfernung",
+    highestAvailabilityPreset: "Meiste verfügbare Anschlüsse",
+    highestPowerPreset: "Höchste Anschlussleistung",
+    fullMatch: "Vollständige Übereinstimmung",
+    partialMatch: "Teilweise Übereinstimmung",
+    fallback: "Fallback",
+    noMatch: "Keine Übereinstimmung",
+    noPersonalizedMatch: "Keine personalisierte Übereinstimmung",
+    matchedConnectorGroup: "Passende Anschlussgruppe",
+    fallbackReason: "Fallback-Grund",
+    fallbackPreferredOperator: "Bevorzugter Betreiber nicht gefunden",
+    fallbackUnknownConnectorType: "Anschlusstyp unbekannt",
+    fallbackUnknownPower: "Leistung unbekannt",
+    fallbackUnknownOperator: "Betreiber unbekannt",
+    preferenceMismatch: "Präferenz nicht erfüllt",
     navigate: "Navigieren",
     googleDirections: "Route mit Google Maps",
     appleDirections: "Route mit Apple Karten",
@@ -256,6 +332,25 @@ const TEXT = {
     providerUpdated: "Leverandørens siste oppdatering",
     integrationUpdated: "Siste vellykkede oppdatering",
     details: "Flere detaljer",
+    personalized: "Personlig tilpasning",
+    preset: "Rangeringsforvalg",
+    balancedPreset: "Balansert",
+    lowestPricePreset: "Lavest pris",
+    shortestDistancePreset: "Kortest avstand",
+    highestAvailabilityPreset: "Flest ledige ladekontakter",
+    highestPowerPreset: "Høyest kontakteffekt",
+    fullMatch: "Fullstendig treff",
+    partialMatch: "Delvis treff",
+    fallback: "Reserveløsning",
+    noMatch: "Ingen treff",
+    noPersonalizedMatch: "Ingen personlig tilpasset match",
+    matchedConnectorGroup: "Matchende kontaktgruppe",
+    fallbackReason: "Årsak til reservevalg",
+    fallbackPreferredOperator: "Foretrukket operatør samsvarte ikke",
+    fallbackUnknownConnectorType: "Ukjent kontakttype",
+    fallbackUnknownPower: "Ukjent effekt",
+    fallbackUnknownOperator: "Ukjent operatør",
+    preferenceMismatch: "Preferansen samsvarte ikke",
     navigate: "Naviger",
     googleDirections: "Veibeskrivelse med Google Maps",
     appleDirections: "Veibeskrivelse med Apple Maps",
@@ -306,6 +401,25 @@ const TEXT = {
     providerUpdated: "Leverantörens senaste uppdatering",
     integrationUpdated: "Senaste lyckade uppdatering",
     details: "Fler detaljer",
+    personalized: "Personlig anpassning",
+    preset: "Rangordningsförval",
+    balancedPreset: "Balanserad",
+    lowestPricePreset: "Lägsta pris",
+    shortestDistancePreset: "Kortaste avstånd",
+    highestAvailabilityPreset: "Flest lediga laddkontakter",
+    highestPowerPreset: "Högsta kontakteffekt",
+    fullMatch: "Fullständig matchning",
+    partialMatch: "Delvis matchning",
+    fallback: "Reservval",
+    noMatch: "Ingen matchning",
+    noPersonalizedMatch: "Ingen personlig matchning",
+    matchedConnectorGroup: "Matchande kontaktgrupp",
+    fallbackReason: "Orsak till reservval",
+    fallbackPreferredOperator: "Föredragen operatör matchade inte",
+    fallbackUnknownConnectorType: "Okänd kontakttyp",
+    fallbackUnknownPower: "Okänd effekt",
+    fallbackUnknownOperator: "Okänd operatör",
+    preferenceMismatch: "Preferensen matchade inte",
     navigate: "Navigera",
     googleDirections: "Vägbeskrivning med Google Maps",
     appleDirections: "Vägbeskrivning med Apple Maps",
@@ -356,6 +470,25 @@ const TEXT = {
     providerUpdated: "Palveluntarjoajan asemapäivitys",
     integrationUpdated: "Viimeisin onnistunut päivitys",
     details: "Lisätiedot",
+    personalized: "Personoitu",
+    preset: "Järjestyksen esiasetus",
+    balancedPreset: "Tasapainotettu",
+    lowestPricePreset: "Alin hinta",
+    shortestDistancePreset: "Lyhin etäisyys",
+    highestAvailabilityPreset: "Eniten vapaita liittimiä",
+    highestPowerPreset: "Suurin liitinteho",
+    fullMatch: "Täysi osuma",
+    partialMatch: "Osittainen osuma",
+    fallback: "Vararatkaisu",
+    noMatch: "Ei osumaa",
+    noPersonalizedMatch: "Ei personoitua osumaa",
+    matchedConnectorGroup: "Sopiva liitinryhmä",
+    fallbackReason: "Vararatkaisun syy",
+    fallbackPreferredOperator: "Ensisijainen operaattori ei täsmännyt",
+    fallbackUnknownConnectorType: "Liitintyyppi tuntematon",
+    fallbackUnknownPower: "Teho tuntematon",
+    fallbackUnknownOperator: "Operaattori tuntematon",
+    preferenceMismatch: "Mieltymys ei täsmännyt",
     navigate: "Navigoi",
     googleDirections: "Google Mapsin reittiohjeet",
     appleDirections: "Apple Mapsin reittiohjeet",
@@ -406,6 +539,25 @@ const TEXT = {
     providerUpdated: "Aggiornamento stazione del fornitore",
     integrationUpdated: "Ultimo aggiornamento riuscito",
     details: "Maggiori dettagli",
+    personalized: "Personalizzato",
+    preset: "Preset di classificazione",
+    balancedPreset: "Bilanciato",
+    lowestPricePreset: "Prezzo più basso",
+    shortestDistancePreset: "Distanza più breve",
+    highestAvailabilityPreset: "Più connettori disponibili",
+    highestPowerPreset: "Potenza del connettore più alta",
+    fullMatch: "Corrispondenza completa",
+    partialMatch: "Corrispondenza parziale",
+    fallback: "Fallback",
+    noMatch: "Nessuna corrispondenza",
+    noPersonalizedMatch: "Nessuna corrispondenza personalizzata",
+    matchedConnectorGroup: "Gruppo di connettori corrispondente",
+    fallbackReason: "Motivo del fallback",
+    fallbackPreferredOperator: "Operatore preferito non trovato",
+    fallbackUnknownConnectorType: "Tipo di connettore sconosciuto",
+    fallbackUnknownPower: "Potenza sconosciuta",
+    fallbackUnknownOperator: "Operatore sconosciuto",
+    preferenceMismatch: "Preferenza non corrispondente",
     navigate: "Naviga",
     googleDirections: "Indicazioni Google Maps",
     appleDirections: "Indicazioni Apple Maps",
@@ -456,6 +608,25 @@ const TEXT = {
     providerUpdated: "Stacijas atjauninājums no pakalpojumu sniedzēja",
     integrationUpdated: "Pēdējais veiksmīgais atjauninājums",
     details: "Papildinformācija",
+    personalized: "Personalizēts",
+    preset: "Ieteikumu secība",
+    balancedPreset: "Līdzsvarots",
+    lowestPricePreset: "Zemākā cena",
+    shortestDistancePreset: "Mazākais attālums",
+    highestAvailabilityPreset: "Visvairāk pieejamo savienotāju",
+    highestPowerPreset: "Lielākā savienotāja jauda",
+    fullMatch: "Pilna atbilstība",
+    partialMatch: "Daļēja atbilstība",
+    fallback: "Atkāpe",
+    noMatch: "Nav atbilstības",
+    noPersonalizedMatch: "Nav personalizētas atbilstības",
+    matchedConnectorGroup: "Atbilstoša savienotāju grupa",
+    fallbackReason: "Atkāpes iemesls",
+    fallbackPreferredOperator: "Vēlamais operators neatbilst",
+    fallbackUnknownConnectorType: "Savienotāja veids nav zināms",
+    fallbackUnknownPower: "Jauda nav zināma",
+    fallbackUnknownOperator: "Operators nav zināms",
+    preferenceMismatch: "Priekšroka neatbilst",
     navigate: "Navigēt",
     googleDirections: "Maršruts Google Maps",
     appleDirections: "Maršruts Apple Maps",
@@ -577,7 +748,95 @@ function formatRecommendation(item, hass, text, options) {
       ],
     );
   }
-  return { name, rows };
+  const personalizationRows = formatPersonalizationRows(
+    recommendation.personalization,
+    hass,
+    text,
+  );
+  return personalizationRows.length
+    ? {
+        name,
+        rows,
+        personalizationRows,
+        personalizationLabel: text.personalized,
+        personalizationKey: String(
+          recommendation.provider_station_id ||
+            recommendation.station_id ||
+            name,
+        ),
+      }
+    : { name, rows };
+}
+
+function formatPersonalizationRows(personalization, hass, text) {
+  if (
+    !personalization ||
+    typeof personalization !== "object" ||
+    personalization.enabled !== true
+  ) {
+    return [];
+  }
+
+  const statuses = {
+    full_match: text.fullMatch,
+    partial_match: text.partialMatch,
+    fallback: text.fallback,
+    no_match: text.noMatch,
+    not_evaluated: text.unknown,
+    unavailable: text.unavailable,
+  };
+  const presets = {
+    balanced: text.balancedPreset,
+    lowest_price: text.lowestPricePreset,
+    shortest_distance: text.shortestDistancePreset,
+    highest_availability: text.highestAvailabilityPreset,
+    highest_power: text.highestPowerPreset,
+  };
+  const rows = [
+    [
+      text.personalized,
+      statuses[personalization.match_status] || text.unknown,
+    ],
+    [text.preset, presets[personalization.preset] || text.unknown],
+  ];
+  const group = personalization.matched_connector_group;
+  if (group && typeof group === "object") {
+    const values = [];
+    if (typeof group.connector_type_id === "string") {
+      values.push(group.connector_type_id.replaceAll("_", " "));
+    }
+    if (typeof group.max_power_kw === "number" && Number.isFinite(group.max_power_kw)) {
+      values.push(
+        `${formatNumber(group.max_power_kw, hass, text.unknown)} kW`,
+      );
+    }
+    rows.push([text.matchedConnectorGroup, values.join(", ")]);
+  }
+
+  if (personalization.fallback_used === true) {
+    const fallbackLabels = {
+      preferred_operator_not_matched: text.fallbackPreferredOperator,
+      unknown_connector_type: text.fallbackUnknownConnectorType,
+      unknown_power: text.fallbackUnknownPower,
+      unknown_operator: text.fallbackUnknownOperator,
+    };
+    const reasons = Array.isArray(personalization.fallback_reasons)
+      ? personalization.fallback_reasons.map(
+          (reason) => fallbackLabels[reason] || text.unknown,
+        )
+      : [];
+    rows.push([
+      text.fallbackReason,
+      reasons.length > 0 ? reasons.join(", ") : text.fallback,
+    ]);
+  } else if (
+    Array.isArray(personalization.preference_mismatches) &&
+    personalization.preference_mismatches.includes("preferred_operator")
+  ) {
+    rows.push([text.preferenceMismatch, text.fallbackPreferredOperator]);
+  }
+
+  return rows;
 }
 
 function buildNavigationLinks(entity, attributes, text) {
@@ -679,6 +938,7 @@ export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
   const statusLabels = {
     available: text.available,
     selected: text.selected,
+    no_personalized_match: text.noPersonalizedMatch,
     none_available: text.noneAvailable,
     no_current_stations: text.noCurrentStations,
     unknown_availability: text.unknownAvailability,
@@ -787,6 +1047,11 @@ export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
         text.integrationUpdated,
         formatTimestamp(values.last_successful_update, hass, text.unknown),
       ],
+    );
+  }
+  if (!hasRecommendationList) {
+    detailsRows.push(
+      ...formatPersonalizationRows(values.personalization, hass, text),
     );
   }
 
@@ -1039,6 +1304,25 @@ class CurbChargeCard extends HTMLElement {
           grid.append(createMetric(row));
         }
         item.append(name, grid);
+        if (recommendation.personalizationRows?.length) {
+          const personalizationDetails = document.createElement("details");
+          personalizationDetails.className = "personalization-details";
+          personalizationDetails.dataset.focusKey =
+            `personalization-${recommendation.personalizationKey}`;
+          personalizationDetails.open =
+            openDetails.get(personalizationDetails.dataset.focusKey) ?? false;
+          const summary = document.createElement("summary");
+          summary.dataset.focusKey =
+            `${personalizationDetails.dataset.focusKey}-summary`;
+          summary.textContent = recommendation.personalizationLabel;
+          const detailsGrid = document.createElement("div");
+          detailsGrid.className = "details-grid";
+          for (const row of recommendation.personalizationRows) {
+            detailsGrid.append(createMetric(row));
+          }
+          personalizationDetails.append(summary, detailsGrid);
+          item.append(personalizationDetails);
+        }
         list.append(item);
       }
       section.append(heading, list);

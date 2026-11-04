@@ -539,15 +539,23 @@ the shared selected-station payload plus one-based `rank`, candidate-relative
 `score`, `score_components` (`price_per_kwh`, `currency`, `distance_m`,
 `available_connectors`, and `max_power_kw`), the stable `reason` code
 `best_nearby_rank`, and the overall `ranking_reason`. The component values
-remain null when unknown. `best_nearby_candidate_count` reports the full
-eligible cohort even when more than five stations are available. No per-rank
-entities, separate recommendation history, or provider requests are created;
-Home Assistant Recorder may still retain the sensor's normal state and
-attribute history according to its own settings.
+remain null when unknown. With personalization enabled, Best nearby, Top
+nearby, and Status summary include bounded personalization status, preset,
+match/fallback codes, and any confirmed compatible connector group. Top nearby
+items additionally include `personalized_rank` and `personalized_score`; their
+base `rank` and `score` remain objective values. The bundled card shows the
+profile status and fallback reason in collapsed, accessible details.
+`best_nearby_candidate_count` reports the full objective eligible cohort even
+when more than five stations are available. No per-rank entities, separate
+recommendation history, or provider requests are created; Home Assistant
+Recorder may still retain the sensor's normal state and attribute history
+according to its own settings.
 
 Best nearby, Top nearby, and alternative selection sensors expose
 `result_status` values such as `selected`, `unavailable`,
 `no_current_stations`, `unknown_availability`, and `none_available`.
+When an enabled profile excludes every otherwise available charger, Best
+nearby and Top nearby report `no_personalized_match`.
 Cheapest can also report `no_comparable_price` when no known price exists or
 prices use multiple currencies; Fastest reports `no_positive_power` when no
 eligible station has a finite positive power; Nearest reports
@@ -755,7 +763,9 @@ chosen by the user. See the
 Diagnostics omit station addresses, exact station coordinates, and station
 distances. They redact manual coordinates, Entity source IDs, saved favourite
 references, API tokens, and personalization profile values from config-entry
-data and options. In Entity mode, the selected entity ID is stored locally in
+data and options. A separate `personalization_profile` diagnostic summary
+contains only enabled status, preset, and preference-list counts. In Entity
+mode, the selected entity ID is stored locally in
 the config entry and redacted from diagnostics; its changing coordinates are
 not persisted or included in diagnostics. Favourite membership is stored by
 provider and station ID; current display names and addresses are not persisted.

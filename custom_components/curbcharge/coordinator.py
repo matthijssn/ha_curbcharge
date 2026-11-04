@@ -423,9 +423,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
             return None, None, None
         if not self.personalization_profile.enabled:
             return self.best_nearby_rank_for(station)
-        evaluation = results.personalization_evaluations.get(
-            _station_identity_key(station)
-        )
+        evaluation = self.personalization_evaluation_for(station)
         if evaluation is None:
             return None, None, results.personalized_candidate_count
         return (
@@ -433,6 +431,19 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
             evaluation.personalized_score,
             results.personalized_candidate_count,
         )
+
+    def personalization_evaluation_for(
+        self, station: ChargingStation
+    ) -> _PersonalizationEvaluation | None:
+        """Return the current profile evaluation for a station, if any."""
+        results = self.recommendation_results
+        if (
+            not self.personalization_profile.enabled
+            or not self.last_update_success
+            or results is None
+        ):
+            return None
+        return results.personalization_evaluations.get(_station_identity_key(station))
 
     @property
     def best_station(self) -> ChargingStation | None:

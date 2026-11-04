@@ -125,6 +125,11 @@ When configured with **Top nearby chargers**, it renders the backend-ordered
 recommendations as one ordered list, including each station's rank, score,
 ranking explanation, availability, and available price, power, and distance.
 It does not sort the list or create per-result navigation links.
+When personalization is enabled, Best nearby's collapsed **More details**
+section includes its localized profile summary. Each Top nearby item has a
+collapsed **Personalized** disclosure with its match status and, when used, a
+textual fallback explanation. These details use the existing Home Assistant
+attributes; a disabled profile adds no new card content.
 When the entity has a valid destination, a collapsed **Navigate** disclosure
 offers explicit Google Maps, Apple Maps, Waze, and open-map links; nothing opens
 until the user taps a link. It is hidden for an unavailable/stale entity or an
