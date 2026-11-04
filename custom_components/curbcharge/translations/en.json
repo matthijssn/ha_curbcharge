@@ -230,7 +230,7 @@
           "unknown_data_policy": "Unknown-data policy"
         },
         "data_description": {
-          "enabled": "Enable this saved profile for personalized recommendations. Until personalization evaluation is available, existing recommendations remain unchanged.",
+          "enabled": "Enable this saved profile for Best nearby and Top nearby results. Hard constraints are never relaxed; configured fallback and unknown-data policies apply.",
           "connector_type_ids": "Choose canonical connector standards. Leave empty to accept any connector type.",
           "minimum_power_kw": "Optional minimum for a matching connector group; use a finite nonnegative value.",
           "preferred_operators": "Enter one provider-qualified reference per line, for example ndw_dot_nl:NLX, eco_movement_be:Example CPO, or nobil_no:Synthetic CPO. NDW IDs and NOBIL names match exactly; Belgium names are trimmed, whitespace-collapsed, and case-insensitive. Saved choices are retained when not nearby.",

@@ -24,10 +24,15 @@ from .const import (
 )
 from .geography import distance_m
 from .models import (
+    ChargingConnector,
     ChargingLocation,
     ChargingStation,
     DiscoveryFilterSettings,
     FavouriteStationReference,
+    OperatorReference,
+    PersonalizationProfile,
+    PersonalizationRankingPreset,
+    PersonalizationUnknownDataPolicy,
 )
 from .providers.base import (
     AuthenticationError,
@@ -50,19 +55,6 @@ class RecommendationResult(NamedTuple):
     best_nearby_candidate_count: int | None
 
 
-class RecommendationResults(NamedTuple):
-    """All recommendation results computed from one coordinator update."""
-
-    best_nearby: RecommendationResult
-    nearest_available: RecommendationResult
-    cheapest_available: RecommendationResult
-    fastest_available: RecommendationResult
-    favorite_nearest: RecommendationResult
-    favorite_cheapest: RecommendationResult
-    favorite_fastest: RecommendationResult
-    best_nearby_ranks: Mapping[tuple[str, str, str], tuple[int, float]]
-
-
 @dataclass(frozen=True, slots=True)
 class _RecommendationCandidate:
     """Facts shared by the recommendation evaluators for one station."""
@@ -75,6 +67,46 @@ class _RecommendationCandidate:
     best_price_per_kwh: Decimal | None
     best_currency: str | None
     known_price: tuple[str, Decimal] | None
+
+
+@dataclass(frozen=True, slots=True)
+class _PersonalizationEvaluation:
+    """One station's hard eligibility, preference matches, and ranking results."""
+
+    candidate: _RecommendationCandidate
+    hard_eligible: bool
+    full_match: bool
+    fallback_eligible: bool
+    fallback_used: bool
+    matched_connector_groups: tuple[ChargingConnector, ...]
+    selected_connector_group: ChargingConnector | None
+    preference_matches: tuple[str, ...]
+    preference_mismatches: tuple[str, ...]
+    unknown_fields: tuple[str, ...]
+    fallback_reasons: tuple[str, ...]
+    rejection_reason: str | None
+    objective_rank: int | None = None
+    objective_score: float | None = None
+    personalized_rank: int | None = None
+    personalized_score: float | None = None
+
+
+class RecommendationResults(NamedTuple):
+    """All recommendation results computed from one coordinator update."""
+
+    best_nearby: RecommendationResult
+    nearest_available: RecommendationResult
+    cheapest_available: RecommendationResult
+    fastest_available: RecommendationResult
+    favorite_nearest: RecommendationResult
+    favorite_cheapest: RecommendationResult
+    favorite_fastest: RecommendationResult
+    best_nearby_ranks: Mapping[tuple[str, str, str], tuple[int, float]]
+    personalization_evaluations: Mapping[
+        tuple[str, str, str], _PersonalizationEvaluation
+    ]
+    personalized_candidate_count: int
+    personalized_reason: str | None
 
 
 class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
@@ -95,6 +127,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         location_resolver: Callable[[], tuple[float, float] | None] | None = None,
         location_movement_threshold_m: int = DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
         discovery_filters: DiscoveryFilterSettings | None = None,
+        personalization_profile: PersonalizationProfile | None = None,
     ) -> None:
         """Initialize the shared coordinator."""
         self.provider = provider
@@ -112,6 +145,11 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         self.location_resolver = location_resolver
         self.location_movement_threshold_m = location_movement_threshold_m
         self.discovery_filters = discovery_filters or DiscoveryFilterSettings()
+        self.personalization_profile = (
+            personalization_profile
+            if personalization_profile is not None
+            else PersonalizationProfile()
+        )
         self.favourite_ids = {favourite.provider_id for favourite in favourites}
         self.nearby_station_ids: set[str] | None = None
         self._config_entry_data = (
@@ -271,6 +309,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         favourites: tuple[FavouriteStationReference, ...],
         location_movement_threshold_m: int = DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
         discovery_filters: DiscoveryFilterSettings | None = None,
+        personalization_profile: PersonalizationProfile | None = None,
     ) -> None:
         """Apply options without discarding station-missing history."""
         previous_default_interval = self._default_update_interval
@@ -283,6 +322,8 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         self.location_movement_threshold_m = location_movement_threshold_m
         if discovery_filters is not None:
             self.discovery_filters = discovery_filters
+        if personalization_profile is not None:
+            self.personalization_profile = personalization_profile
         self.favourite_ids = {favourite.provider_id for favourite in favourites}
         self._default_update_interval = timedelta(minutes=scan_interval_minutes)
         self.update_interval = (
@@ -290,6 +331,14 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
             if current_interval is None or current_interval == previous_default_interval
             else max(current_interval, self._default_update_interval)
         )
+
+    @callback
+    def recompute_cached_recommendations(self) -> None:
+        """Reevaluate current stations after profile-only option changes."""
+        if not self.last_update_success or self.data is None:
+            return
+        self._set_recommendation_results(self.data)
+        self.async_update_listeners()
 
     def entry_data_changed(self, data: Mapping[str, Any]) -> bool:
         """Return whether setup-only config data differs from its snapshot."""
@@ -329,7 +378,10 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
             and not station.is_stale
         )
         self.recommendation_results = evaluate_recommendations(
-            best_nearby_stations, selection_stations, favorite_stations
+            best_nearby_stations,
+            selection_stations,
+            favorite_stations,
+            personalization_profile=self.personalization_profile,
         )
 
     def _set_statistics_snapshot(
@@ -351,7 +403,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
     def best_nearby_rank_for(
         self, station: ChargingStation
     ) -> tuple[int | None, float | None, int | None]:
-        """Return a station's current Best nearby rank, score, and cohort size."""
+        """Return a station's objective Best nearby rank, score, and cohort size."""
         results = self.recommendation_results
         if not self.last_update_success or results is None:
             return None, None, None
@@ -360,6 +412,26 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
             ranking[0] if ranking is not None else None,
             ranking[1] if ranking is not None else None,
             results.best_nearby.best_nearby_candidate_count,
+        )
+
+    def personalized_best_nearby_rank_for(
+        self, station: ChargingStation
+    ) -> tuple[int | None, float | None, int | None]:
+        """Return the personalized rank, score, and eligible cohort size."""
+        results = self.recommendation_results
+        if not self.last_update_success or results is None:
+            return None, None, None
+        if not self.personalization_profile.enabled:
+            return self.best_nearby_rank_for(station)
+        evaluation = results.personalization_evaluations.get(
+            _station_identity_key(station)
+        )
+        if evaluation is None:
+            return None, None, results.personalized_candidate_count
+        return (
+            evaluation.personalized_rank,
+            evaluation.personalized_score,
+            results.personalized_candidate_count,
         )
 
     @property
@@ -429,6 +501,8 @@ def evaluate_recommendations(
     best_nearby_stations: Iterable[ChargingStation],
     selection_stations: Iterable[ChargingStation],
     favorite_stations: Iterable[ChargingStation] = (),
+    *,
+    personalization_profile: PersonalizationProfile | None = None,
 ) -> RecommendationResults:
     """Evaluate all station recommendation views from shared candidate facts."""
     best_stations = tuple(best_nearby_stations)
@@ -469,14 +543,98 @@ def evaluate_recommendations(
         )
         for rank, candidate in enumerate(ranked_best, 1)
     }
+    personalization_evaluations: dict[
+        tuple[str, str, str], _PersonalizationEvaluation
+    ] = {}
+    personalized_candidate_count = candidate_count
+    personalized_reason = None
+    personalized_best_station = ranked_best[0].station if ranked_best else None
+    if personalization_profile is not None and personalization_profile.enabled:
+        personalization_evaluations = {
+            _station_identity_key(candidate.station): _evaluate_personalization(
+                candidate, personalization_profile
+            )
+            for candidate in best_candidates
+        }
+        full_matches = [
+            evaluation
+            for evaluation in personalization_evaluations.values()
+            if evaluation.full_match
+        ]
+        used_fallback = not full_matches
+        if full_matches:
+            eligible = full_matches
+        elif personalization_profile.allow_fallback:
+            eligible = [
+                evaluation
+                for evaluation in personalization_evaluations.values()
+                if evaluation.fallback_eligible
+            ]
+        else:
+            eligible = []
+
+        ranked_personalized, personalized_reason = _rank_personalized_candidates(
+            eligible, personalization_profile
+        )
+        personalized_candidate_count = len(ranked_personalized)
+        personalized_best_station = (
+            ranked_personalized[0].candidate.station if ranked_personalized else None
+        )
+        if ranked_personalized and used_fallback:
+            personalized_reason = "fallback"
+        elif not ranked_personalized:
+            personalized_reason = (
+                "no_personalized_match" if best_candidates else "no_available_station"
+            )
+
+        personal_ranks = {
+            _station_identity_key(evaluation.candidate.station): (
+                rank,
+                100.0
+                * (personalized_candidate_count - rank + 1)
+                / personalized_candidate_count,
+            )
+            for rank, evaluation in enumerate(ranked_personalized, 1)
+        }
+        selected_fallbacks = {
+            _station_identity_key(evaluation.candidate.station)
+            for evaluation in ranked_personalized
+            if used_fallback
+        }
+        personalization_evaluations = {
+            station_key: replace(
+                evaluation,
+                fallback_used=station_key in selected_fallbacks,
+                objective_rank=(
+                    best_nearby_ranks[station_key][0]
+                    if station_key in best_nearby_ranks
+                    else None
+                ),
+                objective_score=(
+                    best_nearby_ranks[station_key][1]
+                    if station_key in best_nearby_ranks
+                    else None
+                ),
+                personalized_rank=(
+                    personal_ranks[station_key][0]
+                    if station_key in personal_ranks
+                    else None
+                ),
+                personalized_score=(
+                    personal_ranks[station_key][1]
+                    if station_key in personal_ranks
+                    else None
+                ),
+            )
+            for station_key, evaluation in personalization_evaluations.items()
+        }
 
     def result(
         station: ChargingStation | None, reason: str | None
     ) -> RecommendationResult:
+        station_key = _station_identity_key(station) if station is not None else None
         ranking = (
-            best_nearby_ranks.get(_station_identity_key(station))
-            if station is not None
-            else None
+            best_nearby_ranks.get(station_key) if station_key is not None else None
         )
         return RecommendationResult(
             station,
@@ -505,7 +663,7 @@ def evaluate_recommendations(
         favorite_candidates
     )
     return RecommendationResults(
-        result(ranked_best[0].station if ranked_best else None, best_reason),
+        result(personalized_best_station, best_reason),
         result(nearest_station, nearest_reason),
         result(cheapest_station, cheapest_reason),
         result(fastest_station, fastest_reason),
@@ -513,7 +671,263 @@ def evaluate_recommendations(
         result(favorite_cheapest, favorite_cheapest_reason),
         result(favorite_fastest, favorite_fastest_reason),
         best_nearby_ranks,
+        personalization_evaluations,
+        personalized_candidate_count,
+        personalized_reason,
     )
+
+
+def _evaluate_personalization(
+    candidate: _RecommendationCandidate,
+    profile: PersonalizationProfile,
+) -> _PersonalizationEvaluation:
+    """Evaluate profile constraints and preferences without changing base facts."""
+    hard_reasons: list[str] = []
+    unknown_fields: set[str] = set()
+    preference_matches: list[str] = []
+    preference_mismatches: list[str] = []
+
+    operator = _station_operator_reference(candidate.station)
+    if operator is not None and operator in profile.excluded_operators:
+        hard_reasons.append("excluded_operator")
+
+    if profile.maximum_price is not None:
+        if candidate.known_price is None:
+            hard_reasons.append("maximum_price_unknown")
+        elif candidate.known_price[0] != profile.maximum_price_currency:
+            hard_reasons.append("maximum_price_currency_mismatch")
+        elif candidate.known_price[1] > profile.maximum_price:
+            hard_reasons.append("maximum_price_exceeded")
+
+    has_connector_constraints = bool(
+        profile.connector_type_ids or profile.minimum_power_kw is not None
+    )
+    matching_groups: list[ChargingConnector] = []
+    fallback_groups: list[tuple[ChargingConnector, tuple[str, ...]]] = []
+    if has_connector_constraints:
+        for connector in candidate.station.connectors:
+            available_count = connector.known_available_count
+            if available_count is None or available_count <= 0:
+                continue
+
+            group_unknown: list[str] = []
+            if profile.connector_type_ids:
+                if connector.connector_type_id is None:
+                    group_unknown.append("connector_type")
+                elif connector.connector_type_id not in profile.connector_type_ids:
+                    continue
+
+            power = connector.max_power_kw
+            if profile.minimum_power_kw is not None:
+                if power is None or not isfinite(power):
+                    group_unknown.append("power")
+                elif power < profile.minimum_power_kw:
+                    continue
+            elif (
+                profile.ranking_preset is PersonalizationRankingPreset.HIGHEST_POWER
+                and (power is None or not isfinite(power))
+            ):
+                group_unknown.append("power")
+
+            if group_unknown:
+                fallback_groups.append((connector, tuple(group_unknown)))
+            else:
+                matching_groups.append(connector)
+
+        if matching_groups:
+            selected_groups = matching_groups
+        elif fallback_groups:
+            selected_groups = [group for group, _unknown in fallback_groups]
+            unknown_fields.update(
+                field for _group, unknown in fallback_groups for field in unknown
+            )
+        else:
+            hard_reasons.append("no_compatible_connector_group")
+            selected_groups = []
+    else:
+        selected_groups = []
+        if profile.ranking_preset is PersonalizationRankingPreset.HIGHEST_POWER:
+            power = candidate.max_power_kw
+            if power is None or not isfinite(power):
+                unknown_fields.add("power")
+
+    selected_group = (
+        _select_personalization_connector_group(selected_groups, profile.ranking_preset)
+        if selected_groups
+        else None
+    )
+
+    if profile.preferred_operators:
+        if operator is None:
+            unknown_fields.add("operator")
+        elif operator in profile.preferred_operators:
+            preference_matches.append("preferred_operator")
+        else:
+            preference_mismatches.append("preferred_operator")
+    elif profile.excluded_operators and operator is None:
+        unknown_fields.add("operator")
+
+    fallback_reasons = [f"unknown_{field}" for field in sorted(unknown_fields)]
+    fallback_reasons.extend(
+        f"{preference}_not_matched" for preference in preference_mismatches
+    )
+    hard_eligible = not hard_reasons
+    full_match = hard_eligible and not fallback_reasons
+    unknowns_allowed = (
+        not unknown_fields
+        or profile.unknown_data_policy
+        is PersonalizationUnknownDataPolicy.ALLOW_FALLBACK
+    )
+    fallback_eligible = (
+        hard_eligible and not full_match and profile.allow_fallback and unknowns_allowed
+    )
+    rejection_reason = hard_reasons[0] if hard_reasons else None
+    if not full_match and not fallback_eligible and rejection_reason is None:
+        rejection_reason = (
+            "unknown_data_excluded" if unknown_fields else "fallback_disabled"
+        )
+
+    return _PersonalizationEvaluation(
+        candidate=candidate,
+        hard_eligible=hard_eligible,
+        full_match=full_match,
+        fallback_eligible=fallback_eligible,
+        fallback_used=False,
+        matched_connector_groups=tuple(matching_groups),
+        selected_connector_group=selected_group,
+        preference_matches=tuple(preference_matches),
+        preference_mismatches=tuple(preference_mismatches),
+        unknown_fields=tuple(sorted(unknown_fields)),
+        fallback_reasons=tuple(fallback_reasons),
+        rejection_reason=rejection_reason,
+    )
+
+
+def _station_operator_reference(
+    station: ChargingStation,
+) -> OperatorReference | None:
+    """Build the provider-scoped key used by the personalization profile."""
+    key = station.operator_id or station.operator
+    if not isinstance(key, str) or not key.strip():
+        return None
+    return OperatorReference(station.provider, key)
+
+
+def _select_personalization_connector_group(
+    groups: list[ChargingConnector],
+    preset: PersonalizationRankingPreset,
+) -> ChargingConnector:
+    """Select one compatible group so availability and power stay associated."""
+    if preset is PersonalizationRankingPreset.HIGHEST_POWER:
+        return min(
+            groups,
+            key=lambda group: (
+                _descending_power_key(group.max_power_kw),
+                -(group.known_available_count or 0),
+                group.provider_connector_id,
+            ),
+        )
+    return min(
+        groups,
+        key=lambda group: (
+            -(group.known_available_count or 0),
+            _descending_power_key(group.max_power_kw),
+            group.provider_connector_id,
+        ),
+    )
+
+
+def _personalized_ranking_candidate(
+    evaluation: _PersonalizationEvaluation,
+) -> _RecommendationCandidate:
+    """Use one compatible connector group's facts when ranking a station."""
+    group = evaluation.selected_connector_group
+    if group is None:
+        return evaluation.candidate
+    return replace(
+        evaluation.candidate,
+        available_connectors=group.known_available_count,
+        max_power_kw=group.max_power_kw,
+    )
+
+
+def _rank_personalized_candidates(
+    evaluations: list[_PersonalizationEvaluation],
+    profile: PersonalizationProfile,
+) -> tuple[list[_PersonalizationEvaluation], str]:
+    """Rank the full-match pool, or fallback pool if there is no full match."""
+    if not evaluations:
+        return [], "no_personalized_match"
+
+    ranking_candidates = [
+        _personalized_ranking_candidate(evaluation) for evaluation in evaluations
+    ]
+    if profile.ranking_preset is PersonalizationRankingPreset.BALANCED:
+        ranked, reason = _rank_best_nearby(ranking_candidates)
+        by_station = {
+            _station_identity_key(evaluation.candidate.station): evaluation
+            for evaluation in evaluations
+        }
+        return (
+            [
+                by_station[_station_identity_key(candidate.station)]
+                for candidate in ranked
+            ],
+            reason or "balanced",
+        )
+
+    currencies = {
+        candidate.known_price[0]
+        for candidate in ranking_candidates
+        if candidate.known_price is not None
+    }
+    if profile.ranking_preset is PersonalizationRankingPreset.LOWEST_PRICE and (
+        len(currencies) != 1
+    ):
+        ranked, reason = _rank_best_nearby(ranking_candidates)
+        by_station = {
+            _station_identity_key(evaluation.candidate.station): evaluation
+            for evaluation in evaluations
+        }
+        return (
+            [
+                by_station[_station_identity_key(candidate.station)]
+                for candidate in ranked
+            ],
+            reason or ("mixed_currencies" if currencies else "no_known_price"),
+        )
+
+    compare_prices = len(currencies) <= 1
+
+    def sort_key(
+        evaluation: _PersonalizationEvaluation,
+    ) -> tuple[object, ...]:
+        candidate = _personalized_ranking_candidate(evaluation)
+        distance = _distance_key(candidate.distance_m)
+        availability = (
+            candidate.available_connectors is None,
+            -(candidate.available_connectors or 0),
+        )
+        power = _descending_power_key(candidate.max_power_kw)
+        price = _comparable_price_key(candidate, compare_prices)
+        identity = _station_identity_key(candidate.station)
+
+        if profile.ranking_preset is PersonalizationRankingPreset.LOWEST_PRICE:
+            return (price, distance, availability, power, identity)
+        if profile.ranking_preset is PersonalizationRankingPreset.SHORTEST_DISTANCE:
+            return (distance, availability, power, price, identity)
+        if profile.ranking_preset is PersonalizationRankingPreset.HIGHEST_AVAILABILITY:
+            return (availability, distance, power, price, identity)
+        return (power, distance, availability, price, identity)
+
+    ranked_evaluations = sorted(evaluations, key=sort_key)
+    reason_by_preset = {
+        PersonalizationRankingPreset.LOWEST_PRICE: "lowest_price_per_kwh",
+        PersonalizationRankingPreset.SHORTEST_DISTANCE: "shortest_distance",
+        PersonalizationRankingPreset.HIGHEST_AVAILABILITY: "more_available_connectors",
+        PersonalizationRankingPreset.HIGHEST_POWER: "highest_maximum_power",
+    }
+    return ranked_evaluations, reason_by_preset[profile.ranking_preset]
 
 
 def recommend_station(

@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from dataclasses import replace
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -26,6 +27,7 @@ from custom_components.curbcharge.const import (
     CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
     CONF_MIN_POWER_KW,
+    CONF_PERSONALIZATION,
     CONF_PROVIDER,
     CONF_REQUIRE_AVAILABLE,
     CONF_SCAN_INTERVAL,
@@ -45,8 +47,13 @@ from custom_components.curbcharge.entity import (
     station_device_identifier,
 )
 from custom_components.curbcharge.models import (
+    ChargingTariff,
+    ConnectorStatus,
+    ConnectorTypeId,
     DiscoveryFilterSettings,
     FavouriteStationReference,
+    OperatorReference,
+    PersonalizationProfile,
     StationDiscoveryResult,
     parse_favourite_references,
 )
@@ -2242,6 +2249,81 @@ async def test_belgium_options_update_keeps_discovery_filters_empty(hass, monkey
 
     assert coordinator.discovery_filters == DiscoveryFilterSettings()
     assert refresh_requests == [True]
+
+
+@pytest.mark.asyncio
+async def test_profile_only_options_update_recomputes_without_provider_request(
+    hass, sample_stations, monkeypatch
+):
+    def station(base, provider_id, distance, price, operator_id):
+        connector = replace(
+            base.connectors[0],
+            provider_connector_id=provider_id,
+            connector_type_id=ConnectorTypeId.TYPE_2,
+            status=ConnectorStatus.AVAILABLE,
+            max_power_kw=50,
+            count=1,
+            available_count=1,
+        )
+        return replace(
+            base,
+            provider_id=provider_id,
+            distance_m=distance,
+            connectors=(connector,),
+            tariff=ChargingTariff(
+                currency="EUR",
+                price_per_kwh=Decimal(price),
+                session_fee=None,
+                price_per_minute=None,
+                description=None,
+                source="test",
+            ),
+            operator_id=operator_id,
+        )
+
+    cheap = station(sample_stations[0], "NL-CHEAP", 10, "0.10", "other")
+    preferred = station(sample_stations[1], "NL-PREFERRED", 100, "0.50", "preferred")
+    provider = FakeProvider([(cheap, preferred)])
+    entry = _entry()
+    entry.add_to_hass(hass)
+    coordinator = CurbChargeCoordinator(
+        hass,
+        provider,
+        52.0,
+        5.0,
+        500,
+        10,
+        5,
+        True,
+        config_entry=entry,
+    )
+    entry.runtime_data = coordinator
+    await coordinator.async_refresh()
+    await hass.async_block_till_done()
+
+    assert coordinator.best_station == cheap
+    assert len(provider.station_calls) == 1
+
+    profile = PersonalizationProfile(
+        enabled=True,
+        preferred_operators=(OperatorReference(PROVIDER_NDW_DOT_NL, "preferred"),),
+    )
+    hass.config_entries.async_update_entry(
+        entry,
+        options={CONF_PERSONALIZATION: profile.as_config()},
+    )
+    refresh_requests: list[bool] = []
+
+    async def request_refresh() -> None:
+        refresh_requests.append(True)
+
+    monkeypatch.setattr(coordinator, "async_request_refresh", request_refresh)
+    await curbcharge._async_options_updated(hass, entry)
+    await hass.async_block_till_done()
+
+    assert coordinator.best_station == preferred
+    assert provider.station_calls == [(52.0, 5.0, 500, 10, ())]
+    assert refresh_requests == []
 
 
 @pytest.mark.asyncio

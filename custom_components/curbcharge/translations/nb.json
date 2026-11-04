@@ -230,7 +230,7 @@
           "unknown_data_policy": "Håndtering av ukjente data"
         },
         "data_description": {
-          "enabled": "Aktiver denne lagrede profilen for personlige anbefalinger. Eksisterende anbefalinger forblir uendret inntil vurdering av personlige tilpasninger er tilgjengelig.",
+          "enabled": "Aktiver denne lagrede profilen for anbefalingene Beste i nærheten og Topp i nærheten. Harde krav lempes aldri; de konfigurerte reserveløsningene og reglene for ukjente data gjelder.",
           "connector_type_ids": "Velg standardiserte kontakttyper. La feltet stå tomt for å godta alle kontakttyper.",
           "minimum_power_kw": "Valgfri minsteeffekt for en passende kontaktgruppe. Bruk en endelig, ikke-negativ verdi.",
           "preferred_operators": "Skriv inn én leverandørkvalifisert referanse per linje, for eksempel ndw_dot_nl:NLX, eco_movement_be:Example CPO eller nobil_no:Synthetic CPO. NDW-ID-er og NOBIL-navn må samsvare nøyaktig. For belgiske navn fjernes innledende og avsluttende mellomrom, flere mellomrom slås sammen, og store og små bokstaver behandles likt. Lagrede valg beholdes når de ikke er i nærheten.",

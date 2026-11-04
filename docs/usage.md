@@ -326,7 +326,9 @@ profile in the config entry's Options. It is disabled by default and supports
 canonical connector types, minimum connector-group power, preferred and
 excluded operators, an optional maximum price and currency, a fixed ranking
 preset, fallback, and an unknown-data policy. A maximum price must be a
-nonnegative decimal and include a three-letter currency code.
+nonnegative decimal and include a three-letter currency code. It is strict:
+unknown prices and prices in another currency do not satisfy the limit, and
+CurbCharge does not convert currencies.
 
 Enter operator references one per line as `ndw_dot_nl:<cpo_id>`,
 `eco_movement_be:<operator name>`, or `afdc_us:<network name>`. NDW's `cpo_id` identifies the CPO in its
@@ -339,10 +341,13 @@ Belgium currently has no stable operator ID in the available fixture, so its
 names match only after trimming, collapsing whitespace, and case-folding.
 AFDC network names are matched exactly as returned by the station directory.
 These references are saved independently of the current search radius and are
-not fuzzy-matched. The profile is stored for personalization support; existing
-recommendation behavior remains unchanged until a recommendation evaluator
-consumes it. Older entries without a profile remain disabled without a config
-entry migration.
+not fuzzy-matched. When enabled, the profile filters and ranks Best nearby and
+Top nearby results. If preferred operators are configured, they form the
+first-choice tier; non-preferred candidates are considered only when no full
+match exists and fallback is enabled. Unknown availability and known
+hard-constraint failures are never bypassed. Unknown connector, power, or
+operator data follows the selected unknown-data policy. Older entries without
+a profile remain disabled without a config-entry migration.
 
 See the
 [Belgium preview setup](#belgium-preview-setup) steps before choosing that
@@ -469,10 +474,24 @@ reserved or out-of-service connector as occupied. The unavailable count is
 `total - available`, which is the only additional count directly supported by
 the NDW availability response.
 
-**Best nearby** keeps its existing ranking: lower known prices when all
-candidate prices use the same currency, then shorter distance, more available
-connectors, higher power, and a stable station identifier. Its `reason`
-attribute is a stable reason code.
+With personalization disabled (the default), **Best nearby** keeps its
+existing ranking: lower known prices when all candidate prices use the same
+currency, then shorter distance, more available connectors, higher power, and
+a stable station identifier. When personalization is enabled, its hard
+constraints filter this eligible cohort before the selected preset ranks it.
+Connector type, minimum power, and availability must be satisfied by the same
+connector group. A fallback is used only when no full match exists and the
+profile allows it; unknown availability and known hard-constraint failures are
+never relaxed. The `reason` attribute retains its stable base-ranking meaning.
+The fixed presets are Balanced, Lowest price, Shortest distance, Highest
+availability, and Highest power. Preferred operators form the first-choice
+tier; the selected preset ranks candidates within that tier. When no full match
+exists, eligible non-preferred or explicitly permitted unknown-data candidates
+may be used as fallback. Lowest price never compares different currencies; if
+prices are mixed or all unknown, the existing Balanced order is used.
+The existing rank and score attributes on Best nearby and station summaries
+remain objective; Top nearby items additionally expose their personalized rank
+and score when personalization is enabled.
 
 The three additional selectors offer deterministic alternatives. Each requires
 a fresh station with a known `available_connectors` count greater than zero;
@@ -509,7 +528,11 @@ input. These sensors use cached coordinator results and make no extra provider
 requests.
 
 The **Top nearby chargers** sensor uses that same backend ranking and returns
-at most five stations, independent of the nearby-station limit. Its state is
+at most five stations, independent of the nearby-station limit. With
+personalization enabled, its list follows the personalized Best nearby order.
+The existing `rank`, `score`, and `best_nearby_candidate_count` retain their
+objective-ranking meanings; each item also has `personalized_rank` and
+`personalized_score`. Its state is
 the number of returned items; its `recommendations` attribute is `[]` after a
 successful empty update and `null` after a failed update. Each item includes
 the shared selected-station payload plus one-based `rank`, candidate-relative

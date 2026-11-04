@@ -230,7 +230,7 @@
           "unknown_data_policy": "Politique des données inconnues"
         },
         "data_description": {
-          "enabled": "Active ce profil enregistré pour les recommandations personnalisées. Les recommandations existantes restent inchangées tant que l'évaluation personnalisée n'est pas disponible.",
+          "enabled": "Activez ce profil enregistré pour les recommandations Meilleur à proximité et Top à proximité. Les contraintes strictes ne sont jamais assouplies ; les règles de repli et de données inconnues configurées s'appliquent.",
           "connector_type_ids": "Choisissez des normes de connecteur canoniques. Laissez vide pour accepter tous les types.",
           "minimum_power_kw": "Minimum facultatif pour un groupe de connecteurs correspondant ; utilisez une valeur finie et non négative.",
           "preferred_operators": "Saisissez une référence fournisseur par ligne, par exemple ndw_dot_nl:NLX ou eco_movement_be:Example CPO. Les identifiants NDW sont comparés exactement ; les noms belges sont nettoyés, espaces regroupés et comparés sans distinction de casse. Les choix enregistrés sont conservés hors du rayon actuel.",

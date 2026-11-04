@@ -26,6 +26,7 @@ from .const import (
     CONF_LOCATION_MOVEMENT_THRESHOLD,
     CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
+    CONF_PERSONALIZATION,
     CONF_PROVIDER,
     CONF_SCAN_INTERVAL,
     CONF_SEARCH_RADIUS,
@@ -51,7 +52,11 @@ from .const import (
 )
 from .coordinator import CurbChargeCoordinator
 from .location import resolve_location
-from .models import DiscoveryFilterSettings, parse_favourite_references
+from .models import (
+    DiscoveryFilterSettings,
+    PersonalizationProfile,
+    parse_favourite_references,
+)
 from .providers import create_provider
 from .providers.base import ChargingProviderError
 from .services import async_setup_services
@@ -144,6 +149,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
                 translation_domain=DOMAIN,
                 translation_key="invalid_config",
             ) from err
+    try:
+        personalization_profile = PersonalizationProfile.from_config(
+            options.get(CONF_PERSONALIZATION)
+        )
+    except ValueError as err:
+        raise ConfigEntryNotReady(
+            translation_domain=DOMAIN,
+            translation_key="invalid_config",
+        ) from err
     api_token = entry.data.get(CONF_API_TOKEN)
     try:
         favourites = parse_favourite_references(
@@ -211,6 +225,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
         location_resolver=location_resolver,
         location_movement_threshold_m=location_movement_threshold_m,
         discovery_filters=discovery_filters,
+        personalization_profile=personalization_profile,
     )
     entry.runtime_data = coordinator
     try:
@@ -262,6 +277,9 @@ async def _async_options_updated(
             if provider_id == PROVIDER_NDW_DOT_NL
             else DiscoveryFilterSettings()
         )
+        personalization_profile = PersonalizationProfile.from_config(
+            options.get(CONF_PERSONALIZATION)
+        )
     except ValueError:
         await hass.config_entries.async_reload(entry.entry_id)
         return
@@ -288,13 +306,22 @@ async def _async_options_updated(
         return
 
     favourites_changed = favourites != coordinator.favourites
-    favourites_only_changed = favourites_changed and (
+    personalization_changed = (
+        personalization_profile != coordinator.personalization_profile
+    )
+    refresh_options_unchanged = (
         radius_m == coordinator.radius_m
         and max_stations == coordinator.max_stations
         and scan_interval == coordinator.scan_interval_minutes
         and include_unknown == coordinator.include_unknown
         and location_movement_threshold_m == coordinator.location_movement_threshold_m
         and discovery_filters == coordinator.discovery_filters
+    )
+    favourites_only_changed = (
+        favourites_changed and refresh_options_unchanged and not personalization_changed
+    )
+    personalization_only_changed = (
+        personalization_changed and refresh_options_unchanged and not favourites_changed
     )
     coordinator.update_options(
         radius_m=radius_m,
@@ -304,9 +331,13 @@ async def _async_options_updated(
         favourites=favourites,
         location_movement_threshold_m=location_movement_threshold_m,
         discovery_filters=discovery_filters,
+        personalization_profile=personalization_profile,
     )
     if favourites_changed:
         coordinator.async_update_listeners()
+    if personalization_only_changed:
+        coordinator.recompute_cached_recommendations()
+        return
     if favourites_only_changed:
         return
     await coordinator.async_request_refresh()

@@ -12,7 +12,13 @@ from custom_components.curbcharge.coordinator import (
 )
 from custom_components.curbcharge.models import (
     ChargingTariff,
+    ConnectorStatus,
+    ConnectorTypeId,
     EVSEStatus,
+    OperatorReference,
+    PersonalizationProfile,
+    PersonalizationRankingPreset,
+    PersonalizationUnknownDataPolicy,
     TariffStatus,
 )
 
@@ -657,3 +663,559 @@ def test_recommendation_scores_are_candidate_relative_and_expose_unknowns(
     assert empty.best_nearby.best_nearby_candidate_count == 0
     assert empty.best_nearby.best_nearby_rank is None
     assert empty.best_nearby.best_nearby_rank_score is None
+
+
+def _personalization_profile(**overrides):
+    return PersonalizationProfile(enabled=True, **overrides)
+
+
+def _identity_key(station):
+    return (
+        station.provider.casefold(),
+        station.provider_id.casefold(),
+        station.provider_id,
+    )
+
+
+def _with_connector_groups(station, *groups):
+    return replace(station, connectors=tuple(groups))
+
+
+def test_disabled_personalization_preserves_all_existing_results(sample_stations):
+    stations = tuple(
+        _candidate(
+            sample_stations[index % 2],
+            provider_id=f"NL-BASE-{index}",
+            distance=25 + index,
+            power=50 + index,
+            price=f"0.{20 + index}",
+        )
+        for index in range(3)
+    )
+
+    existing = evaluate_recommendations(stations, stations, stations)
+    disabled = evaluate_recommendations(
+        stations,
+        stations,
+        stations,
+        personalization_profile=PersonalizationProfile(),
+    )
+
+    assert disabled == existing
+
+
+def test_personalization_presets_rank_candidates_and_keep_balanced_order(
+    sample_stations,
+):
+    cheap = _candidate(
+        sample_stations[0],
+        provider_id="NL-CHEAP",
+        distance=200,
+        power=22,
+        price="0.10",
+        count=1,
+    )
+    nearest = _candidate(
+        sample_stations[1],
+        provider_id="NL-NEAREST",
+        distance=10,
+        power=22,
+        price="0.30",
+        count=1,
+    )
+    fastest = _candidate(
+        sample_stations[0],
+        provider_id="NL-FASTEST-PRESET",
+        distance=100,
+        power=150,
+        price="0.40",
+        count=1,
+    )
+    most_available = _candidate(
+        sample_stations[1],
+        provider_id="NL-MOST-AVAILABLE",
+        distance=100,
+        power=50,
+        price="0.50",
+        count=5,
+    )
+    stations = (cheap, nearest, fastest, most_available)
+
+    expected = {
+        PersonalizationRankingPreset.BALANCED: cheap,
+        PersonalizationRankingPreset.LOWEST_PRICE: cheap,
+        PersonalizationRankingPreset.SHORTEST_DISTANCE: nearest,
+        PersonalizationRankingPreset.HIGHEST_POWER: fastest,
+        PersonalizationRankingPreset.HIGHEST_AVAILABILITY: most_available,
+    }
+    for preset, winner in expected.items():
+        results = evaluate_recommendations(
+            stations,
+            stations,
+            personalization_profile=_personalization_profile(ranking_preset=preset),
+        )
+        assert results.best_nearby.station == winner
+        evaluation = results.personalization_evaluations[_identity_key(winner)]
+        assert evaluation.personalized_rank == 1
+        assert evaluation.personalized_score == 100
+
+
+def test_personalized_ranking_uses_stable_identity_for_ties(sample_stations):
+    first = _candidate(
+        sample_stations[0],
+        provider_id="NL-A",
+        distance=25,
+        power=50,
+        price="0.20",
+    )
+    second = _candidate(
+        sample_stations[1],
+        provider_id="NL-Z",
+        distance=25,
+        power=50,
+        price="0.20",
+    )
+    profile = _personalization_profile(
+        ranking_preset=PersonalizationRankingPreset.LOWEST_PRICE
+    )
+
+    forward = evaluate_recommendations(
+        (first, second),
+        (first, second),
+        personalization_profile=profile,
+    )
+    reversed_input = evaluate_recommendations(
+        (second, first),
+        (second, first),
+        personalization_profile=profile,
+    )
+
+    assert forward.best_nearby.station == reversed_input.best_nearby.station == first
+
+
+def test_preferred_operator_tier_uses_preset_order_within_the_tier(sample_stations):
+    nonpreferred = _candidate(
+        sample_stations[0],
+        provider_id="NL-A",
+        distance=20,
+        power=50,
+        price="0.10",
+    )
+    preferred_expensive = replace(
+        _candidate(
+            sample_stations[1],
+            provider_id="NL-Z",
+            distance=20,
+            power=50,
+            price="0.40",
+        ),
+        operator_id="preferred",
+    )
+    preferred_cheaper = replace(
+        _candidate(
+            sample_stations[0],
+            provider_id="NL-Y",
+            distance=30,
+            power=50,
+            price="0.30",
+        ),
+        operator_id="preferred",
+    )
+    profile = _personalization_profile(
+        preferred_operators=(OperatorReference(nonpreferred.provider, "preferred"),),
+        ranking_preset=PersonalizationRankingPreset.LOWEST_PRICE,
+    )
+
+    results = evaluate_recommendations(
+        (nonpreferred, preferred_expensive, preferred_cheaper),
+        (nonpreferred, preferred_expensive, preferred_cheaper),
+        personalization_profile=profile,
+    )
+
+    assert results.best_nearby.station == preferred_cheaper
+    assert results.personalization_evaluations[
+        _identity_key(nonpreferred)
+    ].fallback_eligible
+
+
+def test_connector_compatibility_requires_one_available_group_to_meet_constraints(
+    sample_stations,
+):
+    template = sample_stations[0].connectors[0]
+    compatible_but_unavailable = replace(
+        template,
+        provider_connector_id="compatible-unavailable",
+        connector_type_id=ConnectorTypeId.CCS_COMBO_2,
+        max_power_kw=150,
+        count=1,
+        available_count=0,
+    )
+    available_but_incompatible = replace(
+        template,
+        provider_connector_id="available-incompatible",
+        connector_type_id=ConnectorTypeId.TYPE_2,
+        max_power_kw=250,
+        count=1,
+        available_count=1,
+    )
+    station = _with_tariff(
+        _with_connector_groups(
+            replace(sample_stations[0], provider_id="NL-SPLIT-GROUPS"),
+            compatible_but_unavailable,
+            available_but_incompatible,
+        ),
+        "EUR",
+        "0.20",
+    )
+    compatible = _with_tariff(
+        _with_connector_groups(
+            replace(sample_stations[1], provider_id="NL-COMPATIBLE"),
+            replace(
+                template,
+                provider_connector_id="compatible-available",
+                connector_type_id=ConnectorTypeId.CCS_COMBO_2,
+                max_power_kw=100,
+                count=1,
+                available_count=1,
+            ),
+            replace(
+                template,
+                provider_connector_id="unrelated-fast",
+                connector_type_id=ConnectorTypeId.TYPE_2,
+                max_power_kw=350,
+                count=1,
+                available_count=1,
+            ),
+        ),
+        "EUR",
+        "0.40",
+    )
+    compatible_faster = _with_tariff(
+        _with_connector_groups(
+            replace(sample_stations[0], provider_id="NL-COMPATIBLE-FASTER"),
+            replace(
+                template,
+                provider_connector_id="compatible-fast",
+                connector_type_id=ConnectorTypeId.CCS_COMBO_2,
+                max_power_kw=150,
+                count=1,
+                available_count=1,
+            ),
+            replace(
+                template,
+                provider_connector_id="unrelated-slower",
+                connector_type_id=ConnectorTypeId.TYPE_2,
+                max_power_kw=200,
+                count=1,
+                available_count=1,
+            ),
+        ),
+        "EUR",
+        "0.45",
+    )
+    profile = _personalization_profile(
+        connector_type_ids=(ConnectorTypeId.CCS_COMBO_2,),
+        minimum_power_kw=100,
+        maximum_price=Decimal("0.50"),
+        maximum_price_currency="EUR",
+        ranking_preset=PersonalizationRankingPreset.HIGHEST_POWER,
+        allow_fallback=True,
+        unknown_data_policy=PersonalizationUnknownDataPolicy.ALLOW_FALLBACK,
+    )
+
+    results = evaluate_recommendations(
+        (station, compatible, compatible_faster),
+        (station, compatible, compatible_faster),
+        personalization_profile=profile,
+    )
+
+    assert results.best_nearby.station == compatible_faster
+    rejected = results.personalization_evaluations[_identity_key(station)]
+    assert not rejected.hard_eligible
+    assert rejected.rejection_reason == "no_compatible_connector_group"
+    selected = results.personalization_evaluations[_identity_key(compatible)]
+    assert selected.selected_connector_group is not None
+    assert selected.selected_connector_group.provider_connector_id == (
+        "compatible-available"
+    )
+    faster = results.personalization_evaluations[_identity_key(compatible_faster)]
+    assert faster.selected_connector_group is not None
+    assert faster.selected_connector_group.provider_connector_id == "compatible-fast"
+
+
+def test_strict_price_and_excluded_operator_are_never_fallback_candidates(
+    sample_stations,
+):
+    template = sample_stations[0].connectors[0]
+
+    def candidate(provider_id, currency, price, operator_id=None):
+        station = _with_connector_groups(
+            replace(
+                _available_station(sample_stations[0]),
+                provider_id=provider_id,
+                operator_id=operator_id,
+            ),
+            replace(
+                template,
+                connector_type_id=ConnectorTypeId.TYPE_2,
+                max_power_kw=50,
+                count=1,
+                available_count=1,
+            ),
+        )
+        return (
+            replace(station, tariff=None)
+            if price is None
+            else _with_tariff(station, currency, price)
+        )
+
+    candidates = (
+        candidate("NL-OVER-CAP", "EUR", "0.60"),
+        candidate("NL-WRONG-CURRENCY", "USD", "0.10"),
+        candidate("NL-UNKNOWN-PRICE", "EUR", None),
+        candidate("NL-EXCLUDED", "EUR", "0.10", "excluded"),
+    )
+    profile = _personalization_profile(
+        connector_type_ids=(ConnectorTypeId.TYPE_2,),
+        excluded_operators=(
+            OperatorReference(sample_stations[0].provider, "excluded"),
+        ),
+        maximum_price=Decimal("0.50"),
+        maximum_price_currency="EUR",
+        allow_fallback=True,
+        unknown_data_policy=PersonalizationUnknownDataPolicy.ALLOW_FALLBACK,
+    )
+
+    results = evaluate_recommendations(
+        candidates,
+        candidates,
+        personalization_profile=profile,
+    )
+
+    assert results.best_nearby.station is None
+    assert results.personalized_candidate_count == 0
+    assert results.personalized_reason == "no_personalized_match"
+    assert {
+        results.personalization_evaluations[_identity_key(item)].rejection_reason
+        for item in candidates
+    } == {
+        "maximum_price_exceeded",
+        "maximum_price_currency_mismatch",
+        "maximum_price_unknown",
+        "excluded_operator",
+    }
+
+
+def test_fallback_is_used_only_when_no_full_preferred_match_exists(sample_stations):
+    preferred = replace(
+        _candidate(
+            sample_stations[0],
+            provider_id="NL-PREFERRED",
+            distance=100,
+            power=50,
+            price="0.40",
+        ),
+        operator_id="preferred",
+    )
+    nonpreferred = replace(
+        _candidate(
+            sample_stations[1],
+            provider_id="NL-NONPREFERRED",
+            distance=1,
+            power=50,
+            price="0.10",
+        ),
+        operator_id="other",
+    )
+    profile = _personalization_profile(
+        preferred_operators=(OperatorReference(preferred.provider, "preferred"),),
+        allow_fallback=True,
+    )
+
+    with_full_match = evaluate_recommendations(
+        (preferred, nonpreferred),
+        (preferred, nonpreferred),
+        personalization_profile=profile,
+    )
+    fallback_only = evaluate_recommendations(
+        (nonpreferred,),
+        (nonpreferred,),
+        personalization_profile=profile,
+    )
+    no_fallback = evaluate_recommendations(
+        (nonpreferred,),
+        (nonpreferred,),
+        personalization_profile=replace(profile, allow_fallback=False),
+    )
+
+    assert with_full_match.best_nearby.station == preferred
+    assert not with_full_match.personalization_evaluations[
+        _identity_key(nonpreferred)
+    ].fallback_used
+    assert fallback_only.best_nearby.station == nonpreferred
+    assert fallback_only.personalization_evaluations[
+        _identity_key(nonpreferred)
+    ].fallback_used
+    assert fallback_only.personalization_evaluations[
+        _identity_key(nonpreferred)
+    ].fallback_reasons == ("preferred_operator_not_matched",)
+    assert no_fallback.best_nearby.station is None
+
+
+def test_unknown_operator_follows_unknown_data_policy(sample_stations):
+    unknown_operator = replace(
+        _candidate(
+            sample_stations[0],
+            provider_id="NL-UNKNOWN-OPERATOR",
+            distance=25,
+            power=50,
+            price=None,
+        ),
+        operator=None,
+        operator_id=None,
+    )
+    profile = _personalization_profile(
+        preferred_operators=(
+            OperatorReference(unknown_operator.provider, "preferred"),
+        ),
+        allow_fallback=True,
+        unknown_data_policy=PersonalizationUnknownDataPolicy.ALLOW_FALLBACK,
+    )
+
+    allowed = evaluate_recommendations(
+        (unknown_operator,),
+        (unknown_operator,),
+        personalization_profile=profile,
+    )
+    excluded = evaluate_recommendations(
+        (unknown_operator,),
+        (unknown_operator,),
+        personalization_profile=replace(
+            profile,
+            unknown_data_policy=PersonalizationUnknownDataPolicy.EXCLUDE,
+        ),
+    )
+
+    assert allowed.best_nearby.station == unknown_operator
+    assert allowed.personalization_evaluations[
+        _identity_key(unknown_operator)
+    ].fallback_reasons == ("unknown_operator",)
+    assert excluded.best_nearby.station is None
+
+
+def test_unknown_connector_data_requires_explicit_fallback_and_availability(
+    sample_stations,
+):
+    template = sample_stations[0].connectors[0]
+    unknown_type = _with_connector_groups(
+        _available_station(
+            replace(sample_stations[0], provider_id="NL-UNKNOWN-TYPE"),
+            power=50,
+        ),
+        replace(
+            template,
+            connector_type_id=None,
+            available_count=1,
+            max_power_kw=50,
+        ),
+    )
+    unknown_availability = _with_connector_groups(
+        replace(
+            sample_stations[1],
+            provider_id="NL-UNKNOWN-AVAILABILITY",
+            evse_status=EVSEStatus.AVAILABLE,
+        ),
+        replace(
+            template,
+            connector_type_id=ConnectorTypeId.TYPE_2,
+            status=ConnectorStatus.UNKNOWN,
+            available_count=None,
+            max_power_kw=50,
+        ),
+    )
+    unknown_power = _with_connector_groups(
+        replace(sample_stations[0], provider_id="NL-UNKNOWN-POWER"),
+        replace(
+            template,
+            connector_type_id=ConnectorTypeId.TYPE_2,
+            status=ConnectorStatus.AVAILABLE,
+            available_count=1,
+            max_power_kw=None,
+        ),
+    )
+    profile = _personalization_profile(
+        connector_type_ids=(ConnectorTypeId.TYPE_2,),
+        minimum_power_kw=22,
+        allow_fallback=True,
+        unknown_data_policy=PersonalizationUnknownDataPolicy.ALLOW_FALLBACK,
+    )
+
+    fallback = evaluate_recommendations(
+        (unknown_type,),
+        (unknown_type,),
+        personalization_profile=profile,
+    )
+    fallback_power = evaluate_recommendations(
+        (unknown_power,),
+        (unknown_power,),
+        personalization_profile=profile,
+    )
+    no_known_group_availability = evaluate_recommendations(
+        (unknown_availability,),
+        (unknown_availability,),
+        personalization_profile=profile,
+    )
+    conservative = evaluate_recommendations(
+        (unknown_type,),
+        (unknown_type,),
+        personalization_profile=replace(
+            profile,
+            unknown_data_policy=PersonalizationUnknownDataPolicy.EXCLUDE,
+        ),
+    )
+
+    assert fallback.best_nearby.station == unknown_type
+    assert fallback.personalization_evaluations[
+        _identity_key(unknown_type)
+    ].fallback_reasons == ("unknown_connector_type",)
+    assert fallback_power.best_nearby.station == unknown_power
+    assert fallback_power.personalization_evaluations[
+        _identity_key(unknown_power)
+    ].fallback_reasons == ("unknown_power",)
+    assert no_known_group_availability.best_nearby.station is None
+    assert conservative.best_nearby.station is None
+
+
+def test_personalization_does_not_change_nearest_cheapest_or_fastest_selectors(
+    sample_stations,
+):
+    nearest = replace(
+        _candidate(
+            sample_stations[0],
+            provider_id="NL-EXCLUDED-NEAREST",
+            distance=1,
+            power=50,
+            price="0.10",
+        ),
+        operator_id="excluded",
+    )
+    other = _candidate(
+        sample_stations[1],
+        provider_id="NL-OTHER",
+        distance=50,
+        power=100,
+        price="0.20",
+    )
+    expected = evaluate_recommendations((nearest, other), (nearest, other))
+    personalized = evaluate_recommendations(
+        (nearest, other),
+        (nearest, other),
+        personalization_profile=_personalization_profile(
+            excluded_operators=(OperatorReference(nearest.provider, "excluded"),)
+        ),
+    )
+
+    assert personalized.best_nearby.station == other
+    assert personalized.nearest_available == expected.nearest_available
+    assert personalized.cheapest_available == expected.cheapest_available
+    assert personalized.fastest_available == expected.fastest_available
