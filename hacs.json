@@ -1,5 +1,5 @@
 {
-  "country": ["NL", "BE", "NO", "SE", "US", "FI", "CH"],
+  "country": ["NL", "BE", "NO", "SE", "US", "FI", "CH", "LU"],
   "filename": "curbcharge.zip",
   "hide_default_branch": true,
   "homeassistant": "2024.12.0",

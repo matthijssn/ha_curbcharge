@@ -44,7 +44,8 @@ relying on a provider.
 ## What it provides
 
 - Public charging coverage for the Netherlands, Belgium (preview), Norway,
-  Sweden, the United States, Finland, and Switzerland (preview) — see
+  Sweden, the United States, Finland, Switzerland (preview), and Luxembourg
+  (Chargy network) — see
   [provider coverage and limitations](docs/usage.md#data-source-and-coverage)
   for data sources and preview status.
 - One device per nearby public charging point

@@ -176,6 +176,34 @@ normalized by CurbCharge, with no endorsement implied. See the
 [Switzerland provider research note][switzerland-research] for verified
 source constraints.
 
+### Luxembourg (Chargy)
+
+Choose **Chargy Luxembourg** for the Chargy/SuperChargy network. No account or
+user API key is required. Requests use the
+[keyless data.public.lu resource](https://data.public.lu/fr/datasets/r/22f9d77a-5138-4b02-b315-15f306b77034);
+the publisher's keyed redirect URL is never stored or exposed by the adapter.
+Data: Chargy, data.public.lu
+([CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)).
+This covers the Chargy network, not necessarily every operator in Luxembourg.
+
+The publisher describes a five-minute refresh. CurbCharge shares one parsed
+country snapshot and a minimum five-minute download interval across all Chargy
+entries, including connection validation. A one-minute scan interval therefore
+reuses the snapshot; the effective refresh is at least five minutes and may be
+longer with the configured interval or rate limiting. HTTP 429 honors
+`Retry-After`, or uses a bounded increasing cooldown starting at five minutes.
+A failed refresh makes the update fail rather than silently serving stale data.
+
+Each device becomes one station with its reported connectors, power and status.
+Offline, unspecified unavailable and unrecognized statuses remain unknown.
+Plug types are unknown: the feed's numeric connector field appears to be a
+socket number, and the HTML plug labels are unreliable even for SuperChargy.
+Connector-type personalization cannot establish compatibility for these devices;
+review your profile's unknown-data/fallback settings. No prices or per-record
+timestamps are published, so tariff and provider-data age remain unknown.
+See the [Luxembourg research note](provider-research/luxembourg.md) for the
+verified schema, status mapping and remaining rate-header uncertainty.
+
 ### United States AFDC
 
 The U.S. provider uses the Alternative Fuels Data Center (AFDC) station API
@@ -217,10 +245,10 @@ select a replacement if an Entity source was renamed or removed.
 Choose a polling interval in minutes (default 5; minimum 1), a search radius
 from 100 to 10,000 metres, and a maximum of 1 to 50 stations (default 10), then
 select NDW DOT-NL, the Belgium preview, NOBIL Norway, NOBIL Sweden, AFDC
-United States, Digitraffic AFIR Finland, or the ich-tanke-strom Switzerland
-preview. Belgium setup asks for the
+United States, Digitraffic AFIR Finland, the ich-tanke-strom Switzerland
+preview, or Chargy Luxembourg. Belgium setup asks for the
 Eco-Movement API token, NOBIL asks for a NOBIL API key, and the U.S. AFDC
-source asks for an NLR API key; Finland and Switzerland require no
+source asks for an NLR API key; Finland, Switzerland and Luxembourg require no
 credentials. Each
 provider is validated before creating the entry.
 You can change the polling interval, radius, station limit, and whether to
@@ -249,7 +277,7 @@ by default; turning it off excludes NDW stations with no availability report
 before the station cap. The search radius remains the distance limit, and the
 maximum-station cap selects the nearest matching stations (with provider
 station ID as the tie-breaker). These filters are NDW-only; Belgium preview,
-NOBIL, Finland AFIR, and Switzerland have no discovery-filter step or
+NOBIL, Finland AFIR, Switzerland and Luxembourg have no discovery-filter step or
 options. There is no
 provider-side operator discovery filter or separate maximum-distance setting.
 

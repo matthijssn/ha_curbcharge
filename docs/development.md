@@ -200,13 +200,21 @@ contract; `models.py` holds immutable stations, connectors, tariffs, and
 discovery settings. `providers/__init__.py` is the factory that selects a
 backend by provider ID. `providers/ndw_nl.py` implements NDW, while
 `providers/belgium.py`, `providers/finland.py`, `providers/nobil.py`,
-`providers/switzerland.py`, and
+`providers/switzerland.py`, `providers/luxembourg.py`, and
 `providers/afdc.py` keep source-specific behavior in their own adapters.
 `coordinator.py` owns one provider update cycle, and `sensor.py`/
 `binary_sensor.py` expose normalized data. Follow a provider's published terms
 and limits, add synthetic fixtures and offline tests under `tests/providers/`,
 and do not add live credentials or private
 payloads to tests, issues, or logs.
+
+Luxembourg uses Chargy's CC0, network-only KML snapshot through the keyless
+data.public.lu resource redirect. Its parsed snapshot and minimum five-minute
+download floor are shared across entries and connection validation. The final
+redirect URL contains a publisher key and must never be retained or logged,
+including in chained HTTP exceptions. Do not infer plug types from socket
+numbers, HTML labels or power; prices and provider timestamps are absent.
+See [Luxembourg source research](provider-research/luxembourg.md).
 
 ## Security and external tooling
 
