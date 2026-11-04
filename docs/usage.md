@@ -204,6 +204,46 @@ timestamps are published, so tariff and provider-data age remain unknown.
 See the [Luxembourg research note](provider-research/luxembourg.md) for the
 verified schema, status mapping and remaining rate-header uncertainty.
 
+### Lithuania (Via Lietuva)
+
+Select **Via Lietuva Lithuania** for the public Lithuanian charging
+infrastructure feed. No account or API key is required. The source reports
+locations, live EVSE status, connector standards, power and tariffs. This is
+operator-reported national data, not an independent guarantee that every
+station is present; only published locations physically in Lithuania are
+included, including sites run by foreign operators.
+
+On 4 November 2026 the full feed traversal returned **1,972 published
+locations, 5,749 EVSEs and 5,751 connectors**. The API's `X-Total-Count`
+reported 3,291 underlying records, including rows not published to consumers.
+CurbCharge advances by explicit 1,000-row offsets because the source's `Link`
+pagination is malformed. A shared five-minute minimum location refresh and
+15-minute tariff cache are CurbCharge policies, not published rate quotas.
+Requests are paced, streamed responses are size-bounded, and an incomplete or
+failed refresh makes the update fail rather than presenting a partial or stale
+snapshot as current. A shorter scan interval reuses the shared snapshot.
+
+Availability is the provider's EVSE status, not per-connector occupancy.
+Connector statuses and exact available counts remain unknown; removed EVSEs
+are omitted. Connector power is converted from watts to kW. Timezone-less
+provider timestamps remain unknown, and fetch time is never substituted.
+
+Prices are taken only from structured tariffs. **Gross prices are shown only
+when tax treatment is explicit:** `YES` means taxes are already included;
+`N/A` means no taxes apply; a net `NO` tariff requires a component VAT before
+CurbCharge can calculate a gross price. Missing tax metadata, unresolved
+tariff links, conflicting rates, conditional restrictions and unmodelled
+parking-time charges remain unknown/incomplete rather than guessed. The
+source's human-readable tariff text does not override structured prices.
+Cached tariffs are re-evaluated for active dates on each update.
+
+Data: [Via Lietuva](https://ev.vialietuva.lt/en/data-provision), normalized
+and modified by CurbCharge; [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+and [ODC-BY 1.0](https://opendatacommons.org/licenses/by/1-0/). The
+[dashboard/card guide](dashboards-and-automations.md) links back to these
+source and licence details. See the [Lithuania source research note](provider-research/lithuania.md)
+for pagination, tariff-link and tax evidence.
+
 ### United States AFDC
 
 The U.S. provider uses the Alternative Fuels Data Center (AFDC) station API

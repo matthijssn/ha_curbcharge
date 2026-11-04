@@ -72,6 +72,7 @@ from .const import (
     PROVIDER_NDW_DOT_NL,
     PROVIDER_NOBIL_NO,
     PROVIDER_NOBIL_SE,
+    PROVIDER_VIA_LIETUVA_LT,
     SUPPORTED_PROVIDER_IDS,
 )
 from .coordinator import CurbChargeCoordinator
@@ -242,6 +243,7 @@ def station_options_schema(
                         PROVIDER_DIGITRAFFIC_AFIR_FI,
                         PROVIDER_ICH_TANKE_STROM_CH,
                         PROVIDER_CHARGY_LU,
+                        PROVIDER_VIA_LIETUVA_LT,
                     ],
                     mode=selector.SelectSelectorMode.DROPDOWN,
                     translation_key="provider",

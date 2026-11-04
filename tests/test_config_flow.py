@@ -54,6 +54,7 @@ from custom_components.curbcharge.const import (
     PROVIDER_NDW_DOT_NL,
     PROVIDER_NOBIL_NO,
     PROVIDER_NOBIL_SE,
+    PROVIDER_VIA_LIETUVA_LT,
 )
 from custom_components.curbcharge.coordinator import CurbChargeCoordinator
 from custom_components.curbcharge.models import (
@@ -791,6 +792,7 @@ async def test_finland_config_flow_reshows_station_options_on_validation_failure
     [
         (PROVIDER_ICH_TANKE_STROM_CH, (46.95, 7.45)),
         (PROVIDER_CHARGY_LU, (49.61, 6.13)),
+        (PROVIDER_VIA_LIETUVA_LT, (54.68, 25.22)),
     ],
 )
 async def test_keyless_config_flow_creates_entry_without_credentials(
@@ -829,6 +831,7 @@ async def test_keyless_config_flow_creates_entry_without_credentials(
     [
         (PROVIDER_ICH_TANKE_STROM_CH, (46.95, 7.45)),
         (PROVIDER_CHARGY_LU, (49.61, 6.13)),
+        (PROVIDER_VIA_LIETUVA_LT, (54.68, 25.22)),
     ],
 )
 async def test_keyless_config_flow_reshows_station_options_on_validation_failure(

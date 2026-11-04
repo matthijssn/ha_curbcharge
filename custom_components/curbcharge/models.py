@@ -358,6 +358,7 @@ class ProviderTimestampSource(StrEnum):
     FINLAND_STATIC_FALLBACK = "finland_static_fallback"
     SWITZERLAND_EVSE_STATUS = "switzerland_evse_status"
     SWITZERLAND_STATIC_FALLBACK = "switzerland_static_fallback"
+    VIA_LIETUVA_RECORD = "via_lietuva_record"
 
 
 class TariffStatus(StrEnum):
