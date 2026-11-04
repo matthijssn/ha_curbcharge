@@ -127,6 +127,13 @@ async def test_recommendations_are_cached_once_and_cleared_after_failure(
     assert coordinator.best_station is None
     assert coordinator.best_station_reason is None
     assert coordinator.best_nearby_rank_for(station) == (None, None, None)
+    assert coordinator.personalized_best_nearby_rank_for(station) == (
+        None,
+        None,
+        None,
+    )
+    coordinator.recompute_cached_recommendations()
+    assert coordinator.recommendation_results is None
 
 
 @pytest.mark.asyncio
@@ -181,6 +188,8 @@ async def test_personalized_ranks_use_personal_order_and_preserve_objective_scor
         None,
         1,
     )
+    absent = replace(preferred, provider_id="NL-ABSENT")
+    assert coordinator.personalized_best_nearby_rank_for(absent) == (None, None, 1)
 
 
 @pytest.mark.asyncio

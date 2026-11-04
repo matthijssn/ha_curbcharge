@@ -1900,6 +1900,16 @@ async def test_setup_rejects_invalid_options(hass, key, value):
 
 
 @pytest.mark.asyncio
+async def test_setup_rejects_malformed_saved_personalization_profile(hass):
+    entry = _entry(options={CONF_PERSONALIZATION: {"unknown": True}})
+
+    with pytest.raises(ConfigEntryNotReady) as error:
+        await curbcharge.async_setup_entry(hass, entry)
+
+    assert error.value.translation_key == "invalid_config"
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "filters",
     [
