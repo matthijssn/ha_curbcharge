@@ -1167,6 +1167,9 @@ def test_identifier_and_country_validation():
     assert lithuania._identifier(535, "id") == "535"
     assert lithuania._identifier("  EVSE-1 ", "id") == "EVSE-1"
     assert lithuania._country_code("lt", "country") == "LT"
+    for code in ("L", "1T", "ŁT"):
+        with pytest.raises(InvalidProviderResponseError):
+            lithuania._country_code(code, "country")
     for value in (True, 0, -1, 1.0, None, ""):
         with pytest.raises(InvalidProviderResponseError):
             lithuania._identifier(value, "id")
@@ -1187,4 +1190,214 @@ def test_invalid_tariff_objects_and_location_records_fail():
             *VILNIUS,
             lithuania._index_tariffs(()),
             datetime.now(UTC),
+        )
+
+
+async def test_location_page_cannot_exceed_its_requested_limit(monkeypatch):
+    monkeypatch.setattr(lithuania, "_LOCATION_PAGE_SIZE", 1)
+    session = FakeSession(
+        [
+            _locations_response(
+                [_location(identifier=1), _location(identifier=2)], total=1
+            )
+        ]
+    )
+    with pytest.raises(InvalidProviderResponseError, match="requested size"):
+        await _provider(session).async_validate_connection(*VILNIUS, 500)
+
+
+async def test_snapshot_without_saved_failure_reports_refresh_in_progress(monkeypatch):
+    monkeypatch.setattr(lithuania.time, "monotonic", lambda: 1000.0)
+    snapshot = lithuania.LithuaniaSnapshot()
+    snapshot._next_location_request_at = 1100.0
+    with pytest.raises(ProviderConnectionError, match="still in progress"):
+        await snapshot.async_get(FakeSession([]))
+
+
+async def test_cached_invalid_refresh_reason_is_repeated(monkeypatch):
+    monkeypatch.setattr(lithuania.time, "monotonic", lambda: 1000.0)
+    snapshot = lithuania.LithuaniaSnapshot()
+    snapshot._retry_at = 1100.0
+    snapshot._failure = ("invalid_response", "cached invalid data", None)
+    with pytest.raises(InvalidProviderResponseError, match="cached invalid data"):
+        await snapshot.async_get(FakeSession([]))
+
+
+def test_empty_evse_list_and_duplicate_evse_ids_are_explicit():
+    location = _location(evses=[])
+    assert (
+        lithuania._stations_from_location(
+            location, *VILNIUS, lithuania._index_tariffs(()), datetime.now(UTC)
+        )
+        == []
+    )
+    location = _location(evses=[_evse(uid=1), _evse(uid="1")])
+    with pytest.raises(InvalidProviderResponseError, match="duplicate EVSE IDs"):
+        lithuania._stations_from_location(
+            location, *VILNIUS, lithuania._index_tariffs(()), datetime.now(UTC)
+        )
+
+
+def test_empty_connector_list_has_no_fabricated_count():
+    station = lithuania._stations_from_location(
+        _location(evses=[_evse(connectors=[])]),
+        *VILNIUS,
+        lithuania._index_tariffs(()),
+        datetime.now(UTC),
+    )[0]
+    assert station.connectors == ()
+    assert station.connector_count_reported is False
+    assert station.tariff_status is TariffStatus.NOT_REPORTED
+
+
+@pytest.mark.parametrize(
+    ("power", "error"),
+    [
+        (None, None),
+        (True, "power is invalid"),
+        ("22000", "power is invalid"),
+        (-1, "power is invalid"),
+        (float("inf"), "power is invalid"),
+        (10**1000, "power is invalid"),
+    ],
+)
+def test_connector_power_is_validated(power, error):
+    location = _location(
+        evses=[_evse(connectors=[_connector(power=power, tariff_ids=None)])]
+    )
+    if error is None:
+        station = lithuania._stations_from_location(
+            location, *VILNIUS, lithuania._index_tariffs(()), datetime.now(UTC)
+        )[0]
+        assert station.connectors[0].max_power_kw is None
+    else:
+        with pytest.raises(InvalidProviderResponseError, match=error):
+            lithuania._stations_from_location(
+                location,
+                *VILNIUS,
+                lithuania._index_tariffs(()),
+                datetime.now(UTC),
+            )
+
+
+def test_tariff_resolution_status_combinations_are_explicit():
+    incomplete = lithuania._parse_tariff(
+        _tariff(tax_included="NO"),
+        datetime(2026, 11, 4, tzinfo=UTC),
+        "Europe/Vilnius",
+    )
+    assert (
+        lithuania._combine_tariff_statuses(("missing",), [], []) is TariffStatus.MISSING
+    )
+    assert (
+        lithuania._combine_tariff_statuses(
+            ("incomplete",), [incomplete], [TariffStatus.INCOMPLETE]
+        )
+        is TariffStatus.INCOMPLETE
+    )
+    first = lithuania._parse_tariff(
+        _tariff(identifier="a", components=[_component("ENERGY", "0.4")]),
+        datetime(2026, 11, 4, tzinfo=UTC),
+        "Europe/Vilnius",
+    )
+    second = lithuania._parse_tariff(
+        _tariff(identifier="b", components=[_component("ENERGY", "0.5")]),
+        datetime(2026, 11, 4, tzinfo=UTC),
+        "Europe/Vilnius",
+    )
+    assert (
+        lithuania._combine_tariff_statuses(
+            ("a", "b"),
+            [first, second],
+            [TariffStatus.AVAILABLE, TariffStatus.AVAILABLE],
+        )
+        is TariffStatus.AMBIGUOUS
+    )
+    assert (
+        lithuania._combined_station_tariff_status(
+            [TariffStatus.AVAILABLE, TariffStatus.NOT_REPORTED], []
+        )
+        is TariffStatus.INCOMPLETE
+    )
+
+
+def test_tariff_end_date_and_invalid_restrictions_are_conservative():
+    now = datetime(2026, 11, 4, tzinfo=UTC)
+    expired = lithuania._parse_tariff(
+        _tariff(end="2026-11-03T23:59:59Z"), now, "Europe/Vilnius"
+    )
+    assert expired.status is TariffStatus.INACTIVE
+    with pytest.raises(InvalidProviderResponseError, match="restriction start_date"):
+        lithuania._element_status({"start_date": 20261105}, now, "Europe/Vilnius")
+    assert (
+        lithuania._element_status({"start_date": "not-a-date"}, now, "Invalid/Timezone")
+        is TariffStatus.CONDITIONAL
+    )
+
+
+def test_bad_tariff_fields_and_prices_are_rejected():
+    now = datetime(2026, 11, 4, tzinfo=UTC)
+    with pytest.raises(InvalidProviderResponseError, match="currency"):
+        lithuania._parse_tariff(_tariff(currency="EURO"), now, "Europe/Vilnius")
+    raw = _tariff()
+    raw["elements"] = "not a list"
+    with pytest.raises(InvalidProviderResponseError, match="elements list"):
+        lithuania._parse_tariff(raw, now, "Europe/Vilnius")
+    raw = _tariff()
+    raw["elements"] = [{"price_components": None}]
+    with pytest.raises(InvalidProviderResponseError, match="price_components list"):
+        lithuania._parse_tariff(raw, now, "Europe/Vilnius")
+    raw = _tariff()
+    raw["elements"] = [{"price_components": [{"type": None}]}]
+    with pytest.raises(InvalidProviderResponseError, match="has no type"):
+        lithuania._parse_tariff(raw, now, "Europe/Vilnius")
+    raw = _tariff(components=[_component("ENERGY", "0.42", vat="-1")])
+    with pytest.raises(InvalidProviderResponseError, match="VAT cannot be negative"):
+        lithuania._parse_tariff(raw, now, "Europe/Vilnius")
+    raw = _tariff(components=[_component("ENERGY", "not-a-number")])
+    with pytest.raises(InvalidProviderResponseError, match="invalid"):
+        lithuania._parse_tariff(raw, now, "Europe/Vilnius")
+
+
+def test_unpublished_country_and_invalid_optional_text_records():
+    location = _location(country="LVA")
+    assert (
+        lithuania._stations_from_location(
+            location, *VILNIUS, lithuania._index_tariffs(()), datetime.now(UTC)
+        )
+        == []
+    )
+    location = _location()
+    location.pop("country")
+    with pytest.raises(InvalidProviderResponseError, match="location country"):
+        lithuania._stations_from_location(
+            location, *VILNIUS, lithuania._index_tariffs(()), datetime.now(UTC)
+        )
+
+
+def test_invalid_evse_connector_container_and_tariff_id_lists_fail():
+    location = _location()
+    location["evses"][0]["connectors"] = "not a list"
+    with pytest.raises(InvalidProviderResponseError, match="no connectors"):
+        lithuania._stations_from_location(
+            location, *VILNIUS, lithuania._index_tariffs(()), datetime.now(UTC)
+        )
+
+    for raw_ids, message in (
+        (("tariff-1", "tariff-1"), "duplicate tariff IDs"),
+        ("tariff-1", "tariff_ids is not a list"),
+    ):
+        location = _location(evses=[_evse(connectors=[_connector(tariff_ids=raw_ids)])])
+        with pytest.raises(InvalidProviderResponseError, match=message):
+            lithuania._stations_from_location(
+                location,
+                *VILNIUS,
+                lithuania._index_tariffs(()),
+                datetime.now(UTC),
+            )
+    location = _location()
+    location["name"] = 1
+    with pytest.raises(InvalidProviderResponseError, match="location name"):
+        lithuania._stations_from_location(
+            location, *VILNIUS, lithuania._index_tariffs(()), datetime.now(UTC)
         )

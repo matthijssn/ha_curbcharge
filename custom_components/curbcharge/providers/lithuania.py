@@ -144,9 +144,13 @@ class LithuaniaSnapshot:
                 or now - self._tariffs_cached_at >= _TARIFF_CACHE_SECONDS
             )
             if not locations_due and not tariffs_due:
-                if self._locations is None or self._tariffs is None:
-                    raise ProviderConnectionError("Via Lietuva cache is incomplete")
-                return self._locations, self._tariffs
+                return cast(
+                    tuple[
+                        tuple[dict[str, object], ...],
+                        tuple[dict[str, object], ...],
+                    ],
+                    (self._locations, self._tariffs),
+                )
 
             if now < self._retry_at or (
                 locations_due and now < self._next_location_request_at
@@ -198,11 +202,8 @@ class LithuaniaSnapshot:
                         time.monotonic() + _MIN_SNAPSHOT_INTERVAL_SECONDS,
                     )
 
-            if locations is None or tariffs is None:
-                raise ProviderConnectionError(
-                    "Via Lietuva refresh did not produce a complete snapshot"
-                )
-
+            locations = cast(tuple[dict[str, object], ...], locations)
+            tariffs = cast(tuple[dict[str, object], ...], tariffs)
             self._locations = locations
             self._tariffs = tariffs
             self._locations_cached_at = locations_cached_at
@@ -228,29 +229,34 @@ class LithuaniaSnapshot:
     ) -> tuple[dict[str, object], ...]:
         locations: list[dict[str, object]] = []
         seen_ids: set[_LocationKey] = set()
-        total_count: int | None = None
-        page_count: int | None = None
-
-        for page_index in range(_MAX_LOCATION_PAGES):
-            offset = page_index * _LOCATION_PAGE_SIZE
-            payload, headers = await self._async_request(
-                session,
-                "/locations",
-                {"limit": str(_LOCATION_PAGE_SIZE), "offset": str(offset)},
-                budget,
+        first_payload, first_headers = await self._async_request(
+            session,
+            "/locations",
+            {"limit": str(_LOCATION_PAGE_SIZE), "offset": "0"},
+            budget,
+        )
+        total_count = _total_count(first_headers.get("X-Total-Count"))
+        page_count = max(1, math.ceil(total_count / _LOCATION_PAGE_SIZE))
+        if page_count > _MAX_LOCATION_PAGES:
+            raise InvalidProviderResponseError(
+                "Via Lietuva catalogue exceeds the supported page bound"
             )
-            current_total = _total_count(headers.get("X-Total-Count"))
-            if total_count is None:
-                total_count = current_total
-                page_count = max(1, math.ceil(total_count / _LOCATION_PAGE_SIZE))
-                if page_count > _MAX_LOCATION_PAGES:
-                    raise InvalidProviderResponseError(
-                        "Via Lietuva catalogue exceeds the supported page bound"
-                    )
-            elif current_total != total_count:
-                raise InvalidProviderResponseError(
-                    "Via Lietuva total changed during pagination"
+
+        for page_index in range(page_count):
+            if page_index == 0:
+                payload, headers = first_payload, first_headers
+            else:
+                offset = page_index * _LOCATION_PAGE_SIZE
+                payload, headers = await self._async_request(
+                    session,
+                    "/locations",
+                    {"limit": str(_LOCATION_PAGE_SIZE), "offset": str(offset)},
+                    budget,
                 )
+                if _total_count(headers.get("X-Total-Count")) != total_count:
+                    raise InvalidProviderResponseError(
+                        "Via Lietuva total changed during pagination"
+                    )
 
             records = _response_data(payload, "locations")
             if total_count == 0 and records:
@@ -281,12 +287,7 @@ class LithuaniaSnapshot:
                 if country.upper() == "LTU":
                     locations.append(location)
 
-            if page_count is not None and page_index + 1 >= page_count:
-                return tuple(locations)
-
-        raise InvalidProviderResponseError(
-            "Via Lietuva location pagination exceeded the supported page bound"
-        )
+        return tuple(locations)
 
     async def _async_get_tariffs(
         self, session: aiohttp.ClientSession, budget: _RefreshBudget
