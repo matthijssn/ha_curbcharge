@@ -93,14 +93,14 @@ const cardSource = await readFile(
 const cardModule = await import(
   `data:text/javascript;base64,${Buffer.from(`${cardSource}\nexport { TEXT };`).toString("base64")}`
 );
-const SUPPORTED_LANGUAGES = ["en", "nl", "fr", "de", "nb", "sv", "fi", "it"];
+const SUPPORTED_LANGUAGES = ["en", "nl", "fr", "de", "nb", "sv", "fi", "it", "lv"];
 
 function visibleText(element) {
   if (element.tagName === "style") return "";
   return [element.textContent, ...element.children.map(visibleText)].join(" ");
 }
 
-test("requires complete nonempty dictionaries for all eight languages", () => {
+test("requires complete nonempty dictionaries for all nine languages", () => {
   assert.deepEqual(Object.keys(cardModule.TEXT), SUPPORTED_LANGUAGES);
   const englishKeys = Object.keys(cardModule.TEXT.en).sort();
   for (const language of SUPPORTED_LANGUAGES) {
@@ -263,6 +263,17 @@ test("localizes editor controls in every supported language", () => {
       show_station_details: "Mostra dettagli stazione",
       show_update_times: "Mostra orari di aggiornamento",
       details: "Maggiori dettagli",
+    },
+    lv: {
+      entity: "Stacijas entītija",
+      layout: "Izkārtojums",
+      standard: "Standarta",
+      compact: "Kompakts",
+      show_price: "Rādīt cenu",
+      show_connector_details: "Rādīt savienotāju informāciju",
+      show_station_details: "Rādīt stacijas informāciju",
+      show_update_times: "Rādīt atjauninājumu laikus",
+      details: "Papildinformācija",
     },
   };
   const Editor = elements.get("curbcharge-card-editor");
@@ -618,6 +629,14 @@ test("localizes Top N score and reason labels in every supported language", () =
       reason: "Motivo",
       bestNearbyRanking: "Ordinato per Migliore nelle vicinanze",
     },
+    lv: {
+      topNearby: "Labākās uzlādes stacijas tuvumā",
+      recommendations: "Ieteikumi",
+      rank: "Vieta",
+      score: "Vērtējums",
+      reason: "Iemesls",
+      bestNearbyRanking: "Sarindots pēc ieteikuma “Labākā uzlādes stacija tuvumā”",
+    },
   };
 
   assert.deepEqual(Object.keys(labels), SUPPORTED_LANGUAGES);
@@ -797,6 +816,18 @@ test("localizes recommendation states, operator, and address in every supported 
       unavailable: "Non disponibile",
       operator: "Operatore",
       address: "Indirizzo",
+    },
+    lv: {
+      selected: "Atlasīts",
+      no_current_stations: "Nav aktuālu staciju",
+      unknown_availability: "Pieejamība nav zināma",
+      none_available: "Nav pieejamu",
+      no_comparable_price: "Cena nav salīdzināma",
+      no_positive_power: "Nav pozitīvas jaudas",
+      no_known_distance: "Attālums nav zināms",
+      unavailable: "Nav pieejams",
+      operator: "Operators",
+      address: "Adrese",
     },
   };
 
@@ -1135,6 +1166,13 @@ test("localizes navigation disclosure and link labels in every supported languag
       "Navigazione Waze",
       "Apri posizione sulla mappa (senza indicazioni)",
     ],
+    lv: [
+      "Navigēt",
+      "Maršruts Google Maps",
+      "Maršruts Apple Maps",
+      "Navigācija ar Waze",
+      "Atvērt atrašanās vietu kartē (bez maršruta)",
+    ],
   };
 
   assert.deepEqual(Object.keys(labels), SUPPORTED_LANGUAGES);
@@ -1295,6 +1333,7 @@ test("renders a localized text favorite indicator only for explicit favorites", 
     sv: "Favorit",
     fi: "Suosikki",
     it: "Preferito",
+    lv: "Izlase",
   };
   const sources = [
     {
@@ -1410,6 +1449,7 @@ test("localizes the provider open-status label in every supported language", () 
     sv: ["Öppningsstatus enligt leverantören", "Stängd"],
     fi: ["Palveluntarjoajan ilmoittama avoinna-tila", "Suljettu"],
     it: ["Stato di apertura segnalato dal fornitore", "Chiuso"],
+    lv: ["Pakalpojumu sniedzēja norādītais atvēršanas statuss", "Slēgts"],
   };
 
   assert.deepEqual(Object.keys(labels), SUPPORTED_LANGUAGES);
@@ -1532,7 +1572,21 @@ test("switches existing cards and editors through HA locales independently of pr
       card.setConfig(config);
       editor.setConfig(config);
       let originalForm;
-      for (const language of ["en", "nb", "sv", "nb-NO", "sv-SE", "fi", "fi-FI", "it", "it-CH", "es-ES", undefined]) {
+      for (const language of [
+        "en",
+        "nb",
+        "sv",
+        "nb-NO",
+        "sv-SE",
+        "fi",
+        "fi-FI",
+        "it",
+        "it-CH",
+        "lv",
+        "lv-LV",
+        "es-ES",
+        undefined,
+      ]) {
         const hass = {
           ...(language
             ? property === "locale"

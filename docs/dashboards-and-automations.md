@@ -118,7 +118,7 @@ requests. It displays the station name and operator when available, address,
 availability, connector counts, maximum power, distance, price/currency when
 known, and update times. Labels follow the Home Assistant language in English,
 Dutch, French, German, Norwegian Bokmål (`nb`), Swedish (`sv`), Finnish
-(`fi`), or Italian (`it`). Language is
+(`fi`), Italian (`it`), or Latvian (`lv`). Language is
 independent of the selected provider country; station names and reported
 currencies are preserved, and prices are not converted.
 When configured with **Top nearby chargers**, it renders the backend-ordered
@@ -164,6 +164,18 @@ details/navigation, and the visual editor. Also check Finnish UI with a
 non-Finland provider's data and a non-Finnish UI with Finland's data,
 including a language switch on an existing card/editor without changing
 saved IDs or customized names.
+
+### Latvian release smoke check
+
+Owner-run Home Assistant UI validation for `lv` remains an outstanding
+release check tracked in [#331](https://github.com/matthijssn/ha_curbcharge/issues/331);
+automated translation and card tests do not replace it. On a safe instance,
+switch the profile language to Latvian and inspect setup/options, entities,
+services, the bundled card and editor. Check Latvian UI with different
+providers and a language switch on an existing card/editor without changing
+saved IDs or customized names. Record the HA version, target release/commit,
+card version and pass/fail/blocked result; do not claim an unrun smoke check
+passed.
 
 Use safe positive, zero, unknown, and unavailable data, and inspect
 `{connector_type}` substitution, accented characters, and longer labels. Record
