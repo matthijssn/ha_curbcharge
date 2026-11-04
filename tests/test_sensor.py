@@ -21,6 +21,7 @@ from custom_components.curbcharge.models import (
     ChargingLocation,
     ChargingTariff,
     ConnectorStatus,
+    ConnectorTypeId,
     EVSEStatus,
     FavouriteStationReference,
     OperatorReference,
@@ -818,6 +819,7 @@ def test_best_nearby_sensor_exposes_selection_reason(hass, sample_stations, capl
     assert attributes["last_updated"] == "2025-01-02T03:04:05+00:00"
     assert attributes["last_successful_update"] == attributes["last_updated"]
     assert attributes["reason"] == "only_available_station"
+    assert "personalization" not in attributes
     assert not {
         "google_maps_url",
         "apple_maps_url",
@@ -827,6 +829,125 @@ def test_best_nearby_sensor_exposes_selection_reason(hass, sample_stations, capl
     assert station.address not in caplog.text
     assert str(station.latitude) not in caplog.text
     assert str(station.longitude) not in caplog.text
+
+
+def test_personalization_status_attributes_cover_full_partial_and_fallback(
+    hass, sample_stations
+):
+    base = sample_stations[0]
+
+    def station(provider_id, operator_id, price):
+        selected = _selection_station(base, distance=100, power=50, price=price)
+        connector = replace(
+            selected.connectors[0],
+            connector_type_id=ConnectorTypeId.TYPE_2,
+        )
+        return replace(
+            selected,
+            provider_id=provider_id,
+            operator_id=operator_id,
+            connectors=(connector,),
+        )
+
+    full = station("NL-FULL-MATCH", "preferred", "0.30")
+    partial = station("NL-PARTIAL-MATCH", "other", "0.10")
+    profile = PersonalizationProfile(
+        enabled=True,
+        connector_type_ids=(ConnectorTypeId.TYPE_2,),
+        minimum_power_kw=22,
+        preferred_operators=(OperatorReference(base.provider, "preferred"),),
+    )
+    coordinator = CurbChargeCoordinator(
+        hass,
+        FakeProvider(),
+        52.0,
+        5.0,
+        500,
+        10,
+        5,
+        True,
+        personalization_profile=profile,
+    )
+    coordinator.async_set_updated_data(
+        {full.provider_id: full, partial.provider_id: partial}
+    )
+
+    full_personalization = StatusSummarySensor(
+        coordinator, full
+    ).extra_state_attributes["personalization"]
+    partial_personalization = StatusSummarySensor(
+        coordinator, partial
+    ).extra_state_attributes["personalization"]
+    fallback_coordinator = CurbChargeCoordinator(
+        hass,
+        FakeProvider(),
+        52.0,
+        5.0,
+        500,
+        10,
+        5,
+        True,
+        personalization_profile=profile,
+    )
+    fallback_coordinator.async_set_updated_data({partial.provider_id: partial})
+    fallback_personalization = StatusSummarySensor(
+        fallback_coordinator, partial
+    ).extra_state_attributes["personalization"]
+    best_fallback = BestNearbyChargerSensor(
+        fallback_coordinator,
+        MockConfigEntry(domain=DOMAIN, unique_id="personalized-fallback"),
+    ).extra_state_attributes["personalization"]
+
+    assert full_personalization["match_status"] == "full_match"
+    assert full_personalization["matched_connector_group"] == {
+        "connector_type_id": ConnectorTypeId.TYPE_2.value,
+        "max_power_kw": 50,
+        "available_connectors": 1,
+    }
+    assert full_personalization["preference_matches"] == ["preferred_operator"]
+    assert partial_personalization["match_status"] == "partial_match"
+    assert partial_personalization["fallback_used"] is False
+    assert partial_personalization["preference_mismatches"] == ["preferred_operator"]
+    assert fallback_personalization["match_status"] == "fallback"
+    assert fallback_personalization["fallback_used"] is True
+    assert fallback_personalization["fallback_reasons"] == [
+        "preferred_operator_not_matched"
+    ]
+    assert best_fallback["match_status"] == "fallback"
+
+
+def test_personalization_no_match_has_a_distinct_result_status(hass, sample_stations):
+    station = _selection_station(
+        sample_stations[0], distance=10, power=50, price="0.42"
+    )
+    profile = PersonalizationProfile(
+        enabled=True,
+        maximum_price=Decimal("0.10"),
+        maximum_price_currency="EUR",
+    )
+    coordinator = CurbChargeCoordinator(
+        hass,
+        FakeProvider(),
+        52.0,
+        5.0,
+        500,
+        10,
+        5,
+        True,
+        personalization_profile=profile,
+    )
+    coordinator.async_set_updated_data({station.provider_id: station})
+    sensor = BestNearbyChargerSensor(
+        coordinator, MockConfigEntry(domain=DOMAIN, unique_id="no-profile-match")
+    )
+
+    attributes = sensor.extra_state_attributes
+
+    assert attributes["result_status"] == "no_personalized_match"
+    assert attributes["personalization"]["match_status"] == "no_match"
+    assert attributes["personalization"]["rejection_reason"] == (
+        "maximum_price_exceeded"
+    )
 
 
 @pytest.mark.parametrize(
@@ -1259,6 +1380,11 @@ def test_top_nearby_sensor_uses_personalized_order_and_keeps_objective_scores(
     )
     assert [item["personalized_rank"] for item in recommendations] == [1, 2]
     assert [item["personalized_score"] for item in recommendations] == [100, 50]
+    assert recommendations[0]["personalization"]["match_status"] == "full_match"
+    assert recommendations[0]["personalization"]["preset"] == "balanced"
+    assert recommendations[0]["personalization"]["preference_matches"] == [
+        "preferred_operator"
+    ]
 
 
 def test_top_nearby_sensor_distinguishes_empty_unknown_and_none_available(

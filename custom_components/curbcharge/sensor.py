@@ -348,6 +348,7 @@ class StatusSummarySensor(CurbChargeStationEntity, SensorEntity):
                 "provider_data_age_seconds": None,
                 "provider_timestamp_source": None,
                 **_best_nearby_rank_attributes(self.coordinator, None),
+                **_personalization_attributes(self.coordinator, None),
             }
         attributes = {
             "station_name": station.name,
@@ -388,6 +389,8 @@ class StatusSummarySensor(CurbChargeStationEntity, SensorEntity):
                 station.evse_status.value if station.evse_status is not None else None
             ),
             **_best_nearby_rank_attributes(self.coordinator, station),
+            **_personalization_attributes(self.coordinator, station),
+            **_personalization_attributes(self.coordinator, station),
         }
         if station.tariff is None and any(
             connector.tariff_ids for connector in station.connectors
@@ -581,12 +584,113 @@ def _best_nearby_result_status(
     if selected_station is not None:
         return "selected"
 
+    results = coordinator.recommendation_results
+    if (
+        coordinator.personalization_profile.enabled
+        and results is not None
+        and results.personalized_reason == "no_personalized_match"
+    ):
+        return "no_personalized_match"
+
     current_stations = _current_stations(coordinator)
     if not current_stations:
         return "no_current_stations"
     if any(station.has_available_connectors is None for station in current_stations):
         return "unknown_availability"
     return "none_available"
+
+
+def _personalization_attributes(
+    coordinator: CurbChargeCoordinator,
+    station: ChargingStation | None,
+) -> dict[str, Any]:
+    """Return bounded match and fallback codes without exposing profile values."""
+    profile = coordinator.personalization_profile
+    if not profile.enabled:
+        return {}
+
+    results = (
+        coordinator.recommendation_results if coordinator.last_update_success else None
+    )
+    evaluation = (
+        coordinator.personalization_evaluation_for(station)
+        if station is not None
+        else None
+    )
+    if not coordinator.last_update_success:
+        match_status = "unavailable"
+    elif evaluation is None:
+        match_status = (
+            "no_match"
+            if station is None
+            and results is not None
+            and results.personalized_candidate_count == 0
+            else "not_evaluated"
+        )
+    elif not evaluation.hard_eligible:
+        match_status = "no_match"
+    elif evaluation.fallback_used:
+        match_status = "fallback"
+    elif evaluation.full_match:
+        match_status = "full_match"
+    else:
+        match_status = "partial_match"
+
+    group = (
+        evaluation.selected_connector_group
+        if evaluation is not None and evaluation.matched_connector_groups
+        else None
+    )
+    return {
+        "personalization": {
+            "enabled": True,
+            "preset": profile.ranking_preset.value,
+            "match_status": match_status,
+            "matched_connector_group": (
+                {
+                    "connector_type_id": (
+                        group.connector_type_id.value
+                        if group.connector_type_id is not None
+                        else None
+                    ),
+                    "max_power_kw": group.max_power_kw,
+                    "available_connectors": group.known_available_count,
+                }
+                if group is not None
+                else None
+            ),
+            "fallback_used": (
+                evaluation.fallback_used if evaluation is not None else False
+            ),
+            "fallback_reasons": (
+                list(evaluation.fallback_reasons)
+                if evaluation is not None and evaluation.fallback_used
+                else []
+            ),
+            "preference_matches": (
+                list(evaluation.preference_matches) if evaluation is not None else []
+            ),
+            "preference_mismatches": (
+                list(evaluation.preference_mismatches) if evaluation is not None else []
+            ),
+            "unknown_fields": (
+                list(evaluation.unknown_fields) if evaluation is not None else []
+            ),
+            "rejection_reason": (
+                evaluation.rejection_reason
+                if evaluation is not None
+                else results.personalized_reason
+                if results is not None
+                else None
+            ),
+            "personalized_rank": (
+                evaluation.personalized_rank if evaluation is not None else None
+            ),
+            "personalized_score": (
+                evaluation.personalized_score if evaluation is not None else None
+            ),
+        }
+    }
 
 
 def _selection_result_status(
@@ -974,6 +1078,8 @@ class BestNearbyChargerSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEn
                 coordinator,
                 station,
             ),
+            **_personalization_attributes(coordinator, station),
+            **_personalization_attributes(coordinator, station),
         }
         if station is None:
             return attributes
@@ -1040,6 +1146,12 @@ class TopNearbyChargersSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEn
             "last_successful_update": last_successful_update,
             "best_nearby_candidate_count": (
                 best.best_nearby_candidate_count if best is not None else None
+            ),
+            **_personalization_attributes(
+                coordinator, best.station if best is not None else None
+            ),
+            **_personalization_attributes(
+                coordinator, best.station if best is not None else None
             ),
             "recommendations": _top_nearby_recommendations(coordinator),
         }
@@ -1202,6 +1314,7 @@ def _top_nearby_recommendations(
                 station, "best_nearby_rank", rank, score, candidate_count
             ),
         )
+        payload.update(_personalization_attributes(coordinator, station))
         payload.update(
             {
                 "rank": rank,
@@ -1219,6 +1332,7 @@ def _top_nearby_recommendations(
                 "ranking_reason": results.best_nearby.reason,
             }
         )
+        payload.update(_personalization_attributes(coordinator, station))
         if coordinator.personalization_profile.enabled:
             payload["personalized_rank"] = personalized_rank
             payload["personalized_score"] = personalized_score

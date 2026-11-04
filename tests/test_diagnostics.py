@@ -32,6 +32,7 @@ from custom_components.curbcharge.diagnostics import (
 )
 from custom_components.curbcharge.models import (
     ChargingTariff,
+    ConnectorTypeId,
     EVSEStatus,
     FavouriteStationReference,
     OperatorReference,
@@ -276,13 +277,19 @@ async def test_diagnostics_bound_favourite_details_and_redact_personalization(ha
         )
         for index in range(favourite_count)
     )
-    profile = PersonalizationProfile(
+    personalization_profile = PersonalizationProfile(
         enabled=True,
+        connector_type_ids=(ConnectorTypeId.TYPE_2,),
         preferred_operators=tuple(
             OperatorReference(PROVIDER_NDW_DOT_NL, f"private-operator-{index}")
             for index in range(1000)
         ),
-    ).as_config()
+        excluded_operators=(
+            OperatorReference(PROVIDER_NDW_DOT_NL, "private-excluded"),
+        ),
+        maximum_price=Decimal("0.1234"),
+        maximum_price_currency="EUR",
+    )
     coordinator = CurbChargeCoordinator(
         hass,
         FakeProvider(),
@@ -293,6 +300,7 @@ async def test_diagnostics_bound_favourite_details_and_redact_personalization(ha
         5,
         True,
         favourites,
+        personalization_profile=personalization_profile,
     )
     coordinator.async_set_updated_data({})
     entry = MockConfigEntry(
@@ -301,7 +309,7 @@ async def test_diagnostics_bound_favourite_details_and_redact_personalization(ha
         data={CONF_PROVIDER: PROVIDER_NDW_DOT_NL},
         options={
             CONF_FAVOURITES: [favourite.as_config() for favourite in favourites],
-            CONF_PERSONALIZATION: profile,
+            CONF_PERSONALIZATION: personalization_profile.as_config(),
         },
     )
     entry.runtime_data = coordinator
@@ -316,6 +324,15 @@ async def test_diagnostics_bound_favourite_details_and_redact_personalization(ha
     assert all(favourite.name not in serialized for favourite in favourites)
     assert "private-operator-0" not in serialized
     assert "private-operator-999" not in serialized
+    assert "private-excluded" not in serialized
+    assert "0.1234" not in serialized
+    assert diagnostics["personalization_profile"] == {
+        "enabled": True,
+        "preset": "balanced",
+        "connector_type_count": 1,
+        "preferred_operator_count": 1000,
+        "excluded_operator_count": 1,
+    }
 
 
 @pytest.mark.asyncio

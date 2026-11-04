@@ -516,6 +516,96 @@ test("renders Top N as an ordered list without per-result navigation", () => {
   );
 });
 
+test("renders accessible personalized details and fallback explanation", () => {
+  const Card = elements.get("curbcharge-card");
+  const card = new Card();
+  card.setConfig({ entity: "sensor.top_nearby_chargers" });
+  card.hass = {
+    language: "en",
+    states: {
+      "sensor.top_nearby_chargers": {
+        entity_id: "sensor.top_nearby_chargers",
+        state: 1,
+        attributes: {
+          result_status: "selected",
+          recommendations: [
+            {
+              name: "Fallback station",
+              provider_station_id: "fallback-1",
+              rank: 2,
+              score: 50,
+              reason: "best_nearby_rank",
+              personalized_rank: 1,
+              personalized_score: 100,
+              personalization: {
+                enabled: true,
+                preset: "lowest_price",
+                match_status: "fallback",
+                matched_connector_group: {
+                  connector_type_id: "IEC_62196_T2",
+                  max_power_kw: 50,
+                  available_connectors: 1,
+                },
+                fallback_used: true,
+                fallback_reasons: ["preferred_operator_not_matched"],
+                preference_matches: [],
+                preference_mismatches: ["preferred_operator"],
+                unknown_fields: [],
+              },
+            },
+          ],
+        },
+      },
+    },
+  };
+
+  const renderedCard = card.shadowRoot.children[1];
+  const section = renderedCard.children.find(
+    (child) => child.className === "recommendations",
+  );
+  const item = section.children.find((child) => child.tagName === "ol").children[0];
+  const personalizationDetails = item.children.find(
+    (child) => child.className === "personalization-details",
+  );
+
+  assert.equal(personalizationDetails.tagName, "details");
+  assert.equal(personalizationDetails.open, false);
+  assert.equal(personalizationDetails.children[0].tagName, "summary");
+  assert.equal(personalizationDetails.children[0].textContent, "Personalized");
+  assert.match(visibleText(personalizationDetails), /Fallback reason/);
+  assert.match(visibleText(personalizationDetails), /Preferred operator not matched/);
+
+  const bestNearby = cardModule.buildCardData(
+    {
+      entity_id: "sensor.best_nearby_charger",
+      state: "Preferred station",
+      attributes: {
+        provider_station_id: "preferred-1",
+        result_status: "selected",
+        reason: "lowest_price_per_kwh",
+        last_successful_update: "2026-01-01T00:00:00Z",
+        personalization: {
+          enabled: true,
+          preset: "balanced",
+          match_status: "full_match",
+          matched_connector_group: null,
+          fallback_used: false,
+          fallback_reasons: [],
+          preference_matches: [],
+          preference_mismatches: [],
+          unknown_fields: [],
+        },
+      },
+    },
+    { language: "en" },
+  );
+  assert.ok(
+    bestNearby.detailsRows.some(
+      ([label, value]) => label === "Personalized" && value === "Full match",
+    ),
+  );
+});
+
 test("renders a successful empty Top N list and suppresses unavailable stale items", () => {
   const empty = cardModule.buildCardData(
     {
@@ -572,6 +662,14 @@ test("localizes Top N score and reason labels in every supported language", () =
       score: "Score",
       reason: "Reason",
       bestNearbyRanking: "Ranked by Best nearby",
+      personalized: "Personalized",
+      preset: "Preset",
+      lowestPricePreset: "Lowest price",
+      fallback: "Fallback",
+      fallbackReason: "Fallback reason",
+      fallbackPreferredOperator: "Preferred operator not matched",
+      matchedConnectorGroup: "Matched connector group",
+      noPersonalizedMatch: "No personalized match",
     },
     nl: {
       topNearby: "Top laadpunten in de buurt",
@@ -580,6 +678,14 @@ test("localizes Top N score and reason labels in every supported language", () =
       score: "Score",
       reason: "Reden",
       bestNearbyRanking: "Gerangschikt volgens beste laadpunt in de buurt",
+      personalized: "Gepersonaliseerd",
+      preset: "Rangschikking",
+      lowestPricePreset: "Laagste prijs",
+      fallback: "Terugval",
+      fallbackReason: "Reden voor terugval",
+      fallbackPreferredOperator: "Voorkeursoperator komt niet overeen",
+      matchedConnectorGroup: "Passende connectorgroep",
+      noPersonalizedMatch: "Geen gepersonaliseerde match",
     },
     fr: {
       topNearby: "Meilleures bornes à proximité",
@@ -588,6 +694,14 @@ test("localizes Top N score and reason labels in every supported language", () =
       score: "Score",
       reason: "Motif",
       bestNearbyRanking: "Classée selon la meilleure borne à proximité",
+      personalized: "Personnalisé",
+      preset: "Préréglage",
+      lowestPricePreset: "Prix le plus bas",
+      fallback: "Repli",
+      fallbackReason: "Motif de repli",
+      fallbackPreferredOperator: "Opérateur préféré non trouvé",
+      matchedConnectorGroup: "Groupe de connecteurs correspondant",
+      noPersonalizedMatch: "Aucune correspondance personnalisée",
     },
     de: {
       topNearby: "Top-Ladestationen in der Nähe",
@@ -596,6 +710,14 @@ test("localizes Top N score and reason labels in every supported language", () =
       score: "Bewertung",
       reason: "Begründung",
       bestNearbyRanking: "Nach Best nearby sortiert",
+      personalized: "Personalisiert",
+      preset: "Rangfolge",
+      lowestPricePreset: "Niedrigster Preis",
+      fallback: "Fallback",
+      fallbackReason: "Fallback-Grund",
+      fallbackPreferredOperator: "Bevorzugter Betreiber nicht gefunden",
+      matchedConnectorGroup: "Passende Anschlussgruppe",
+      noPersonalizedMatch: "Keine personalisierte Übereinstimmung",
     },
     nb: {
       topNearby: "Topprangerte ladere i nærheten",
@@ -604,6 +726,14 @@ test("localizes Top N score and reason labels in every supported language", () =
       score: "Poengsum",
       reason: "Begrunnelse",
       bestNearbyRanking: "Rangert etter beste lader i nærheten",
+      personalized: "Personlig tilpasning",
+      preset: "Rangeringsforvalg",
+      lowestPricePreset: "Lavest pris",
+      fallback: "Reserveløsning",
+      fallbackReason: "Årsak til reservevalg",
+      fallbackPreferredOperator: "Foretrukket operatør samsvarte ikke",
+      matchedConnectorGroup: "Matchende kontaktgruppe",
+      noPersonalizedMatch: "Ingen personlig tilpasset match",
     },
     sv: {
       topNearby: "Högst rankade laddare i närheten",
@@ -612,6 +742,14 @@ test("localizes Top N score and reason labels in every supported language", () =
       score: "Poäng",
       reason: "Motivering",
       bestNearbyRanking: "Rangordnad efter bästa laddare i närheten",
+      personalized: "Personlig anpassning",
+      preset: "Rangordningsförval",
+      lowestPricePreset: "Lägsta pris",
+      fallback: "Reservval",
+      fallbackReason: "Orsak till reservval",
+      fallbackPreferredOperator: "Föredragen operatör matchade inte",
+      matchedConnectorGroup: "Matchande kontaktgrupp",
+      noPersonalizedMatch: "Ingen personlig matchning",
     },
     fi: {
       topNearby: "Parhaat lähellä olevat laturit",
@@ -620,6 +758,14 @@ test("localizes Top N score and reason labels in every supported language", () =
       score: "Pisteet",
       reason: "Peruste",
       bestNearbyRanking: "Järjestetty Paras lähellä olevan mukaan",
+      personalized: "Personoitu",
+      preset: "Järjestyksen esiasetus",
+      lowestPricePreset: "Alin hinta",
+      fallback: "Vararatkaisu",
+      fallbackReason: "Vararatkaisun syy",
+      fallbackPreferredOperator: "Ensisijainen operaattori ei täsmännyt",
+      matchedConnectorGroup: "Sopiva liitinryhmä",
+      noPersonalizedMatch: "Ei personoitua osumaa",
     },
     it: {
       topNearby: "Migliori colonnine nelle vicinanze",
@@ -628,6 +774,14 @@ test("localizes Top N score and reason labels in every supported language", () =
       score: "Punteggio",
       reason: "Motivo",
       bestNearbyRanking: "Ordinato per Migliore nelle vicinanze",
+      personalized: "Personalizzato",
+      preset: "Preset di classificazione",
+      lowestPricePreset: "Prezzo più basso",
+      fallback: "Fallback",
+      fallbackReason: "Motivo del fallback",
+      fallbackPreferredOperator: "Operatore preferito non trovato",
+      matchedConnectorGroup: "Gruppo di connettori corrispondente",
+      noPersonalizedMatch: "Nessuna corrispondenza personalizzata",
     },
     lv: {
       topNearby: "Labākās uzlādes stacijas tuvumā",
@@ -636,6 +790,14 @@ test("localizes Top N score and reason labels in every supported language", () =
       score: "Vērtējums",
       reason: "Iemesls",
       bestNearbyRanking: "Sarindots pēc ieteikuma “Labākā uzlādes stacija tuvumā”",
+      personalized: "Personalizēts",
+      preset: "Ieteikumu secība",
+      lowestPricePreset: "Zemākā cena",
+      fallback: "Atkāpe",
+      fallbackReason: "Atkāpes iemesls",
+      fallbackPreferredOperator: "Vēlamais operators neatbilst",
+      matchedConnectorGroup: "Atbilstoša savienotāju grupa",
+      noPersonalizedMatch: "Nav personalizētas atbilstības",
     },
   };
 
@@ -648,7 +810,28 @@ test("localizes Top N score and reason labels in every supported language", () =
         attributes: {
           result_status: "selected",
           recommendations: [
-            { name: "Station", rank: 1, score: 100, reason: "best_nearby_rank" },
+            {
+              name: "Station",
+              rank: 1,
+              score: 100,
+              reason: "best_nearby_rank",
+              provider_station_id: "station-1",
+              personalization: {
+                enabled: true,
+                preset: "lowest_price",
+                match_status: "fallback",
+                matched_connector_group: {
+                  connector_type_id: "IEC_62196_T2",
+                  max_power_kw: 50,
+                  available_connectors: 1,
+                },
+                fallback_used: true,
+                fallback_reasons: ["preferred_operator_not_matched"],
+                preference_matches: [],
+                preference_mismatches: ["preferred_operator"],
+                unknown_fields: [],
+              },
+            },
           ],
         },
       },
@@ -670,6 +853,30 @@ test("localizes Top N score and reason labels in every supported language", () =
       expected.reason,
       expected.bestNearbyRanking,
     ]);
+    assert.deepEqual(data.recommendations[0].personalizationRows, [
+      [expected.personalized, expected.fallback],
+      [expected.preset, expected.lowestPricePreset],
+      [expected.matchedConnectorGroup, "IEC 62196 T2, 50 kW"],
+      [expected.fallbackReason, expected.fallbackPreferredOperator],
+    ]);
+    const noPersonalizedMatch = cardModule.buildCardData(
+      {
+        entity_id: "sensor.best_nearby_charger",
+        state: "unknown",
+        attributes: {
+          result_status: "no_personalized_match",
+          reason: "no_personalized_match",
+          last_successful_update: "2026-01-01T00:00:00Z",
+          personalization: {
+            enabled: true,
+            preset: "balanced",
+            match_status: "no_match",
+          },
+        },
+      },
+      { language },
+    );
+    assert.equal(noPersonalizedMatch.status, expected.noPersonalizedMatch);
   }
 });
 
@@ -678,6 +885,7 @@ test("shows recommendation result states distinctly and suppresses unavailable d
     ["no_current_stations", "No current stations", "unknown"],
     ["unknown_availability", "Availability unknown", "unknown"],
     ["none_available", "None available", "unknown"],
+    ["no_personalized_match", "No personalized match", "unknown"],
     ["no_comparable_price", "Price not comparable", "unknown"],
     ["no_positive_power", "No positive power", "unknown"],
     ["no_known_distance", "Distance unknown", "unknown"],
