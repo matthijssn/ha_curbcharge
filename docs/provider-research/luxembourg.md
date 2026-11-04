@@ -22,8 +22,7 @@ generic messages without exception chaining. No publisher key is bundled.
 
 ## Bounded measurements
 
-Two downloads were made **305 seconds apart**, with no other live downloads
-during this implementation:
+The initial source gate used two downloads **305 seconds apart**:
 
 | Measurement | First | Second |
 | --- | ---: | ---: |
@@ -42,10 +41,20 @@ claimed standardized international EVSE ID.
 
 An earlier planning probe on 2026-11-03 observed HTTP 429 after three downloads
 in about four minutes, persisting a minute later. No quota was documented.
-**Whether a live 429 includes Retry-After remains unverified**: the two safely
-spaced samples both succeeded. Deliberately provoking another rate limit is
-not justified. Offline tests cover both numeric and HTTP-date Retry-After,
-absence, malformed headers, cooldown escalation and sharing.
+A follow-up check on 2026-11-04 at 07:51:02 UTC returned portal HTTP 302 then
+publisher HTTP 200. The maintainer then explicitly authorized an exception to
+the research request spacing: at most three additional requests, stopping on
+429 without retries. The first two returned 200 at 07:52:52 and 07:53:02 UTC;
+the third returned **publisher HTTP 429 at 07:53:12 UTC, with no Retry-After
+header**. Each request followed the portal's 302. The 429 response contained
+only `Connection`, `Content-Length`, `Content-Type` and `Date` headers.
+The probe stopped immediately, with no further requests.
+
+This verifies the need for the fallback cooldown, not a guaranteed quota,
+recovery duration or promise that future 429 responses never include
+Retry-After. The runtime five-minute request floor is unchanged. Offline tests
+cover both numeric and HTTP-date Retry-After, absence, malformed headers,
+cooldown escalation and sharing.
 
 All entries in one Home Assistant instance share a lock, neutral parsed
 snapshot and at least 300 seconds between download starts, including validation
