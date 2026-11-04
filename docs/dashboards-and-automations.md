@@ -8,6 +8,9 @@ at `/curbcharge/curbcharge-card.js`. In **Settings → Dashboards → Resources*
 add that URL once as a JavaScript module. HACS updates the card with the
 integration; reload or restart Home Assistant after updating.
 
+For Via Lietuva station data, its attribution, both data licences and the
+normalization notice, see the [Lithuania section of the user guide](usage.md#lithuania-via-lietuva).
+
 Existing dashboards using `/local/curbcharge-card.js` only need a one-time
 resource URL change to `/curbcharge/curbcharge-card.js`; the card configuration
 does not need to change. After updating the resource, you can remove

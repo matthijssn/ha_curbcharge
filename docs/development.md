@@ -200,13 +200,25 @@ contract; `models.py` holds immutable stations, connectors, tariffs, and
 discovery settings. `providers/__init__.py` is the factory that selects a
 backend by provider ID. `providers/ndw_nl.py` implements NDW, while
 `providers/belgium.py`, `providers/finland.py`, `providers/nobil.py`,
-`providers/switzerland.py`, `providers/luxembourg.py`, and
+`providers/switzerland.py`, `providers/luxembourg.py`,
+`providers/lithuania.py`, and
 `providers/afdc.py` keep source-specific behavior in their own adapters.
 `coordinator.py` owns one provider update cycle, and `sensor.py`/
 `binary_sensor.py` expose normalized data. Follow a provider's published terms
 and limits, add synthetic fixtures and offline tests under `tests/providers/`,
 and do not add live credentials or private
 payloads to tests, issues, or logs.
+
+Lithuania uses Via Lietuva's anonymous OCPI 2.3.0 public snapshot. The source
+returns malformed `Link` pagination, so CurbCharge uses its measured numeric
+offset/total contract and rejects incomplete or changing traversals. The
+shared location snapshot has a five-minute minimum floor; tariffs cache for
+15 minutes. The provider enforces 16 MiB of decompressed response bodies and
+20 location pages, resolves cross-party tariff IDs only when unique within
+the country, and leaves uncertain tax/timestamp data unresolved. User-facing
+attribution and both source licences are documented in the
+[user guide](usage.md#lithuania-via-lietuva) and
+[source research](provider-research/lithuania.md).
 
 Luxembourg uses Chargy's CC0, network-only KML snapshot through the keyless
 data.public.lu resource redirect. Its parsed snapshot and minimum five-minute

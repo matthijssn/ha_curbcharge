@@ -47,6 +47,7 @@ REQUIRED_FILES = {
     "providers/base.py",
     "providers/belgium.py",
     "providers/finland.py",
+    "providers/lithuania.py",
     "providers/ndw_nl.py",
     "providers/nobil.py",
     "schema.py",
