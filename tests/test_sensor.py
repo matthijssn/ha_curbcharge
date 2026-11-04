@@ -948,6 +948,39 @@ def test_personalization_no_match_has_a_distinct_result_status(hass, sample_stat
     assert attributes["personalization"]["rejection_reason"] == (
         "no_personalized_match"
     )
+    station_personalization = StatusSummarySensor(
+        coordinator, station
+    ).extra_state_attributes["personalization"]
+    assert station_personalization["match_status"] == "no_match"
+    assert station_personalization["rejection_reason"] == "maximum_price_exceeded"
+
+
+@pytest.mark.asyncio
+async def test_personalization_status_is_unavailable_after_refresh_failure(
+    hass, sample_stations
+):
+    station = _selection_station(
+        sample_stations[0], distance=10, power=50, price="0.42"
+    )
+    provider = FakeProvider([(station,), ChargingProviderError("offline")])
+    coordinator = _coordinator(
+        hass,
+        station,
+        provider=provider,
+        personalization_profile=PersonalizationProfile(enabled=True),
+    )
+    sensor = BestNearbyChargerSensor(
+        coordinator, MockConfigEntry(domain=DOMAIN, unique_id="personalization-failed")
+    )
+
+    await coordinator.async_refresh()
+    await coordinator.async_refresh()
+
+    assert not coordinator.last_update_success
+    assert coordinator.personalization_evaluation_for(station) is None
+    assert sensor.extra_state_attributes["personalization"]["match_status"] == (
+        "unavailable"
+    )
 
 
 @pytest.mark.parametrize(
