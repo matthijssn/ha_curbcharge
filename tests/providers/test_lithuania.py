@@ -568,6 +568,13 @@ async def test_invalid_ocpi_responses_are_rejected(response):
         await _provider(session).async_validate_connection(*VILNIUS, 500)
 
 
+def test_ocpi_envelope_status_and_data_fields_are_required():
+    with pytest.raises(InvalidProviderResponseError, match="unsuccessful OCPI"):
+        lithuania._response_data({"status_code": True, "data": []}, "locations")
+    with pytest.raises(InvalidProviderResponseError, match="no data list"):
+        lithuania._response_data({"status_code": 1000, "data": None}, "locations")
+
+
 async def test_tariff_link_header_is_not_silently_truncated():
     session = FakeSession(
         [
@@ -1000,6 +1007,8 @@ def test_datetime_parser_preserves_only_timezone_aware_values():
     assert lithuania._aware_datetime("2026-11-04T10:00:00", "last_updated") is None
     with pytest.raises(InvalidProviderResponseError):
         lithuania._aware_datetime("not a timestamp", "last_updated")
+    with pytest.raises(InvalidProviderResponseError):
+        lithuania._parse_datetime(123, "last_updated")
 
 
 def test_source_timestamp_provenance_never_claims_dynamic_status_age():
@@ -1036,6 +1045,12 @@ def test_invalid_coordinates_are_explicit(coordinates):
             lithuania._index_tariffs(()),
             datetime.now(UTC),
         )
+
+
+@pytest.mark.parametrize("value", ["not-a-coordinate", 10**1000])
+def test_coordinate_conversion_errors_are_explicit(value):
+    with pytest.raises(InvalidProviderResponseError, match="latitude"):
+        lithuania._coordinate_value(value, "latitude")
 
 
 @pytest.mark.parametrize(
@@ -1312,6 +1327,14 @@ def test_tariff_resolution_status_combinations_are_explicit():
             [TariffStatus.AVAILABLE, TariffStatus.AVAILABLE],
         )
         is TariffStatus.AMBIGUOUS
+    )
+    assert (
+        lithuania._combine_tariff_statuses(
+            ("a", "b"),
+            [first],
+            [TariffStatus.AVAILABLE, TariffStatus.NOT_REPORTED],
+        )
+        is TariffStatus.INCOMPLETE
     )
     assert (
         lithuania._combined_station_tariff_status(
