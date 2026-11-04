@@ -946,7 +946,7 @@ def test_personalization_no_match_has_a_distinct_result_status(hass, sample_stat
     assert attributes["result_status"] == "no_personalized_match"
     assert attributes["personalization"]["match_status"] == "no_match"
     assert attributes["personalization"]["rejection_reason"] == (
-        "maximum_price_exceeded"
+        "no_personalized_match"
     )
 
 
