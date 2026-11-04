@@ -59,7 +59,7 @@ REQUIRED_FILES = {
     "www/curbcharge-card.js",
     *(
         f"translations/{locale}.json"
-        for locale in ("de", "en", "fi", "fr", "it", "nb", "nl", "sv")
+        for locale in ("de", "en", "fi", "fr", "it", "lv", "nb", "nl", "sv")
     ),
 }
 
@@ -170,7 +170,8 @@ def validate_archive(
         if name.startswith("translations/")
     }
     if translations != {
-        f"{locale}.json" for locale in ("de", "en", "fi", "fr", "it", "nb", "nl", "sv")
+        f"{locale}.json"
+        for locale in ("de", "en", "fi", "fr", "it", "lv", "nb", "nl", "sv")
     }:
         raise ValueError("Archive is missing a required translation")
     if not contents["www/curbcharge-card.js"].strip():

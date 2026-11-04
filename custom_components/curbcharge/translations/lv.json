@@ -1,0 +1,457 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Iestatīt CurbCharge",
+        "description": "Izvēlieties, vai CurbCharge izmantot Home Assistant mājas atrašanās vietu, manuālas koordinātas vai entītiju.",
+        "data": {
+          "location_source": "Atrašanās vietas avots"
+        },
+        "data_description": {
+          "location_source": "Izmantojiet Home Assistant mājas koordinātas, ievadiet koordinātas vai atlasiet entītiju, kas norāda atrašanās vietu."
+        }
+      },
+      "entity_location": {
+        "title": "Atlasīt atrašanās vietas entītiju",
+        "description": "Izvēlieties jebkuru entītiju, kas pašlaik norāda derīgus platuma un garuma atribūtus. Tiek saglabāts tikai entītijas ID.",
+        "data": {
+          "location_entity": "Atrašanās vietas entītija"
+        },
+        "data_description": {
+          "location_entity": "Entītijai pašlaik jānorāda derīgas platuma un garuma koordinātas."
+        }
+      },
+      "reconfigure": {
+        "title": "Mainīt meklēšanas atrašanās vietu",
+        "description": "Izvēlieties, vai izmantot Home Assistant mājas atrašanās vietu, manuālas koordinātas vai entītiju.",
+        "data": {
+          "location_source": "Atrašanās vietas avots"
+        },
+        "data_description": {
+          "location_source": "Mainot meklēšanas apgabalu, var mainīties iekļautās tuvumā esošās stacijas."
+        }
+      },
+      "reconfigure_entity_location": {
+        "title": "Atlasīt jaunu atrašanās vietas entītiju",
+        "description": "Izvēlieties entītiju, kas pašlaik norāda derīgas atrašanās vietas koordinātas. CurbCharge saglabā entītijas ID, nevis tās koordinātas.",
+        "data": {
+          "location_entity": "Atrašanās vietas entītija"
+        },
+        "data_description": {
+          "location_entity": "Ja iepriekšējā entītija nav pieejama vai ir noņemta, atlasiet citu."
+        }
+      },
+      "reconfigure_manual_location": {
+        "title": "Ievadīt jaunu meklēšanas atrašanās vietu",
+        "description": "Pirms atrašanās vietas saglabāšanas CurbCharge pārbauda pakalpojumu sniedzēju.",
+        "data": {
+          "latitude": "Platums",
+          "longitude": "Garums"
+        },
+        "data_description": {
+          "latitude": "Uzlādes staciju meklēšanas apgabala centra platums.",
+          "longitude": "Uzlādes staciju meklēšanas apgabala centra garums."
+        }
+      },
+      "manual_location": {
+        "title": "Ievadīt meklēšanas atrašanās vietu",
+        "description": "Koordinātas tiek saglabātas tikai tad, ja izvēlaties manuālu atrašanās vietu.",
+        "data": {
+          "latitude": "Platums",
+          "longitude": "Garums"
+        },
+        "data_description": {
+          "latitude": "Uzlādes staciju meklēšanas apgabala centra platums.",
+          "longitude": "Uzlādes staciju meklēšanas apgabala centra garums."
+        }
+      },
+      "station_options": {
+        "title": "Izvēlēties tuvumā esošās stacijas",
+        "description": "Pirms ieraksta izveides CurbCharge pārbauda savienojumu ar pakalpojumu sniedzēju.",
+        "data": {
+          "search_radius": "Meklēšanas rādiuss (m)",
+          "max_stations": "Maksimālais staciju skaits",
+          "scan_interval": "Atjaunināšanas intervāls (minūtes)",
+          "provider": "Pakalpojumu sniedzējs"
+        },
+        "data_description": {
+          "search_radius": "Tiek iekļautas tikai publiskās uzlādes stacijas šajā attālumā.",
+          "max_stations": "Ierobežojiet staciju un to entītiju skaitu.",
+          "scan_interval": "Cik bieži Home Assistant atjaunina uzlādes staciju datus.",
+          "provider": "Datu avots, ko izmanto staciju un pieejamības atrašanai."
+        }
+      },
+      "discovery_filters": {
+        "title": "Filtrēt tuvumā esošās stacijas",
+        "description": "Pēc izvēles atlasiet NDW stacijas pēc to savienotāju grupām. Filtri tiek piemēroti pirms staciju skaita ierobežojuma.",
+        "data": {
+          "connector_types": "Savienotāju veidi",
+          "min_power_kw": "Minimālā jauda (kW)",
+          "require_available": "Pieprasīt pieejamu savienotāju"
+        },
+        "data_description": {
+          "connector_types": "Atstājiet tukšu, lai pieņemtu jebkuru veidu. Savienotāju grupai ar atlasīto veidu jāatbilst arī pārējiem filtriem.",
+          "min_power_kw": "Neobligāti. Atbilstošajai savienotāju grupai jānorāda vismaz šāda jauda.",
+          "require_available": "Iekļaujiet stacijas tikai tad, ja atbilstošajā savienotāju grupā ir pieejami savienotāji."
+        }
+      },
+      "belgium_credentials": {
+        "title": "Savienot ar Eco-Movement Belgium",
+        "description": "Ievadiet Eco-Movement jums izsniegto API pilnvaru. Tā tiek saglabāta šajā konfigurācijas ierakstā un paslēpta diagnostikas datos.",
+        "data": {
+          "api_token": "Eco-Movement API piekļuves marķieris"
+        },
+        "data_description": {
+          "api_token": "Izmantojiet tikai tādu piekļuves marķieri, ko drīkstat izmantot. Nekopīgojiet to problēmu ziņojumos."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Atjaunināt Eco-Movement akreditācijas datus",
+        "description": "Ievadiet Eco-Movement izsniegtu aizstājējpilnvaru.",
+        "data": {
+          "api_token": "Eco-Movement API piekļuves marķieris"
+        },
+        "data_description": {
+          "api_token": "Piekļuves marķieris tiek saglabāts šajā konfigurācijas ierakstā un paslēpts diagnostikas datos."
+        }
+      },
+      "nobil_credentials": {
+        "title": "Savienot ar NOBIL",
+        "description": "Ievadiet savu NOBIL API atslēgu. Informāciju par atslēgas iegūšanu skatiet [NOBIL API lapā]({nobil_api_url}). Tā tiek saglabāta tikai šajā konfigurācijas ierakstā un paslēpta diagnostikas datos.",
+        "data": {
+          "api_token": "NOBIL API atslēga"
+        },
+        "data_description": {
+          "api_token": "Izmantojiet tikai tādu atslēgu, ko drīkstat izmantot. Nekopīgojiet to problēmu ziņojumos."
+        }
+      },
+      "nobil_reauth_confirm": {
+        "title": "Atjaunināt NOBIL akreditācijas datus",
+        "description": "Ievadiet aizstājēj-NOBIL API atslēgu. Informāciju skatiet [NOBIL API lapā]({nobil_api_url}).",
+        "data": {
+          "api_token": "NOBIL API atslēga"
+        },
+        "data_description": {
+          "api_token": "Atslēga tiek saglabāta šajā konfigurācijas ierakstā un paslēpta diagnostikas datos."
+        }
+      },
+      "afdc_credentials": {
+        "title": "Savienot ar AFDC (Amerikas Savienotās Valstis)",
+        "description": "Ievadiet savu NLR API atslēgu. Bezmaksas atslēgu var iegūt [NLR izstrādātāju tīklā]({afdc_api_url}). Tā tiek saglabāta tikai šajā konfigurācijas ierakstā un paslēpta diagnostikas datos.",
+        "data": {
+          "api_token": "NLR API atslēga"
+        },
+        "data_description": {
+          "api_token": "Izmantojiet tikai tādu atslēgu, ko drīkstat izmantot. Nekopīgojiet to problēmu ziņojumos."
+        }
+      },
+      "afdc_reauth_confirm": {
+        "title": "Atjaunināt AFDC akreditācijas datus",
+        "description": "Ievadiet aizstājēj-NLR API atslēgu. Bezmaksas atslēgu var iegūt [NLR izstrādātāju tīklā]({afdc_api_url}).",
+        "data": {
+          "api_token": "NLR API atslēga"
+        },
+        "data_description": {
+          "api_token": "Atslēga tiek saglabāta šajā konfigurācijas ierakstā un paslēpta diagnostikas datos."
+        }
+      }
+    },
+    "error": {
+      "auth": "Pakalpojumu sniedzējs noraidīja autentifikāciju.",
+      "cannot_connect": "Neizdevās izveidot savienojumu ar uzlādes pakalpojumu sniedzēju.",
+      "invalid_location": "Ievadiet derīgas koordinātas un atbalstītu meklēšanas apgabalu.",
+      "invalid_entity_location": "Atlasiet entītiju, kas pašlaik norāda derīgas platuma un garuma koordinātas.",
+      "invalid_api_token": "Ievadiet netukšu, drukājamu ASCII API piekļuves marķieri.",
+      "invalid_nobil_api_key": "Ievadiet netukšu, drukājamu NOBIL API atslēgu.",
+      "invalid_afdc_api_key": "Ievadiet netukšu, drukājamu NLR API atslēgu.",
+      "invalid_discovery_filters": "Ievadiet derīgus atrašanas filtrus. Minimālajai jaudai jābūt galīgam pozitīvam skaitlim.",
+      "invalid_response": "Pakalpojumu sniedzējs atgrieza neparedzēta formāta datus.",
+      "location_not_configured": "Home Assistant nav konfigurētas mājas koordinātas.",
+      "rate_limited": "Pakalpojumu sniedzējs ierobežo pieprasījumu skaitu. Mēģiniet vēlāk.",
+      "unsupported_provider": "Atlasītais pakalpojumu sniedzējs netiek atbalstīts."
+    },
+    "abort": {
+      "already_configured": "Šis pakalpojumu sniedzējs un meklēšanas apgabals jau ir konfigurēts.",
+      "location_not_configured": "Meklēšanas atrašanās vieta nav konfigurēta.",
+      "reconfigure_successful": "Meklēšanas atrašanās vieta atjaunināta.",
+      "reauth_successful": "Eco-Movement akreditācijas dati atjaunināti.",
+      "nobil_reauth_successful": "NOBIL API atslēga atjaunināta.",
+      "afdc_reauth_successful": "NLR API atslēga atjaunināta."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "CurbCharge opcijas",
+        "menu_options": {
+          "general": "Vispārīgie iestatījumi",
+          "personalization": "Personalizācija"
+        }
+      },
+      "general": {
+        "title": "Vispārīgie iestatījumi",
+        "data": {
+          "scan_interval": "Atjaunināšanas intervāls (minūtes)",
+          "search_radius": "Meklēšanas rādiuss (m)",
+          "max_stations": "Maksimālais staciju skaits",
+          "provider": "Pakalpojumu sniedzējs",
+          "include_unknown": "Iekļaut stacijas bez pieejamības datiem",
+          "connector_types": "Savienotāju veidi",
+          "min_power_kw": "Minimālā jauda (kW)",
+          "require_available": "Pieprasīt pieejamu savienotāju",
+          "favourites": "Iecienītie uzlādes punkti",
+          "location_movement_threshold": "Atrašanās vietas pārvietošanās slieksnis (m)"
+        },
+        "data_description": {
+          "scan_interval": "Cik bieži Home Assistant atjaunina uzlādes staciju datus.",
+          "search_radius": "Tiek iekļautas tikai publiskās uzlādes stacijas šajā attālumā.",
+          "max_stations": "Ierobežojiet staciju un to entītiju skaitu.",
+          "provider": "Datu avots, ko izmanto staciju un pieejamības atrašanai.",
+          "include_unknown": "Iekļaut stacijas, ja pakalpojumu sniedzējs nav norādījis savienotāju pieejamību.",
+          "connector_types": "Atstājiet tukšu, lai pieņemtu jebkuru veidu. Savienotāju grupai ar atlasīto veidu jāatbilst arī pārējiem filtriem.",
+          "min_power_kw": "Neobligāti. Atbilstošajai savienotāju grupai jānorāda vismaz šāda jauda.",
+          "require_available": "Iekļaujiet stacijas tikai tad, ja atbilstošajā savienotāju grupā ir pieejami savienotāji.",
+          "favourites": "Atlasiet uzlādes punktus pēc nosaukuma. Izlase ir pieejama arī ārpus meklēšanas rādiusa un tiek pievienota papildus tuvumā esošo staciju ierobežojumam.",
+          "location_movement_threshold": "Minimālais attālums, par kādu atlasītajai entītijai jāpārvietojas, lai atjauninātu meklēšanas atrašanās vietu. Iestatiet 0, lai izslēgtu slieksni."
+        }
+      },
+      "personalization": {
+        "title": "Personalizācija",
+        "data": {
+          "enabled": "Iespējot personalizāciju",
+          "connector_type_ids": "Saderīgo savienotāju veidi",
+          "minimum_power_kw": "Minimālā savienotāja jauda (kW)",
+          "preferred_operators": "Vēlamie operatori",
+          "excluded_operators": "Izslēgtie operatori",
+          "maximum_price": "Maksimālā cena par kWh",
+          "maximum_price_currency": "Maksimālās cenas valūta",
+          "ranking_preset": "Sarindošanas režīms",
+          "allow_fallback": "Atļaut rezerves atlasi",
+          "unknown_data_policy": "Nezināmu datu politika"
+        },
+        "data_description": {
+          "enabled": "Iespējojiet šo saglabāto profilu personalizētiem ieteikumiem. Kamēr personalizācijas novērtēšana nav pieejama, esošie ieteikumi nemainās.",
+          "connector_type_ids": "Izvēlieties standarta savienotāju veidus. Atstājiet tukšu, lai pieņemtu jebkuru savienotāja veidu.",
+          "minimum_power_kw": "Neobligāts minimums atbilstošai savienotāju grupai; ievadiet galīgu nenegatīvu vērtību.",
+          "preferred_operators": "Katrā rindā ievadiet vienu operatora atsauci ar pakalpojumu sniedzēja prefiksu, piemēram, ndw_dot_nl:NLX, eco_movement_be:Example CPO vai nobil_no:Synthetic CPO. NDW ID un NOBIL nosaukumiem precīzi jāsakrīt; Beļģijas nosaukumiem atstarpes tiek apgrieztas un normalizētas, un reģistrs netiek ņemts vērā. Saglabātās izvēles tiek paturētas arī tad, ja operators nav tuvumā.",
+          "excluded_operators": "Katrā rindā ievadiet vienu operatora atsauci ar pakalpojumu sniedzēja prefiksu, izmantojot tādu pašu formātu kā vēlamajiem operatoriem. Rezerves atlase nekad neignorē izslēgtos operatorus.",
+          "maximum_price": "Neobligāta nenegatīva decimālvērtība. Atstājiet tukšu, lai neierobežotu cenu.",
+          "maximum_price_currency": "Nepieciešama kopā ar maksimālo cenu; ievadiet trīs burtu valūtas kodu, piemēram, EUR.",
+          "ranking_preset": "Izvēlieties fiksētu sarindošanas mērķi; pielāgoti svari netiek atbalstīti.",
+          "allow_fallback": "Atļaut atbilstošus operatorus, kas nav vēlamie, tikai tad, ja nav pilnīgas atbilstības.",
+          "unknown_data_policy": "Izvēlieties, vai rezerves rezultātos drīkst iekļaut nezināmus savienotāja, jaudas vai operatora datus. Nezināma pieejamība un zināmi obligāto ierobežojumu pārkāpumi nekad netiek atviegloti."
+        }
+      }
+    },
+    "error": {
+      "invalid_discovery_filters": "Ievadiet derīgus atrašanas filtrus. Minimālajai jaudai jābūt galīgam pozitīvam skaitlim.",
+      "invalid_favourites": "Viena vai vairākas atlasītās izlases stacijas vairs nav pieejamas. Atsvaidziniet opcijas un mēģiniet vēlreiz.",
+      "invalid_personalization_profile": "Ievadiet derīgu profilu. Jaudai un cenai jābūt galīgām un nenegatīvām, maksimālajai cenai vajadzīgs trīs burtu valūtas kods, operatora atsaucēm vajadzīgs atbalstīts pakalpojumu sniedzēja prefikss, un operators nedrīkst būt gan vēlamo, gan izslēgto sarakstā.",
+      "invalid_saved_personalization_profile": "Saglabātais personalizācijas profils ir bojāts vai izmanto neatbalstītu shēmas versiju. Pārbaudiet laukus un saglabājiet derīgu profilu, lai to aizstātu."
+    }
+  },
+  "services": {
+    "add_favorite": {
+      "name": "Pievienot izlasei",
+      "description": "Saglabāt nesen atrastu uzlādes staciju izlasē.",
+      "fields": {
+        "config_entry_id": {
+          "name": "CurbCharge konfigurācijas ieraksts",
+          "description": "Atlasiet ielādēto CurbCharge ierakstu, kuru atjaunināt."
+        },
+        "station_id": {
+          "name": "Stacijas ID",
+          "description": "Pakalpojumu sniedzēja lokālais tās stacijas ID, kas atrasta pēdējā veiksmīgajā tuvumā esošo staciju meklēšanā."
+        }
+      }
+    },
+    "remove_favorite": {
+      "name": "Noņemt no izlases",
+      "description": "Noņemt saglabātu izlases staciju no CurbCharge konfigurācijas ieraksta.",
+      "fields": {
+        "config_entry_id": {
+          "name": "CurbCharge konfigurācijas ieraksts",
+          "description": "Atlasiet ielādēto CurbCharge ierakstu, kurā ir izlases stacija."
+        },
+        "station_id": {
+          "name": "Stacijas ID",
+          "description": "Noņemamās izlases stacijas pakalpojumu sniedzēja lokālais ID. Tas var būt novecojis vai vairs nebūt pieejams pakalpojumu sniedzēja datos."
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "authentication_failed": {
+      "message": "Neizdevās autentificēties pie uzlādes pakalpojumu sniedzēja."
+    },
+    "invalid_config": {
+      "message": "CurbCharge konfigurācija nav derīga."
+    },
+    "location_not_configured": {
+      "message": "Konfigurētā uzlādes meklēšanas atrašanās vieta nav pieejama."
+    },
+    "rate_limited": {
+      "message": "Uzlādes pakalpojumu sniedzējs ierobežo pieprasījumus. Uzgaidiet, līdz ierobežojums tiek atiestatīts, un mēģiniet vēlreiz."
+    },
+    "unsupported_provider": {
+      "message": "Konfigurētais uzlādes pakalpojumu sniedzējs netiek atbalstīts."
+    },
+    "config_entry_not_loaded": {
+      "message": "Atlasiet ielādētu CurbCharge konfigurācijas ierakstu."
+    },
+    "favorite_not_found": {
+      "message": "Stacijas ID nav šī konfigurācijas ieraksta saglabāto izlases staciju sarakstā."
+    },
+    "invalid_station_id": {
+      "message": "Ievadiet netukšu stacijas ID."
+    },
+    "station_not_discovered": {
+      "message": "Pirms pievienošanas izlasei stacijai jābūt nesen atrastai šajā konfigurācijas ierakstā."
+    }
+  },
+  "selector": {
+    "location_source": {
+      "options": {
+        "home": "Home Assistant mājas koordinātas",
+        "manual": "Manuāli ievadīts platums un garums",
+        "entity": "Home Assistant entītija"
+      }
+    },
+    "ndw_connector_type": {
+      "options": {
+        "type-2": "Type 2 (Mennekes)",
+        "ccs-combo-2": "CCS (Combo 2)",
+        "chademo": "CHAdeMO",
+        "cee-16a-single-phase": "CEE 16 A (vienfāzes)",
+        "cee-16a-three-phase": "CEE 16 A (trīsfāžu)",
+        "cee-32a-three-phase": "CEE 32 A (trīsfāžu)",
+        "domestic-a": "Domestic A (NEMA 1-15)"
+      }
+    },
+    "personalization_connector_type": {
+      "options": {
+        "iec_62196_t2": "Type 2 (Mennekes)",
+        "iec_62196_t2_combo": "CCS Combo 2",
+        "chademo": "CHAdeMO",
+        "iec_60309_2_single_16": "CEE 16 A (vienfāzes)",
+        "iec_60309_2_three_16": "CEE 16 A (trīsfāžu)",
+        "iec_60309_2_three_32": "CEE 32 A (trīsfāžu)",
+        "domestic_a": "Domestic A (NEMA 1-15)",
+        "iec_62196_t1": "Type 1 (J1772)",
+        "iec_62196_t1_combo": "CCS Combo 1",
+        "tesla": "Tesla",
+        "nema_5_15": "NEMA 5-15",
+        "nema_5_20": "NEMA 5-20",
+        "nema_14_50": "NEMA 14-50",
+        "sae_j3271": "SAE J3271 (MCS)"
+      }
+    },
+    "personalization_ranking_preset": {
+      "options": {
+        "balanced": "Līdzsvarots",
+        "lowest_price": "Zemākā cena",
+        "shortest_distance": "Mazākais attālums",
+        "highest_availability": "Visvairāk pieejamo savienotāju",
+        "highest_power": "Lielākā savienotāja jauda"
+      }
+    },
+    "personalization_unknown_data_policy": {
+      "options": {
+        "exclude": "Izslēgt nezināmas preferenču vērtības (ieteicams)",
+        "allow_fallback": "Atļaut nezināmas vērtības tikai rezerves atlasē"
+      }
+    },
+    "provider": {
+      "options": {
+        "ndw_dot_nl": "NDW DOT-NL",
+        "eco_movement_be": "Eco-Movement Belgium (priekšskatījums)",
+        "nobil_no": "NOBIL Norvēģija",
+        "nobil_se": "NOBIL Zviedrija",
+        "afdc_us": "AFDC Amerikas Savienotās Valstis",
+        "digitraffic_afir_fi": "Digitraffic AFIR Somija",
+        "ich_tanke_strom_ch": "ich-tanke-strom Šveice",
+        "chargy_lu": "Chargy Luksemburga",
+        "via_lietuva_lt": "Via Lietuva (Lietuva)"
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "available": {
+        "name": "Pieejams"
+      }
+    },
+    "sensor": {
+      "available_connectors": {
+        "name": "Pieejamie savienotāji"
+      },
+      "availability_percentage": {
+        "name": "Pieejamības procentuālā daļa"
+      },
+      "occupied_connectors": {
+        "name": "Aizņemtie savienotāji"
+      },
+      "unavailable_connectors": {
+        "name": "Nepieejamie savienotāji"
+      },
+      "total_connectors": {
+        "name": "Kopējais savienotāju skaits"
+      },
+      "connector_group": {
+        "name": "{connector_type} savienotāji"
+      },
+      "maximum_charging_power": {
+        "name": "Maksimālā uzlādes jauda"
+      },
+      "price_per_kwh": {
+        "name": "Cena par kWh"
+      },
+      "distance": {
+        "name": "Attālums"
+      },
+      "status_summary": {
+        "name": "Statusa kopsavilkums",
+        "state": {
+          "available": "Pieejams",
+          "none_available": "Nav pieejamu",
+          "unknown": "Nezināms"
+        }
+      },
+      "favorite_status": {
+        "name": "Izlases statuss",
+        "state": {
+          "available": "Pieejams",
+          "none_available": "Nav pieejamu",
+          "unknown": "Nezināms"
+        }
+      },
+      "favorite_summary": {
+        "name": "Izlases kopsavilkums"
+      },
+      "best_nearby_charger": {
+        "name": "Labākā uzlādes stacija tuvumā"
+      },
+      "nearest_available_charger": {
+        "name": "Tuvākā pieejamā uzlādes stacija"
+      },
+      "cheapest_available_charger": {
+        "name": "Lētākā pieejamā uzlādes stacija"
+      },
+      "fastest_available_charger": {
+        "name": "Ātrākā pieejamā uzlādes stacija"
+      },
+      "top_nearby_chargers": {
+        "name": "Labākās uzlādes stacijas tuvumā"
+      },
+      "nearby_charging_units": {
+        "name": "Uzlādes iekārtas tuvumā"
+      },
+      "nearby_available_connectors": {
+        "name": "Pieejamie savienotāji tuvumā"
+      },
+      "nearby_availability_percentage": {
+        "name": "Savienotāju pieejamība tuvumā"
+      }
+    }
+  }
+}

@@ -9,7 +9,7 @@ import pytest
 
 from custom_components.curbcharge.const import SUPPORTED_PROVIDER_IDS
 
-SUPPORTED_LANGUAGES = ("en", "nl", "fr", "de", "nb", "sv", "fi", "it")
+SUPPORTED_LANGUAGES = ("en", "nl", "fr", "de", "nb", "sv", "fi", "it", "lv")
 AFDC_CONNECTOR_TRANSLATION_KEYS = (
     "iec_62196_t1",
     "iec_62196_t1_combo",
