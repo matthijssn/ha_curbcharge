@@ -718,6 +718,35 @@ def test_station_connector_availability_percentage_uses_complete_counts(
     assert empty_sensor.native_value is None
 
 
+def test_recorder_sensors_are_unknown_before_the_first_snapshot(hass, sample_stations):
+    coordinator = CurbChargeCoordinator(
+        hass, FakeProvider(), 52.0, 5.0, 500, 10, 5, True
+    )
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="uninitialized-statistics-area")
+    station_percentage = ConnectorAvailabilityPercentageSensor(
+        coordinator, sample_stations[0]
+    )
+    available_stations = NearbyAvailableStationsSensor(coordinator, entry)
+    prices = (
+        NearbyMinimumPricePerKwhSensor(coordinator, entry),
+        NearbyAveragePricePerKwhSensor(coordinator, entry),
+        NearbyMaximumPricePerKwhSensor(coordinator, entry),
+    )
+    comparable_count = NearbyComparablePriceStationCountSensor(coordinator, entry)
+
+    assert station_percentage.native_value is None
+    assert available_stations.native_value is None
+    assert available_stations.extra_state_attributes["data_quality_status"] is None
+    assert all(sensor.native_value is None for sensor in prices)
+    assert all(sensor.native_unit_of_measurement is None for sensor in prices)
+    assert all(
+        sensor.extra_state_attributes["currency_status"] is None for sensor in prices
+    )
+    assert prices[0].extra_state_attributes["tariff_status_counts"] is None
+    assert comparable_count.native_value is None
+    assert comparable_count.extra_state_attributes["currency_status"] is None
+
+
 def test_connector_group_sensor_exposes_provider_group_counts(hass, sample_stations):
     station = sample_stations[0]
     coordinator = _coordinator(hass, station)
