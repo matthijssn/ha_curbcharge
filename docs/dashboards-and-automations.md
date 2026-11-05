@@ -711,14 +711,84 @@ example, `EUR/kWh`); mixed currencies produce unknown prices with
 contributing and excluded station counts and tariff quality statuses without
 listing station IDs.
 
+A built-in Statistics Graph can show the search-area station and comparable
+price counts:
+
+```yaml
+type: statistics-graph
+title: Nearby availability and comparable prices
+days_to_show: 30
+period: hour
+chart_type: line
+stat_types:
+  - mean
+entities:
+  - sensor.your_nearby_available_stations
+  - sensor.your_nearby_comparable_price_station_count
+```
+
+For a price graph, use the minimum, average, and maximum sensors only while the
+eligible prices remain in one currency:
+
+```yaml
+type: statistics-graph
+title: Nearby gross prices
+days_to_show: 30
+period: hour
+chart_type: line
+stat_types:
+  - mean
+entities:
+  - sensor.your_nearby_minimum_price_per_kwh
+  - sensor.your_nearby_average_price_per_kwh
+  - sensor.your_nearby_maximum_price_per_kwh
+```
+
+The price unit follows the current eligible currency. A currency change changes
+the unit metadata; currencies are not convertible, so Recorder may interrupt
+long-term statistics for that sensor. Review **Developer Tools → Statistics**
+after a unit change, and do not compare or combine values across currencies.
+CurbCharge does not convert prices or keep a separate historical store.
+
+A built-in Markdown card can display the latest bounded Operator Insights rows:
+
+```yaml
+type: markdown
+content: |
+  {% set entity = 'sensor.your_operator_insights' %}
+  {% set operators = state_attr(entity, 'operators') or [] %}
+  {% for row in operators %}
+  - **{{ row.operator | e }}** ({{ row.provider | e }}): {{ row.station_count }} stations
+  {% endfor %}
+  {% if state_attr(entity, 'operator_list_truncated') %}
+  _Showing {{ state_attr(entity, 'displayed_operator_group_count') }} of {{ state_attr(entity, 'total_operator_group_count') }} groups._
+  {% endif %}
+```
+
+These count, percentage, and price entities are `MEASUREMENT` snapshots from
+successful coordinator updates. Recorder statistics summarize the samples it
+observes; they are not time-weighted availability or a custom history. The
+`Operator Insights` numeric group count is recordable, but its per-operator
+`operators` attribute is only the latest bounded snapshot and has no separate
+long-term series.
+
+The price sensors have no currency device class; their unit is the current
+eligible currency per kWh. If that currency changes, Home Assistant sees a unit
+metadata change. Currencies are not convertible, so long-term statistics may
+be interrupted or require attention in **Developer Tools → Statistics**.
+Do not compare price statistics across currencies. CurbCharge does not convert
+prices or keep a separate historical store.
+
 Home Assistant's [Recorder](https://www.home-assistant.io/integrations/recorder/)
 keeps detailed state history for 10 days by default (`purge_keep_days`); this
 can be changed in the Home Assistant Recorder configuration. Five-minute
-statistics follow that retention, while hourly
-long-term statistics for measurement sensors such as availability percentage
-and connector counts are retained indefinitely. The hourly mean of the
-percentage sensor is a trend of reported `0%`/`100%` values, not an exact
-time-in-state calculation; it cannot show changes between provider polls.
+statistics follow that retention, while hourly long-term statistics for
+measurement sensors such as availability percentages and nearby counts are
+retained indefinitely. Price statistics are available while their unit
+metadata remains compatible; currency changes may interrupt that series. The
+hourly mean of the binary-derived percentage sensor is a trend of reported
+`0%`/`100%` values, not an exact time-in-state calculation; it cannot show
+changes between provider polls.
 For numeric sensors with long-term statistics, History Graph may use hourly
 aggregates for older portions of its range; binary sensor transitions remain
 limited to retained detailed history.

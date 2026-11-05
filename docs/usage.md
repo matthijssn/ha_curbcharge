@@ -398,6 +398,10 @@ Each charging point is one Home Assistant device. CurbCharge creates:
   provider reports no available connectors, and unknown when availability is
   unknown. It mirrors the binary sensor; it is not a percentage of time
   available or a ratio of available to total connectors.
+- **Connector availability percentage**: the station's reported
+  `available_connectors / total_connectors` ratio, rounded to one decimal place.
+  Partial or unknown connector counts and a zero denominator produce unknown.
+  This does not change the binary-derived **Availability percentage**.
 - **Available connectors**, **Occupied connectors**, **Unavailable
   connectors**, and **Total connectors**.
 - **Maximum charging power**, **Price per kWh**, and **Distance**.
@@ -421,23 +425,24 @@ Each charging point is one Home Assistant device. CurbCharge creates:
   recommendations. Each recommendation uses the shared station payload; the
   cheapest result is empty when prices span multiple currencies.
 - The entry-level **Operator Insights** sensor is enabled by default and its
-  integer state counts current provider-scoped operator groups. Its `operators`
-  attribute contains at most ten rows, ordered by station count and a stable
-  normalized operator key. Names are trimmed, internal whitespace is collapsed,
-  and matching is case-insensitive; punctuation and provider identity are
-  preserved. Each row reports available station, connector, price, and power
-  summaries where known. Mixed-currency groups have no comparable price values;
-  stations without an operator name are counted separately as
-  `unattributed_station_count`. No station IDs, addresses, or coordinates are
-  included. The rows describe only the latest coordinator snapshot and are not
-  stored as per-operator long-term statistics; only the numeric group count is
-  a recordable state. This single entity can be disabled from Home Assistant's
+  unitless `MEASUREMENT` state counts current provider-scoped operator groups.
+  The `operators` attribute contains at most ten rows, ordered by station count
+  and a stable normalized operator key. Names are trimmed, internal whitespace
+  is collapsed, and matching is case-insensitive; punctuation and provider
+  identity are preserved. Each row reports station counts plus any known
+  availability, connector, price, and power summaries. Mixed-currency groups
+  have no comparable price values. Stations without an operator name are
+  counted separately as `unattributed_station_count`. No station IDs, addresses,
+  or coordinates are included. The rows describe only the latest coordinator
+  snapshot and are not stored as per-operator long-term statistics; only the
+  numeric group count is a recordable state. This single entity can be disabled from Home Assistant's
   entity registry.
-- Integration-level **Best nearby charger**, **Top nearby chargers**,
+- Entry-level **Best nearby charger**, **Top nearby chargers**,
   **Nearest available charger**, **Cheapest available charger**,
-  **Fastest available charger**, **Nearby charging units**, and **Nearby
-  available connectors** sensors. The
-  charging-unit count covers
+  **Fastest available charger**, **Nearby charging units**, **Nearby available
+  connectors**, **Nearby connector availability**, **Nearby available stations**,
+  minimum/average/maximum nearby gross-price sensors per kWh, and the
+  comparable-price station count. The charging-unit count covers
   current, non-stale records in that entry's configured search area (NDW
   charge-point records in the Netherlands and EVSEs in Belgium), not physical
   sites, available chargers, or nationwide coverage. Its attributes report
@@ -456,6 +461,24 @@ Each charging point is one Home Assistant device. CurbCharge creates:
   provider-reported connector totals; attributes also disclose unreported
   totals. If no known denominator remains, the sensor is unknown rather than
   0%.
+
+The entry-level **Nearby available stations** count includes a fresh in-radius
+station only when at least one connector group has a known positive available
+count. It counts each station once. A status-only station whose connector
+counts are unknown is not counted as available by this sensor; its unknown
+availability remains visible in the aggregate attributes.
+
+These entry-level statistics share the latest snapshot and are scoped to one
+config entry's fresh, in-radius records, including fresh in-radius favourites
+but excluding remote or stale stations. Price aggregates reuse each station's
+normalized gross tariff once, not once per connector group. Only
+finite prices with a currency and an available, unambiguous tariff status are
+eligible; a reported zero price is valid. Missing, conditional, incomplete,
+inactive, or otherwise invalid prices do not contribute. Minimum, average, and
+maximum are reported only when all eligible prices share one currency; no
+currency conversion or country-based choice is made. The comparable-price
+station count is zero when the eligible prices are mixed. Price attributes
+distinguish valid-but-mixed prices, unknown prices, and invalid tariffs.
 
 The Home Assistant State object has its own `last_changed` and `last_updated`
 timestamps. `last_changed` is when Home Assistant last observed the entity's

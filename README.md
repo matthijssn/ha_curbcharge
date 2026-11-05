@@ -51,6 +51,8 @@ relying on a provider.
 - One device per nearby public charging point
 - Provider-reported availability, connector counts, power, distance and operator
 - Tariff information when the provider data is complete and unambiguous
+- Recorder-facing availability and gross-price statistics, plus bounded
+  Operator Insights summaries; see the [entity guide](docs/usage.md#entities)
 - A best-nearby recommendation and favorite monitoring
 - A bundled dashboard card, plus copyable dashboard and automation examples
 
