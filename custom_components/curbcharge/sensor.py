@@ -79,6 +79,7 @@ async def async_setup_entry(
         NearbyMaximumPricePerKwhSensor(coordinator, entry),
         NearbyComparablePriceStationCountSensor(coordinator, entry),
         FavoriteSummarySensor(coordinator, entry),
+        OperatorInsightsSensor(coordinator, entry),
     ]
     _migrate_aggregate_entity_ids(hass, entry, aggregate_entities)
     async_add_entities(aggregate_entities)
@@ -923,6 +924,70 @@ def _favorite_summary_attributes(
     return attributes
 
 
+def _operator_insights_attributes(
+    coordinator: CurbChargeCoordinator,
+) -> dict[str, Any]:
+    """Return bounded, current operator summaries without station details."""
+    snapshot = coordinator.statistics_snapshot
+    if snapshot is None:
+        return {
+            "data_quality_status": None,
+            "last_successful_update": None,
+            "fresh_station_count": None,
+            "stale_station_count": None,
+            "results_may_be_truncated": None,
+            "total_operator_group_count": None,
+            "displayed_operator_group_count": None,
+            "operator_list_truncated": None,
+            "unattributed_station_count": None,
+            "operators": None,
+        }
+
+    return {
+        "data_quality_status": snapshot.data_quality_status,
+        "last_successful_update": _isoformat(snapshot.last_successful_update),
+        "fresh_station_count": snapshot.fresh_station_count,
+        "stale_station_count": snapshot.stale_station_count,
+        "results_may_be_truncated": snapshot.results_may_be_truncated,
+        "total_operator_group_count": snapshot.operator_group_count,
+        "displayed_operator_group_count": len(snapshot.operator_summaries),
+        "operator_list_truncated": snapshot.operator_list_truncated,
+        "unattributed_station_count": snapshot.unattributed_station_count,
+        "operators": [
+            {
+                "provider": summary.provider,
+                "operator": summary.operator,
+                "station_count": summary.station_count,
+                "known_availability_station_count": (
+                    summary.known_availability_station_count
+                ),
+                "available_station_count": summary.available_station_count,
+                "unknown_availability_station_count": (
+                    summary.unknown_availability_station_count
+                ),
+                "available_connectors": summary.available_connectors,
+                "total_connectors": summary.total_connectors,
+                "reported_total_connectors": summary.reported_total_connectors,
+                "availability_percentage": summary.availability_percentage,
+                "currency": summary.currency,
+                "currency_status": summary.currency_status,
+                "known_price_station_count": summary.known_price_station_count,
+                "comparable_price_station_count": (
+                    summary.comparable_price_station_count
+                ),
+                "minimum_price_per_kwh": _decimal_attribute(
+                    summary.minimum_price_per_kwh
+                ),
+                "average_price_per_kwh": _decimal_attribute(
+                    summary.average_price_per_kwh
+                ),
+                "average_max_power_kw": summary.average_max_power_kw,
+            }
+            for summary in snapshot.operator_summaries
+        ],
+    }
+
+
 class FavoriteSummarySensor(CoordinatorEntity[CurbChargeCoordinator], SensorEntity):
     """Summarize favorite discovery, availability, freshness, and recommendations."""
 
@@ -943,6 +1008,31 @@ class FavoriteSummarySensor(CoordinatorEntity[CurbChargeCoordinator], SensorEnti
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         return _favorite_summary_attributes(self.coordinator)
+
+
+class OperatorInsightsSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEntity):
+    """Expose bounded current operator summaries for this config entry."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "operator_insights"
+    _attr_entity_registry_enabled_default = True
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self, coordinator: CurbChargeCoordinator, entry: ConfigEntry[Any]
+    ) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_operator_insights"
+        self._unique_id_suffix = "operator_insights"
+
+    @property
+    def native_value(self) -> int | None:
+        snapshot = self.coordinator.statistics_snapshot
+        return None if snapshot is None else snapshot.operator_group_count
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return _operator_insights_attributes(self.coordinator)
 
 
 class NearbyChargingUnitsSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEntity):

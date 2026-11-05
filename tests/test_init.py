@@ -534,6 +534,42 @@ def _provider_station(station, provider_id, provider_name, country_code):
 
 
 @pytest.mark.asyncio
+async def test_operator_insights_is_one_entry_entity_and_user_disableable(
+    hass, monkeypatch, sample_stations
+):
+    station = replace(
+        _provider_station(sample_stations[0], PROVIDER_NDW_DOT_NL, "NDW DOT-NL", "NL"),
+        operator="Example CPO",
+    )
+    provider = FakeProvider([(station,)])
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    entry = _entry(unique_id="operator-insights-entry")
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    registry = er.async_get(hass)
+    operator_entities = [
+        entity
+        for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
+        if entity.unique_id == f"{entry.entry_id}_operator_insights"
+    ]
+    assert len(operator_entities) == 1
+    operator_entity = operator_entities[0]
+    assert operator_entity.disabled_by is None
+    assert operator_entity.device_id is None
+    state = hass.states.get(operator_entity.entity_id)
+    assert state is not None and state.state == "1"
+
+    registry.async_update_entity(
+        operator_entity.entity_id, disabled_by=er.RegistryEntryDisabler.USER
+    )
+    updated = registry.entities[operator_entity.entity_id]
+    assert updated.disabled_by is er.RegistryEntryDisabler.USER
+
+
+@pytest.mark.asyncio
 async def test_favorite_sensors_follow_coordinator_changes_without_provider_calls(
     hass, monkeypatch, sample_stations
 ):

@@ -431,6 +431,9 @@
       "favorite_summary": {
         "name": "Izlases kopsavilkums"
       },
+      "operator_insights": {
+        "name": "Operatoru pārskats"
+      },
       "best_nearby_charger": {
         "name": "Labākā uzlādes stacija tuvumā"
       },

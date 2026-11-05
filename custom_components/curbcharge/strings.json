@@ -431,6 +431,9 @@
       "favorite_summary": {
         "name": "Favorite summary"
       },
+      "operator_insights": {
+        "name": "Operator insights"
+      },
       "best_nearby_charger": {
         "name": "Best nearby charger"
       },

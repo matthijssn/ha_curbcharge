@@ -431,6 +431,9 @@
       "favorite_summary": {
         "name": "Favorittoversikt"
       },
+      "operator_insights": {
+        "name": "Operatøroversikt"
+      },
       "best_nearby_charger": {
         "name": "Beste lader i nærheten"
       },
