@@ -388,6 +388,9 @@
       "availability_percentage": {
         "name": "Saatavuusprosentti"
       },
+      "connector_availability_percentage": {
+        "name": "Liittimien saatavuusprosentti"
+      },
       "occupied_connectors": {
         "name": "Varatut liittimet"
       },
@@ -451,6 +454,21 @@
       },
       "nearby_availability_percentage": {
         "name": "Lähialueen liitinsaatavuus"
+      },
+      "nearby_available_stations": {
+        "name": "Lähellä olevat latausasemat, joilla on vähintään yksi vapaa liitin"
+      },
+      "nearby_minimum_price_per_kwh": {
+        "name": "Alin kokonaishinta per kWh lähialueella"
+      },
+      "nearby_average_price_per_kwh": {
+        "name": "Keskimääräinen kokonaishinta per kWh lähialueella"
+      },
+      "nearby_maximum_price_per_kwh": {
+        "name": "Ylin kokonaishinta per kWh lähialueella"
+      },
+      "nearby_comparable_price_station_count": {
+        "name": "Lähellä olevat latausasemat, joiden hinnat ovat vertailukelpoisia"
       }
     }
   }

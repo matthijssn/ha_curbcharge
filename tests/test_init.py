@@ -876,7 +876,7 @@ async def test_favorite_entity_and_device_growth_is_linear(
         for entity in entity_entries
         if any(entity.unique_id.startswith(prefix) for prefix in station_prefixes)
     ]
-    assert len(favorite_entities) == favorite_count * 11
+    assert len(favorite_entities) == favorite_count * 12
     assert (
         sum(
             entity.unique_id.endswith(f"_favorite_status_{entry.entry_id}")
@@ -938,10 +938,22 @@ async def test_station_availability_percentage_is_unavailable_during_provider_fa
             f"{entry.entry_id}"
         )
     )
+    connector_availability_entity = next(
+        entity
+        for entity in er.async_entries_for_config_entry(registry, entry.entry_id)
+        if entity.unique_id
+        == (
+            f"{station.provider}_{station.provider_id}_"
+            f"connector_availability_percentage_{entry.entry_id}"
+        )
+    )
 
     state = hass.states.get(availability_entity.entity_id)
     assert state is not None
     assert float(state.state) == 100.0
+    connector_state = hass.states.get(connector_availability_entity.entity_id)
+    assert connector_state is not None
+    assert float(connector_state.state) == 50.0
 
     coordinator = entry.runtime_data
     await coordinator.async_refresh()
@@ -951,6 +963,9 @@ async def test_station_availability_percentage_is_unavailable_during_provider_fa
     state = hass.states.get(availability_entity.entity_id)
     assert state is not None
     assert state.state == "unavailable"
+    connector_state = hass.states.get(connector_availability_entity.entity_id)
+    assert connector_state is not None
+    assert connector_state.state == "unavailable"
 
     await coordinator.async_refresh()
     await hass.async_block_till_done()
@@ -959,6 +974,9 @@ async def test_station_availability_percentage_is_unavailable_during_provider_fa
     state = hass.states.get(availability_entity.entity_id)
     assert state is not None
     assert float(state.state) == 100.0
+    connector_state = hass.states.get(connector_availability_entity.entity_id)
+    assert connector_state is not None
+    assert float(connector_state.state) == 50.0
     assert len(provider.station_calls) == 3
 
 
@@ -1036,6 +1054,19 @@ async def test_nl_and_be_entries_refresh_fail_recover_and_reload_independently(
     nl_unique_ids = {entity.unique_id for entity in nl_entities}
     be_unique_ids = {entity.unique_id for entity in be_entities}
     assert nl_unique_ids.isdisjoint(be_unique_ids)
+    statistics_suffixes = (
+        "nearby_available_stations",
+        "nearby_minimum_price_per_kwh",
+        "nearby_average_price_per_kwh",
+        "nearby_maximum_price_per_kwh",
+        "nearby_comparable_price_station_count",
+    )
+    assert {
+        f"{nl_entry.entry_id}_{suffix}" for suffix in statistics_suffixes
+    } <= nl_unique_ids
+    assert {
+        f"{be_entry.entry_id}_{suffix}" for suffix in statistics_suffixes
+    } <= be_unique_ids
 
     nl_count = next(
         entity

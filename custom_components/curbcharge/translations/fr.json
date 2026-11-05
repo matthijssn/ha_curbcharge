@@ -388,6 +388,9 @@
       "availability_percentage": {
         "name": "Pourcentage de disponibilité"
       },
+      "connector_availability_percentage": {
+        "name": "Pourcentage de connecteurs disponibles"
+      },
       "occupied_connectors": {
         "name": "Connecteurs occupés"
       },
@@ -451,6 +454,21 @@
       },
       "nearby_availability_percentage": {
         "name": "Disponibilité des connecteurs à proximité"
+      },
+      "nearby_available_stations": {
+        "name": "Bornes avec un connecteur disponible à proximité"
+      },
+      "nearby_minimum_price_per_kwh": {
+        "name": "Prix brut minimum par kWh à proximité"
+      },
+      "nearby_average_price_per_kwh": {
+        "name": "Prix brut moyen par kWh à proximité"
+      },
+      "nearby_maximum_price_per_kwh": {
+        "name": "Prix brut maximum par kWh à proximité"
+      },
+      "nearby_comparable_price_station_count": {
+        "name": "Bornes avec des prix comparables à proximité"
       }
     }
   }
