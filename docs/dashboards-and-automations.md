@@ -310,6 +310,62 @@ mode: single
 The values are recalculated with the regular coordinator refresh, so an
 automation responds to poll updates rather than every provider or GPS event.
 
+### Personalization templates and triggers
+
+The following templates use the existing `personalization` attributes. Replace
+the example entity ID and connector criteria with the values configured in your
+profile. With personalization disabled, the attribute is absent and the
+expressions safely return false:
+
+```jinja
+{% set profile = state_attr('sensor.your_best_nearby_charger', 'personalization') or {} %}
+{{ 'preferred_operator' in profile.get('preference_matches', []) }}
+```
+
+Check whether Best nearby used a fallback and inspect its stable reason codes:
+
+```jinja
+{% set profile = state_attr('sensor.your_best_nearby_charger', 'personalization') or {} %}
+{{ profile.get('fallback_used', false) }}
+```
+
+To require a preferred operator and a confirmed compatible connector group,
+check both the preference match and the group facts. This example requires a
+CCS Combo 2 group with at least 100 kW:
+
+```jinja
+{% set profile = state_attr('sensor.your_best_nearby_charger', 'personalization') or {} %}
+{% set group = profile.get('matched_connector_group') or {} %}
+{{ 'preferred_operator' in profile.get('preference_matches', [])
+   and group.get('connector_type_id') == 'IEC_62196_T2_COMBO'
+   and group.get('max_power_kw') is not none
+   and group.get('max_power_kw') >= 100 }}
+```
+
+An enabled profile with no eligible result has a distinct status:
+
+```jinja
+{{ state_attr('sensor.your_best_nearby_charger', 'result_status') == 'no_personalized_match' }}
+```
+
+To react only when the selected station changes, compare its provider-scoped
+station ID before and after the sensor update. Attach any action you choose;
+this trigger/condition fragment does not assume a notification platform:
+
+```yaml
+trigger:
+  - platform: state
+    entity_id: sensor.your_best_nearby_charger
+condition:
+  - condition: template
+    value_template: >
+      {% set old_id = trigger.from_state.attributes.get('provider_station_id')
+         if trigger.from_state is not none else none %}
+      {% set new_id = trigger.to_state.attributes.get('provider_station_id')
+         if trigger.to_state is not none else none %}
+      {{ old_id is not none and new_id is not none and old_id != new_id }}
+```
+
 ### Favorite services and automations
 
 Favorites belong to one CurbCharge config entry. The administrator-only
