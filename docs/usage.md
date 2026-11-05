@@ -330,6 +330,20 @@ nonnegative decimal and include a three-letter currency code. It is strict:
 unknown prices and prices in another currency do not satisfy the limit, and
 CurbCharge does not convert currencies.
 
+To restore profile defaults, open **Options → Personalization**, disable the
+profile, clear connector types, minimum power, preferred/excluded operators,
+and price/currency, select **Balanced**, enable fallback, set unknown-data
+policy to **Exclude**, and save. There is no separate reset button.
+
+Connector choices are provider-independent canonical IDs:
+`IEC_62196_T1`, `IEC_62196_T2`, `IEC_62196_T1_COMBO`,
+`IEC_62196_T2_COMBO`, `CHADEMO`, `TESLA`, `NEMA_5_15`, `NEMA_5_20`,
+`NEMA_14_50`, `SAE_J3271`, `IEC_60309_2_SINGLE_16`,
+`IEC_60309_2_THREE_16`, `IEC_60309_2_THREE_32`, and `DOMESTIC_A`. The options
+page has no separate AC/DC mode selector. When connector types and minimum
+power are both set, a single fresh, available connector group must satisfy
+both; power or availability from another group is not combined.
+
 Enter operator references one per line as `ndw_dot_nl:<cpo_id>`,
 `eco_movement_be:<operator name>`, or `afdc_us:<network name>`. NDW's `cpo_id` identifies the CPO in its
 published data; see the
@@ -340,14 +354,40 @@ longer matches.
 Belgium currently has no stable operator ID in the available fixture, so its
 names match only after trimming, collapsing whitespace, and case-folding.
 AFDC network names are matched exactly as returned by the station directory.
-These references are saved independently of the current search radius and are
-not fuzzy-matched. When enabled, the profile filters and ranks Best nearby and
-Top nearby results. If preferred operators are configured, they form the
-first-choice tier; non-preferred candidates are considered only when no full
-match exists and fallback is enabled. Unknown availability and known
-hard-constraint failures are never bypassed. Unknown connector, power, or
-operator data follows the selected unknown-data policy. Older entries without
-a profile remain disabled without a config-entry migration.
+Other providers use their operator ID when present, otherwise the trimmed
+operator name; provider qualification always matters. Apart from Belgium's
+whitespace/case normalization, matching is exact after trimming and does not
+remove punctuation or legal suffixes. IDs and display names may change upstream,
+so saved references can stop matching.
+
+Hard constraints are compatible connector type, minimum connector-group power,
+excluded operator, and maximum price in the specified currency; none is relaxed
+by fallback. Preferred operators are a soft first-choice tier. The fixed
+presets are **Balanced** (the existing Best nearby order), **Lowest price**,
+**Shortest distance**, **Highest availability**, and **Highest power**; custom
+weights and AC/DC mode filters are not supported. Lowest price compares only
+known prices when they share one currency; candidates with unknown prices sort
+after known prices in that case. If eligible prices have multiple currencies or
+none are known, the preset uses the Balanced order instead.
+
+Fallback is considered only when no full match exists and `allow_fallback` is
+enabled (the default). Unknown connector type, power, or operator data is
+excluded by the default `Exclude` unknown-data policy; `Allow fallback` can
+admit such records into the fallback pool. Unknown availability and known hard
+constraint failures are never bypassed. Stable `fallback_reasons` include
+`preferred_operator_not_matched`, `unknown_connector_type`, `unknown_power`,
+and `unknown_operator`; rejected station details use `rejection_reason` codes
+such as `maximum_price_exceeded`, `maximum_price_currency_mismatch`,
+`maximum_price_unknown`, `excluded_operator`, or
+`no_compatible_connector_group`. Best nearby and Top nearby report
+`result_status: no_personalized_match` when the enabled profile has no eligible
+result. Profile evaluation reuses the coordinator snapshot and adds no provider
+requests.
+
+When personalization is disabled or absent, the existing recommendation state,
+entity IDs, `reason`, base ranking and card content retain their prior meaning.
+Older entries without a profile remain disabled without a config-entry
+migration.
 
 See the
 [Belgium preview setup](#belgium-preview-setup) steps before choosing that
@@ -524,12 +564,22 @@ availability, and Highest power. Preferred operators form the first-choice
 tier; the selected preset ranks candidates within that tier. When no full match
 exists, eligible non-preferred or explicitly permitted unknown-data candidates
 may be used as fallback. Lowest price never compares different currencies; if
-prices are mixed or all unknown, the existing Balanced order is used.
+eligible prices have multiple currencies or none are known, the existing
+Balanced order is used. When known prices share one currency, they sort ahead
+of candidates with unknown prices.
 The existing rank and score attributes on Best nearby and station summaries
 remain objective; Top nearby items additionally expose their personalized rank
 and score when personalization is enabled.
 
-The three additional selectors offer deterministic alternatives. Each requires
+Personalized rank and score are relative to the eligible personalized cohort.
+For `M` eligible candidates, the one-based personalized rank score is
+`100 * (M - personalized_rank + 1) / M`; rank one scores 100. These values
+change with the cohort and preset and are not absolute station-quality or
+confidence measures. With no eligible personalized candidate, there is no
+personalized rank or score.
+
+The three additional selectors offer deterministic alternatives and ignore the
+personalization profile. Each requires
 a fresh station with a known `available_connectors` count greater than zero;
 unknown availability, zero connectors, and stale records do not qualify.
 **Nearest available charger** requires a known distance and chooses the

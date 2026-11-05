@@ -54,6 +54,8 @@ relying on a provider.
 - Recorder-facing availability and gross-price statistics, plus bounded
   Operator Insights summaries; see the [entity guide](docs/usage.md#entities)
 - A best-nearby recommendation and favorite monitoring
+- Optional connector, price, and operator personalization with match and
+  fallback explanations
 - A bundled dashboard card, plus copyable dashboard and automation examples
 
 ## Documentation

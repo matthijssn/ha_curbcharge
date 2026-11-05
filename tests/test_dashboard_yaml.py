@@ -12,6 +12,15 @@ MAP_PATH = REPOSITORY_ROOT / "examples" / "curbcharge-map.yaml"
 NAVIGATION_PATH = REPOSITORY_ROOT / "examples" / "curbcharge-navigation.yaml"
 
 
+def _yaml_block_containing(text, marker):
+    marker_index = text.index(marker)
+    block_start = text.rfind("```yaml\n", 0, marker_index)
+    assert block_start >= 0
+    content_start = block_start + len("```yaml\n")
+    block_end = text.index("\n```", marker_index)
+    return yaml.safe_load(text[content_start:block_end])
+
+
 def test_documented_dashboard_examples_parse_and_link_to_canonical_files():
     readme = README_PATH.read_text(encoding="utf-8")
     guide = GUIDE_PATH.read_text(encoding="utf-8")
@@ -119,3 +128,23 @@ def test_documented_dashboard_examples_parse_and_link_to_canonical_files():
     )
     assert "custom:auto-entities" not in native_section
     assert "custom:auto-entities" in optional_section
+
+
+def test_documented_personalization_templates_and_trigger_parse():
+    guide = GUIDE_PATH.read_text(encoding="utf-8")
+    section = guide.split("### Personalization templates and triggers", 1)[1].split(
+        "### Favorite services and automations", 1
+    )[0]
+    assert "preferred_operator" in section
+    assert "fallback_used" in section
+    assert "IEC_62196_T2_COMBO" in section
+    assert "no_personalized_match" in section
+    assert "provider_station_id" in section
+    assert "does not assume a notification platform" in section
+
+    trigger = _yaml_block_containing(
+        section, "entity_id: sensor.your_best_nearby_charger"
+    )
+    assert trigger["trigger"][0]["platform"] == "state"
+    assert trigger["condition"][0]["condition"] == "template"
+    assert "provider_station_id" in trigger["condition"][0]["value_template"]
