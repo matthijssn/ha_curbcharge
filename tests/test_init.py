@@ -876,7 +876,7 @@ async def test_favorite_entity_and_device_growth_is_linear(
         for entity in entity_entries
         if any(entity.unique_id.startswith(prefix) for prefix in station_prefixes)
     ]
-    assert len(favorite_entities) == favorite_count * 11
+    assert len(favorite_entities) == favorite_count * 12
     assert (
         sum(
             entity.unique_id.endswith(f"_favorite_status_{entry.entry_id}")
