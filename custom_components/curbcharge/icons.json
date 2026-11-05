@@ -26,6 +26,24 @@
           "none_available": "mdi:ev-station-outline",
           "unknown": "mdi:help-circle-outline"
         }
+      },
+      "connector_availability_percentage": {
+        "default": "mdi:percent-outline"
+      },
+      "nearby_available_stations": {
+        "default": "mdi:ev-station"
+      },
+      "nearby_minimum_price_per_kwh": {
+        "default": "mdi:cash-minus"
+      },
+      "nearby_average_price_per_kwh": {
+        "default": "mdi:cash"
+      },
+      "nearby_maximum_price_per_kwh": {
+        "default": "mdi:cash-plus"
+      },
+      "nearby_comparable_price_station_count": {
+        "default": "mdi:counter"
       }
     }
   }

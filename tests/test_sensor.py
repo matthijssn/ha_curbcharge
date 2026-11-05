@@ -35,6 +35,7 @@ from custom_components.curbcharge.sensor import (
     AvailableConnectorsSensor,
     BestNearbyChargerSensor,
     CheapestAvailableChargerSensor,
+    ConnectorAvailabilityPercentageSensor,
     ConnectorGroupSensor,
     DistanceSensor,
     FastestAvailableChargerSensor,
@@ -43,7 +44,12 @@ from custom_components.curbcharge.sensor import (
     MaximumChargingPowerSensor,
     NearbyAvailabilityPercentageSensor,
     NearbyAvailableConnectorsSensor,
+    NearbyAvailableStationsSensor,
+    NearbyAveragePricePerKwhSensor,
     NearbyChargingUnitsSensor,
+    NearbyComparablePriceStationCountSensor,
+    NearbyMaximumPricePerKwhSensor,
+    NearbyMinimumPricePerKwhSensor,
     NearestAvailableChargerSensor,
     OccupiedConnectorsSensor,
     PricePerKwhSensor,
@@ -575,6 +581,38 @@ def test_nearby_availability_percentage_does_not_infer_be_evse_status(
     assert sensor.extra_state_attributes["availability_coverage_percent"] == 0.0
 
 
+def test_nearby_available_stations_counts_known_positive_connector_availability(
+    hass, sample_stations
+):
+    available, zero, unknown = sample_stations
+    stale = replace(available, provider_id="NL-STALE", is_stale=True)
+    coordinator = _coordinator(hass, available, max_stations=3)
+    coordinator.async_set_updated_data(
+        {
+            available.provider_id: available,
+            zero.provider_id: zero,
+            unknown.provider_id: unknown,
+            stale.provider_id: stale,
+        }
+    )
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="available-stations-area")
+    sensor = NearbyAvailableStationsSensor(coordinator, entry)
+
+    assert sensor.native_value == 1
+    assert sensor.unique_id == f"{entry.entry_id}_nearby_available_stations"
+    assert sensor.state_class is SensorStateClass.MEASUREMENT
+    attributes = sensor.extra_state_attributes
+    assert attributes["counted_unit"] == "charging_station"
+    assert attributes["available_station_count"] == 1
+    assert attributes["fresh_station_count"] == 3
+    assert attributes["known_availability_station_count"] == 2
+    assert attributes["unknown_availability_station_count"] == 1
+    assert attributes["stale_station_count"] == 1
+
+    coordinator.async_set_updated_data({})
+    assert sensor.native_value == 0
+
+
 def test_connector_sensors_do_not_infer_occupancy(hass, sample_stations):
     station = sample_stations[0]
     coordinator = _coordinator(hass, station)
@@ -619,6 +657,65 @@ def test_station_availability_percentage_mirrors_binary_sensor(hass, sample_stat
     stale = replace(station, is_stale=True)
     stale_sensor = AvailabilityPercentageSensor(_coordinator(hass, stale), stale)
     assert not stale_sensor.available
+
+
+def test_station_connector_availability_percentage_uses_complete_counts(
+    hass, sample_stations
+):
+    station = sample_stations[0]
+    coordinator = _coordinator(hass, station)
+    sensor = ConnectorAvailabilityPercentageSensor(coordinator, station)
+
+    assert station.available_connectors == 2
+    assert station.total_connectors == 4
+    assert sensor.native_value == 50.0
+    assert sensor.native_unit_of_measurement == PERCENTAGE
+    assert sensor.state_class is SensorStateClass.MEASUREMENT
+    assert sensor.unique_id == (
+        f"{station.provider}_{station.provider_id}_connector_availability_percentage"
+    )
+    assert AvailabilityPercentageSensor(coordinator, station).native_value == 100.0
+
+    zero = sample_stations[1]
+    assert (
+        ConnectorAvailabilityPercentageSensor(
+            _coordinator(hass, zero), zero
+        ).native_value
+        == 0.0
+    )
+
+    partial = replace(
+        station,
+        connectors=(
+            ChargingConnector(
+                "known-group",
+                None,
+                ConnectorStatus.UNKNOWN,
+                None,
+                count=2,
+                available_count=1,
+            ),
+            ChargingConnector(
+                "unknown-group",
+                None,
+                ConnectorStatus.UNKNOWN,
+                None,
+                count=2,
+            ),
+        ),
+    )
+    partial_sensor = ConnectorAvailabilityPercentageSensor(
+        _coordinator(hass, partial), partial
+    )
+    assert partial.available_connectors is None
+    assert partial_sensor.native_value is None
+
+    empty = replace(station, connectors=())
+    empty_sensor = ConnectorAvailabilityPercentageSensor(
+        _coordinator(hass, empty), empty
+    )
+    assert empty.total_connectors == 0
+    assert empty_sensor.native_value is None
 
 
 def test_connector_group_sensor_exposes_provider_group_counts(hass, sample_stations):
@@ -718,6 +815,205 @@ def test_price_sensor_is_unknown_without_tariff(hass, sample_stations):
     assert sensor.native_value is None
     assert sensor.native_unit_of_measurement == "EUR/kWh"
     assert sensor.extra_state_attributes["tariff_status"] == "incomplete"
+
+
+def test_nearby_price_sensors_aggregate_each_station_once(hass, sample_stations):
+    zero = replace(
+        sample_stations[0],
+        provider_id="NL-PRICE-ZERO",
+        connectors=(
+            ChargingConnector(
+                "zero-group-a",
+                None,
+                ConnectorStatus.UNKNOWN,
+                None,
+                count=2,
+                available_count=1,
+            ),
+            ChargingConnector(
+                "zero-group-b",
+                None,
+                ConnectorStatus.UNKNOWN,
+                None,
+                count=3,
+                available_count=2,
+            ),
+        ),
+        tariff=ChargingTariff(
+            "EUR",
+            Decimal("0"),
+            None,
+            None,
+            None,
+            "test",
+            status=TariffStatus.AVAILABLE,
+        ),
+        tariff_status=TariffStatus.AVAILABLE,
+    )
+    positive = replace(
+        sample_stations[1],
+        provider_id="NL-PRICE-POSITIVE",
+        tariff=ChargingTariff(
+            "EUR",
+            Decimal("0.4"),
+            None,
+            None,
+            None,
+            "test",
+            status=TariffStatus.AVAILABLE,
+        ),
+        tariff_status=TariffStatus.AVAILABLE,
+    )
+    incomplete = replace(
+        sample_stations[2],
+        provider_id="NL-PRICE-INCOMPLETE",
+        tariff=ChargingTariff(
+            "EUR",
+            Decimal("0.9"),
+            None,
+            None,
+            None,
+            "test",
+            status=TariffStatus.INCOMPLETE,
+        ),
+        tariff_status=TariffStatus.INCOMPLETE,
+    )
+    coordinator = _coordinator(hass, zero, max_stations=5)
+    coordinator.async_set_updated_data(
+        {
+            zero.provider_id: zero,
+            positive.provider_id: positive,
+            incomplete.provider_id: incomplete,
+        }
+    )
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="price-statistics-area")
+    minimum = NearbyMinimumPricePerKwhSensor(coordinator, entry)
+    average = NearbyAveragePricePerKwhSensor(coordinator, entry)
+    maximum = NearbyMaximumPricePerKwhSensor(coordinator, entry)
+    comparable_count = NearbyComparablePriceStationCountSensor(coordinator, entry)
+
+    assert minimum.native_value == 0.0
+    assert average.native_value == 0.2
+    assert maximum.native_value == 0.4
+    assert comparable_count.native_value == 2
+    assert minimum.native_unit_of_measurement == "EUR/kWh"
+    assert average.native_unit_of_measurement == "EUR/kWh"
+    assert maximum.native_unit_of_measurement == "EUR/kWh"
+    assert all(
+        sensor.state_class is SensorStateClass.MEASUREMENT
+        and sensor.device_class is None
+        for sensor in (minimum, average, maximum, comparable_count)
+    )
+    assert minimum.unique_id == (f"{entry.entry_id}_nearby_minimum_price_per_kwh")
+
+    attributes = minimum.extra_state_attributes
+    assert attributes["currency"] == "EUR"
+    assert attributes["currency_status"] == "single_currency"
+    assert attributes["data_quality_status"] == "partial"
+    assert attributes["known_price_station_count"] == 2
+    assert attributes["comparable_price_station_count"] == 2
+    assert attributes["contributing_price_station_count"] == 2
+    assert attributes["excluded_price_station_count"] == 1
+    assert attributes["unknown_price_station_count"] == 1
+    assert attributes["invalid_tariff_station_count"] == 1
+    assert attributes["mixed_currency_station_count"] == 0
+    assert attributes["tariff_status_counts"] == {
+        "available": 2,
+        "incomplete": 1,
+    }
+    assert "station_ids" not in attributes
+
+
+def test_nearby_price_sensors_are_unknown_for_mixed_currencies(hass, sample_stations):
+    euro = replace(
+        sample_stations[0],
+        provider_id="NL-PRICE-EUR",
+        tariff=ChargingTariff(
+            "EUR",
+            Decimal("0.2"),
+            None,
+            None,
+            None,
+            "test",
+            status=TariffStatus.AVAILABLE,
+        ),
+        tariff_status=TariffStatus.AVAILABLE,
+    )
+    dollar = replace(
+        sample_stations[1],
+        provider_id="NL-PRICE-USD",
+        tariff=ChargingTariff(
+            "USD",
+            Decimal("0.3"),
+            None,
+            None,
+            None,
+            "test",
+            status=TariffStatus.AVAILABLE,
+        ),
+        tariff_status=TariffStatus.AVAILABLE,
+    )
+    missing = replace(
+        sample_stations[2],
+        provider_id="NL-PRICE-MISSING",
+        tariff=None,
+        tariff_status=None,
+    )
+    coordinator = _coordinator(hass, euro, max_stations=5)
+    coordinator.async_set_updated_data(
+        {
+            euro.provider_id: euro,
+            dollar.provider_id: dollar,
+            missing.provider_id: missing,
+        }
+    )
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="mixed-price-area")
+    sensors = (
+        NearbyMinimumPricePerKwhSensor(coordinator, entry),
+        NearbyAveragePricePerKwhSensor(coordinator, entry),
+        NearbyMaximumPricePerKwhSensor(coordinator, entry),
+    )
+    count_sensor = NearbyComparablePriceStationCountSensor(coordinator, entry)
+
+    assert all(sensor.native_value is None for sensor in sensors)
+    assert all(sensor.native_unit_of_measurement is None for sensor in sensors)
+    assert count_sensor.native_value == 0
+    attributes = sensors[0].extra_state_attributes
+    assert attributes["currency"] is None
+    assert attributes["currency_status"] == "mixed_currencies"
+    assert attributes["known_price_station_count"] == 2
+    assert attributes["comparable_price_station_count"] == 0
+    assert attributes["contributing_price_station_count"] == 0
+    assert attributes["excluded_price_station_count"] == 3
+    assert attributes["unknown_price_station_count"] == 1
+    assert attributes["mixed_currency_station_count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_recorder_sensors_become_unavailable_on_provider_failure(
+    hass, sample_stations
+):
+    station = sample_stations[0]
+    provider = FakeProvider([(station,), ChargingProviderError("offline")])
+    coordinator = _coordinator(hass, station, provider=provider)
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="recorder-area")
+    sensors = (
+        ConnectorAvailabilityPercentageSensor(coordinator, station),
+        NearbyAvailableStationsSensor(coordinator, entry),
+        NearbyMinimumPricePerKwhSensor(coordinator, entry),
+        NearbyAveragePricePerKwhSensor(coordinator, entry),
+        NearbyMaximumPricePerKwhSensor(coordinator, entry),
+        NearbyComparablePriceStationCountSensor(coordinator, entry),
+    )
+
+    await coordinator.async_refresh()
+    snapshot = coordinator.statistics_snapshot
+    await coordinator.async_refresh()
+
+    assert not coordinator.last_update_success
+    assert coordinator.statistics_snapshot is snapshot
+    assert all(not sensor.available for sensor in sensors)
+    assert len(provider.station_calls) == 2
 
 
 def test_status_summary_exposes_operational_and_provider_status(hass, sample_stations):

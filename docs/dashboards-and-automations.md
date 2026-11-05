@@ -611,6 +611,12 @@ snapshot expressed as `100%`, `0%`, or unknown; it does not calculate the
 percentage of time a charger was available. The nearby connector percentage is
 a separate, search-area aggregate weighted by known connector counts.
 
+The station-level **Connector availability percentage** uses reported
+`available_connectors / total_connectors`. It remains unknown when counts are
+partial or unknown, or when the total is zero. It is separate from the
+binary-derived **Availability percentage** and does not change that entity's
+history or meaning.
+
 To calculate how long a station was reported available, create Home Assistant's
 built-in [History Stats](https://www.home-assistant.io/integrations/history_stats/)
 helper for its **Available** binary sensor. Choose `time` for hours in the
@@ -665,6 +671,21 @@ entities:
   - sensor.your_station_availability_percentage
 ```
 
+For the reported share of connectors available at the station, graph the
+`connector_availability_percentage` sensor instead:
+
+```yaml
+type: statistics-graph
+title: Connector availability, hourly
+days_to_show: 30
+period: hour
+chart_type: line
+stat_types:
+  - mean
+entities:
+  - sensor.your_station_connector_availability_percentage
+```
+
 Connector counts have different units, so graph them in a separate card:
 
 ```yaml
@@ -679,6 +700,16 @@ entities:
   - sensor.your_station_available_connectors
   - sensor.your_station_total_connectors
 ```
+
+The configured search area also has `nearby_available_stations`,
+`nearby_minimum_price_per_kwh`, `nearby_average_price_per_kwh`,
+`nearby_maximum_price_per_kwh`, and `nearby_comparable_price_station_count`.
+Price aggregates count each station once and have a value only when all
+eligible prices share one currency. Their unit follows that currency (for
+example, `EUR/kWh`); mixed currencies produce unknown prices with
+`currency_status: mixed_currencies`. Price sensor attributes report
+contributing and excluded station counts and tariff quality statuses without
+listing station IDs.
 
 Home Assistant's [Recorder](https://www.home-assistant.io/integrations/recorder/)
 keeps detailed state history for 10 days by default (`purge_keep_days`); this

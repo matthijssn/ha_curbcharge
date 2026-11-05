@@ -388,6 +388,9 @@
       "availability_percentage": {
         "name": "Beschikbaarheidspercentage"
       },
+      "connector_availability_percentage": {
+        "name": "Percentage beschikbare connectoren"
+      },
       "occupied_connectors": {
         "name": "Bezettingsconnectoren"
       },
@@ -451,6 +454,21 @@
       },
       "nearby_availability_percentage": {
         "name": "Beschikbaarheid laadconnectoren in de buurt"
+      },
+      "nearby_available_stations": {
+        "name": "Laadstations met een beschikbare connector in de buurt"
+      },
+      "nearby_minimum_price_per_kwh": {
+        "name": "Laagste brutoprijs per kWh in de buurt"
+      },
+      "nearby_average_price_per_kwh": {
+        "name": "Gemiddelde brutoprijs per kWh in de buurt"
+      },
+      "nearby_maximum_price_per_kwh": {
+        "name": "Hoogste brutoprijs per kWh in de buurt"
+      },
+      "nearby_comparable_price_station_count": {
+        "name": "Laadstations met vergelijkbare prijzen in de buurt"
       }
     }
   }

@@ -73,6 +73,11 @@ async def async_setup_entry(
         NearbyChargingUnitsSensor(coordinator, entry),
         NearbyAvailableConnectorsSensor(coordinator, entry),
         NearbyAvailabilityPercentageSensor(coordinator, entry),
+        NearbyAvailableStationsSensor(coordinator, entry),
+        NearbyMinimumPricePerKwhSensor(coordinator, entry),
+        NearbyAveragePricePerKwhSensor(coordinator, entry),
+        NearbyMaximumPricePerKwhSensor(coordinator, entry),
+        NearbyComparablePriceStationCountSensor(coordinator, entry),
         FavoriteSummarySensor(coordinator, entry),
     ]
     _migrate_aggregate_entity_ids(hass, entry, aggregate_entities)
@@ -142,6 +147,25 @@ class AvailabilityPercentageSensor(CurbChargeStationEntity, SensorEntity):
         if available is None:
             return None
         return 100.0 if available else 0.0
+
+
+class ConnectorAvailabilityPercentageSensor(CurbChargeStationEntity, SensorEntity):
+    """Report the share of the station's reported connectors available."""
+
+    _attr_translation_key = "connector_availability_percentage"
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    @property
+    def native_value(self) -> float | None:
+        station = self.station
+        if station is None:
+            return None
+        available = station.available_connectors
+        total = station.total_connectors
+        if available is None or total is None or total <= 0:
+            return None
+        return round(100 * available / total, 1)
 
 
 class OccupiedConnectorsSensor(CurbChargeStationEntity, SensorEntity):
@@ -767,6 +791,55 @@ def _nearby_aggregate_attributes(
     }
 
 
+def _nearby_price_attributes(coordinator: CurbChargeCoordinator) -> dict[str, Any]:
+    """Return bounded contributor and currency metadata for price statistics."""
+    snapshot = coordinator.statistics_snapshot
+    attributes = _nearby_aggregate_attributes(
+        coordinator, _current_stations(coordinator)
+    )
+    if snapshot is None:
+        attributes.update(
+            {
+                "fresh_station_count": None,
+                "data_quality_status": None,
+                "currency": None,
+                "currency_status": None,
+                "contributing_price_station_count": None,
+                "excluded_price_station_count": None,
+                "known_price_station_count": None,
+                "comparable_price_station_count": None,
+                "unknown_price_station_count": None,
+                "invalid_tariff_station_count": None,
+                "mixed_currency_station_count": None,
+                "tariff_status_counts": None,
+            }
+        )
+        return attributes
+
+    tariffs = snapshot.tariffs
+    attributes.update(
+        {
+            "fresh_station_count": snapshot.fresh_station_count,
+            "data_quality_status": snapshot.data_quality_status,
+            "currency": tariffs.currency,
+            "currency_status": tariffs.currency_status,
+            "contributing_price_station_count": (
+                tariffs.comparable_price_station_count
+            ),
+            "excluded_price_station_count": (
+                snapshot.fresh_station_count - tariffs.comparable_price_station_count
+            ),
+            "known_price_station_count": tariffs.known_price_station_count,
+            "comparable_price_station_count": (tariffs.comparable_price_station_count),
+            "unknown_price_station_count": tariffs.unknown_price_station_count,
+            "invalid_tariff_station_count": tariffs.invalid_tariff_station_count,
+            "mixed_currency_station_count": tariffs.mixed_currency_station_count,
+            "tariff_status_counts": dict(tariffs.tariff_status_counts),
+        }
+    )
+    return attributes
+
+
 def _favorite_summary_attributes(
     coordinator: CurbChargeCoordinator,
 ) -> dict[str, Any]:
@@ -1036,6 +1109,167 @@ class NearbyAvailabilityPercentageSensor(
             }
         )
         return attributes
+
+
+class NearbyAvailableStationsSensor(
+    CoordinatorEntity[CurbChargeCoordinator], SensorEntity
+):
+    """Count fresh stations with at least one known available connector."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "nearby_available_stations"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self, coordinator: CurbChargeCoordinator, entry: ConfigEntry[Any]
+    ) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_nearby_available_stations"
+        self._unique_id_suffix = "nearby_available_stations"
+
+    @property
+    def native_value(self) -> int | None:
+        snapshot = self.coordinator.statistics_snapshot
+        return (
+            None if snapshot is None else snapshot.availability.available_station_count
+        )
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        coordinator = self.coordinator
+        snapshot = coordinator.statistics_snapshot
+        attributes = _nearby_aggregate_attributes(
+            coordinator, _current_stations(coordinator)
+        )
+        availability = snapshot.availability if snapshot is not None else None
+        attributes.update(
+            {
+                "counted_unit": "charging_station",
+                "available_station_count": (
+                    None
+                    if availability is None
+                    else availability.available_station_count
+                ),
+                "known_availability_station_count": (
+                    None
+                    if availability is None
+                    else availability.known_availability_station_count
+                ),
+                "unknown_availability_station_count": (
+                    None
+                    if availability is None
+                    else availability.unknown_availability_station_count
+                ),
+                "fresh_station_count": (
+                    None if snapshot is None else snapshot.fresh_station_count
+                ),
+                "data_quality_status": (
+                    None if snapshot is None else snapshot.data_quality_status
+                ),
+            }
+        )
+        return attributes
+
+
+class _NearbyPriceSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEntity):
+    """Base for single-currency, current nearby price measurements."""
+
+    _attr_has_entity_name = True
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _unique_id_suffix: str
+
+    def __init__(
+        self, coordinator: CurbChargeCoordinator, entry: ConfigEntry[Any]
+    ) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_{self._unique_id_suffix}"
+
+    @property
+    def native_unit_of_measurement(self) -> str | None:
+        snapshot = self.coordinator.statistics_snapshot
+        if (
+            snapshot is None
+            or snapshot.tariffs.currency_status != "single_currency"
+            or snapshot.tariffs.currency is None
+        ):
+            return None
+        return f"{snapshot.tariffs.currency}/kWh"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return _nearby_price_attributes(self.coordinator)
+
+
+class NearbyMinimumPricePerKwhSensor(_NearbyPriceSensor):
+    """Minimum eligible gross price across nearby stations."""
+
+    _attr_translation_key = "nearby_minimum_price_per_kwh"
+    _unique_id_suffix = "nearby_minimum_price_per_kwh"
+
+    @property
+    def native_value(self) -> float | None:
+        snapshot = self.coordinator.statistics_snapshot
+        if snapshot is None or snapshot.tariffs.currency_status != "single_currency":
+            return None
+        return _decimal_attribute(snapshot.tariffs.minimum_price_per_kwh)
+
+
+class NearbyAveragePricePerKwhSensor(_NearbyPriceSensor):
+    """Average eligible gross price across nearby stations."""
+
+    _attr_translation_key = "nearby_average_price_per_kwh"
+    _unique_id_suffix = "nearby_average_price_per_kwh"
+
+    @property
+    def native_value(self) -> float | None:
+        snapshot = self.coordinator.statistics_snapshot
+        if snapshot is None or snapshot.tariffs.currency_status != "single_currency":
+            return None
+        return _decimal_attribute(snapshot.tariffs.average_price_per_kwh)
+
+
+class NearbyMaximumPricePerKwhSensor(_NearbyPriceSensor):
+    """Maximum eligible gross price across nearby stations."""
+
+    _attr_translation_key = "nearby_maximum_price_per_kwh"
+    _unique_id_suffix = "nearby_maximum_price_per_kwh"
+
+    @property
+    def native_value(self) -> float | None:
+        snapshot = self.coordinator.statistics_snapshot
+        if snapshot is None or snapshot.tariffs.currency_status != "single_currency":
+            return None
+        return _decimal_attribute(snapshot.tariffs.maximum_price_per_kwh)
+
+
+class NearbyComparablePriceStationCountSensor(
+    CoordinatorEntity[CurbChargeCoordinator], SensorEntity
+):
+    """Count nearby stations that contribute to comparable-price aggregates."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "nearby_comparable_price_station_count"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self, coordinator: CurbChargeCoordinator, entry: ConfigEntry[Any]
+    ) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry.entry_id}_nearby_comparable_price_station_count"
+        self._unique_id_suffix = "nearby_comparable_price_station_count"
+
+    @property
+    def native_value(self) -> int | None:
+        snapshot = self.coordinator.statistics_snapshot
+        return (
+            None
+            if snapshot is None
+            else snapshot.tariffs.comparable_price_station_count
+        )
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return _nearby_price_attributes(self.coordinator)
 
 
 class BestNearbyChargerSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEntity):
@@ -1412,6 +1646,7 @@ def create_station_sensors(
     return [
         AvailableConnectorsSensor(coordinator, station),
         AvailabilityPercentageSensor(coordinator, station),
+        ConnectorAvailabilityPercentageSensor(coordinator, station),
         OccupiedConnectorsSensor(coordinator, station),
         UnavailableConnectorsSensor(coordinator, station),
         TotalConnectorsSensor(coordinator, station),

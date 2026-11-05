@@ -388,6 +388,9 @@
       "availability_percentage": {
         "name": "Pieejamības procentuālā daļa"
       },
+      "connector_availability_percentage": {
+        "name": "Pieejamo savienotāju procentuālā daļa"
+      },
       "occupied_connectors": {
         "name": "Aizņemtie savienotāji"
       },
@@ -451,6 +454,21 @@
       },
       "nearby_availability_percentage": {
         "name": "Savienotāju pieejamība tuvumā"
+      },
+      "nearby_available_stations": {
+        "name": "Tuvumā esošās uzlādes stacijas ar vismaz vienu pieejamu savienotāju"
+      },
+      "nearby_minimum_price_per_kwh": {
+        "name": "Zemākā bruto cena par kWh tuvumā"
+      },
+      "nearby_average_price_per_kwh": {
+        "name": "Vidējā bruto cena par kWh tuvumā"
+      },
+      "nearby_maximum_price_per_kwh": {
+        "name": "Augstākā bruto cena par kWh tuvumā"
+      },
+      "nearby_comparable_price_station_count": {
+        "name": "Tuvumā esošās uzlādes stacijas ar salīdzināmām cenām"
       }
     }
   }

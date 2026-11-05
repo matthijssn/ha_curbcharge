@@ -388,6 +388,9 @@
       "availability_percentage": {
         "name": "Verfügbarkeitsprozentsatz"
       },
+      "connector_availability_percentage": {
+        "name": "Anteil verfügbarer Anschlüsse"
+      },
       "occupied_connectors": {
         "name": "Belegte Anschlüsse"
       },
@@ -451,6 +454,21 @@
       },
       "nearby_availability_percentage": {
         "name": "Verfügbarkeit der Ladeanschlüsse in der Nähe"
+      },
+      "nearby_available_stations": {
+        "name": "Ladestationen mit mindestens einem verfügbaren Anschluss in der Nähe"
+      },
+      "nearby_minimum_price_per_kwh": {
+        "name": "Niedrigster Bruttopreis pro kWh in der Nähe"
+      },
+      "nearby_average_price_per_kwh": {
+        "name": "Durchschnittlicher Bruttopreis pro kWh in der Nähe"
+      },
+      "nearby_maximum_price_per_kwh": {
+        "name": "Höchster Bruttopreis pro kWh in der Nähe"
+      },
+      "nearby_comparable_price_station_count": {
+        "name": "Ladestationen mit vergleichbaren Preisen in der Nähe"
       }
     }
   }

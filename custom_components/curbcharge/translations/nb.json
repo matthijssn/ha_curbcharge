@@ -388,6 +388,9 @@
       "availability_percentage": {
         "name": "Andel ledige ladekontakter"
       },
+      "connector_availability_percentage": {
+        "name": "Andel tilgjengelige ladekontakter"
+      },
       "occupied_connectors": {
         "name": "Opptatte ladekontakter"
       },
@@ -451,6 +454,21 @@
       },
       "nearby_availability_percentage": {
         "name": "Tilgjengelighet for ladekontakter i nærheten"
+      },
+      "nearby_available_stations": {
+        "name": "Ladestasjoner med minst én ledig ladekontakt i nærheten"
+      },
+      "nearby_minimum_price_per_kwh": {
+        "name": "Laveste bruttopris per kWh i nærheten"
+      },
+      "nearby_average_price_per_kwh": {
+        "name": "Gjennomsnittlig bruttopris per kWh i nærheten"
+      },
+      "nearby_maximum_price_per_kwh": {
+        "name": "Høyeste bruttopris per kWh i nærheten"
+      },
+      "nearby_comparable_price_station_count": {
+        "name": "Ladestasjoner med sammenlignbare priser i nærheten"
       }
     }
   }
