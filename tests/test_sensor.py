@@ -52,6 +52,7 @@ from custom_components.curbcharge.sensor import (
     NearbyMinimumPricePerKwhSensor,
     NearestAvailableChargerSensor,
     OccupiedConnectorsSensor,
+    OperatorInsightsSensor,
     PricePerKwhSensor,
     StatusSummarySensor,
     TopNearbyChargersSensor,
@@ -59,6 +60,7 @@ from custom_components.curbcharge.sensor import (
     UnavailableConnectorsSensor,
     async_setup_dynamic_favorite_status_sensors,
 )
+from custom_components.curbcharge.statistics import MAX_OPERATOR_SUMMARIES
 from tests.conftest import FakeProvider
 
 
@@ -2224,6 +2226,141 @@ def test_favorite_summary_counts_and_recommends_fresh_available_favorites(
     assert attributes["highest_power_available_favorite"]["station_id"] == (
         highest_power_usd.provider_id
     )
+
+
+def test_operator_insights_exposes_bounded_provider_scoped_snapshot(
+    hass, sample_stations
+):
+    template = sample_stations[0]
+    first = replace(
+        template,
+        provider_id="NL-OPERATOR-1",
+        operator=" Example   CPO ",
+        distance_m=100,
+        tariff=ChargingTariff(
+            "EUR",
+            Decimal("0.20"),
+            None,
+            None,
+            None,
+            "test",
+            status=TariffStatus.AVAILABLE,
+        ),
+        tariff_status=TariffStatus.AVAILABLE,
+    )
+    second = replace(
+        template,
+        provider_id="NL-OPERATOR-2",
+        operator="example cpo",
+        distance_m=100,
+        tariff=ChargingTariff(
+            "USD",
+            Decimal("0.30"),
+            None,
+            None,
+            None,
+            "test",
+            status=TariffStatus.AVAILABLE,
+        ),
+        tariff_status=TariffStatus.AVAILABLE,
+    )
+    belgian = replace(
+        template,
+        provider_id="BE-OPERATOR",
+        provider=PROVIDER_ECO_MOVEMENT_BE,
+        provider_name="Eco-Movement Belgium",
+        country_code="BE",
+        operator="Example CPO",
+        distance_m=100,
+    )
+    other_operators = tuple(
+        replace(
+            template,
+            provider_id=f"NL-OPERATOR-{index + 10}",
+            operator=f"Operator {index:02}",
+            distance_m=100,
+        )
+        for index in range(10)
+    )
+    unattributed = replace(
+        template, provider_id="NL-UNATTRIBUTED", operator=None, distance_m=100
+    )
+    stations = (first, second, belgian, *other_operators, unattributed)
+    coordinator = _coordinator(hass, first, max_stations=50)
+    coordinator.async_set_updated_data(
+        {station.provider_id: station for station in stations}
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN, entry_id="operator-insights-entry", unique_id="operator-area"
+    )
+    sensor = OperatorInsightsSensor(coordinator, entry)
+
+    assert sensor.native_value == 12
+    assert sensor.unique_id == f"{entry.entry_id}_operator_insights"
+    assert sensor.state_class is SensorStateClass.MEASUREMENT
+    assert sensor.native_unit_of_measurement is None
+    assert sensor.device_class is None
+    assert sensor.entity_registry_enabled_default is True
+    attributes = sensor.extra_state_attributes
+    assert attributes["total_operator_group_count"] == 12
+    assert attributes["displayed_operator_group_count"] == MAX_OPERATOR_SUMMARIES
+    assert attributes["operator_list_truncated"] is True
+    assert attributes["unattributed_station_count"] == 1
+    assert len(attributes["operators"]) == MAX_OPERATOR_SUMMARIES
+
+    operators = attributes["operators"]
+    assert operators[0]["provider"] == first.provider
+    assert operators[0]["station_count"] == 2
+    assert " ".join(operators[0]["operator"].split()).casefold() == "example cpo"
+    assert operators[0]["currency_status"] == "mixed_currencies"
+    assert operators[0]["minimum_price_per_kwh"] is None
+    assert operators[0]["average_price_per_kwh"] is None
+    assert any(
+        row["provider"] == belgian.provider and row["station_count"] == 1
+        for row in operators
+    )
+    order_keys = [
+        (
+            -row["station_count"],
+            row["provider"],
+            " ".join(row["operator"].split()).casefold(),
+        )
+        for row in operators
+    ]
+    assert order_keys == sorted(order_keys)
+    for row in operators:
+        assert (
+            not {
+                "station_id",
+                "provider_station_id",
+                "address",
+                "latitude",
+                "longitude",
+            }
+            & row.keys()
+        )
+
+    unique_id = sensor.unique_id
+    coordinator.async_set_updated_data({first.provider_id: first})
+    assert sensor.unique_id == unique_id
+    assert sensor.native_value == 1
+
+
+def test_operator_insights_is_unknown_before_first_snapshot(hass):
+    coordinator = CurbChargeCoordinator(
+        hass, FakeProvider(), 52.0, 5.0, 500, 10, 5, True
+    )
+    sensor = OperatorInsightsSensor(
+        coordinator,
+        MockConfigEntry(domain=DOMAIN, unique_id="uninitialized-operator-area"),
+    )
+
+    assert sensor.native_value is None
+    attributes = sensor.extra_state_attributes
+    assert attributes["total_operator_group_count"] is None
+    assert attributes["displayed_operator_group_count"] is None
+    assert attributes["operator_list_truncated"] is None
+    assert attributes["operators"] is None
 
 
 @pytest.mark.asyncio

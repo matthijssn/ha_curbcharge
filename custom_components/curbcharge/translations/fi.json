@@ -431,6 +431,9 @@
       "favorite_summary": {
         "name": "Suosikkiyhteenveto"
       },
+      "operator_insights": {
+        "name": "Operaattorien yhteenveto"
+      },
       "best_nearby_charger": {
         "name": "Paras lähellä oleva laturi"
       },

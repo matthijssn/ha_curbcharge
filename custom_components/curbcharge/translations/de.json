@@ -431,6 +431,9 @@
       "favorite_summary": {
         "name": "Favoritenübersicht"
       },
+      "operator_insights": {
+        "name": "Betreiberübersicht"
+      },
       "best_nearby_charger": {
         "name": "Beste Ladestation in der Nähe"
       },

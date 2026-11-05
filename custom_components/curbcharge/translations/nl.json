@@ -431,6 +431,9 @@
       "favorite_summary": {
         "name": "Favorietenoverzicht"
       },
+      "operator_insights": {
+        "name": "Overzicht laadpuntexploitanten"
+      },
       "best_nearby_charger": {
         "name": "Beste laadpunt in de buurt"
       },

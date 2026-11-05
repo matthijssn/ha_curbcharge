@@ -420,6 +420,19 @@ Each charging point is one Home Assistant device. CurbCharge creates:
   update, and nearest, cheapest, and highest-power available-favourite
   recommendations. Each recommendation uses the shared station payload; the
   cheapest result is empty when prices span multiple currencies.
+- The entry-level **Operator Insights** sensor is enabled by default and its
+  integer state counts current provider-scoped operator groups. Its `operators`
+  attribute contains at most ten rows, ordered by station count and a stable
+  normalized operator key. Names are trimmed, internal whitespace is collapsed,
+  and matching is case-insensitive; punctuation and provider identity are
+  preserved. Each row reports available station, connector, price, and power
+  summaries where known. Mixed-currency groups have no comparable price values;
+  stations without an operator name are counted separately as
+  `unattributed_station_count`. No station IDs, addresses, or coordinates are
+  included. The rows describe only the latest coordinator snapshot and are not
+  stored as per-operator long-term statistics; only the numeric group count is
+  a recordable state. This single entity can be disabled from Home Assistant's
+  entity registry.
 - Integration-level **Best nearby charger**, **Top nearby chargers**,
   **Nearest available charger**, **Cheapest available charger**,
   **Fastest available charger**, **Nearby charging units**, and **Nearby

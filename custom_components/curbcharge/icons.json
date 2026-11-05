@@ -27,6 +27,9 @@
           "unknown": "mdi:help-circle-outline"
         }
       },
+      "operator_insights": {
+        "default": "mdi:account-group-outline"
+      },
       "connector_availability_percentage": {
         "default": "mdi:percent-outline"
       },

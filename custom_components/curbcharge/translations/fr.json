@@ -431,6 +431,9 @@
       "favorite_summary": {
         "name": "Résumé des favoris"
       },
+      "operator_insights": {
+        "name": "Aperçu des opérateurs"
+      },
       "best_nearby_charger": {
         "name": "Meilleure borne à proximité"
       },

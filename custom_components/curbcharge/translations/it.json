@@ -431,6 +431,9 @@
       "favorite_summary": {
         "name": "Riepilogo preferiti"
       },
+      "operator_insights": {
+        "name": "Riepilogo operatori"
+      },
       "best_nearby_charger": {
         "name": "Migliore colonnina nelle vicinanze"
       },
