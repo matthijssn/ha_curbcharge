@@ -5,6 +5,7 @@ import logging
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
@@ -1760,25 +1761,47 @@ async def test_stations_with_the_same_address_get_unique_device_names(
     }
 
 
-def test_empty_location_device_cleanup_removes_orphaned_device(hass):
+def test_empty_location_device_cleanup_removes_orphaned_device(hass, monkeypatch):
     entry = _entry()
-    entry.add_to_hass(hass)
-    device_registry = dr.async_get(hass)
     parent_identifier = location_device_identifier(
         PROVIDER_ECO_MOVEMENT_BE, "empty-site"
     )
-    parent_device = device_registry.async_get_or_create(
-        config_entry_id=entry.entry_id,
+    parent_device = SimpleNamespace(
+        id="parent-device",
         identifiers={parent_identifier},
-        name="Empty site",
+        config_entries=set(),
+    )
+    removed_devices = []
+    device_registry = SimpleNamespace(
+        async_update_device=lambda _device_id, **_kwargs: parent_device,
+        async_remove_device=removed_devices.append,
+    )
+    monkeypatch.setattr(
+        curbcharge_entity.dr,
+        "async_get",
+        lambda _hass: device_registry,
+    )
+    monkeypatch.setattr(
+        curbcharge_entity.dr,
+        "async_entries_for_config_entry",
+        lambda _registry, _entry_id: [parent_device],
+    )
+    monkeypatch.setattr(
+        curbcharge_entity.dr,
+        "async_entries_for_parent_device",
+        lambda _registry, _device_id: (),
+        raising=False,
+    )
+    monkeypatch.setattr(curbcharge_entity.er, "async_get", lambda _hass: object())
+    monkeypatch.setattr(
+        curbcharge_entity.er,
+        "async_entries_for_device",
+        lambda _registry, _device_id: (),
     )
 
     cleanup_location_device_if_unused(hass, entry, parent_identifier)
 
-    assert parent_device not in dr.async_entries_for_config_entry(
-        device_registry, entry.entry_id
-    )
-    cleanup_location_device_if_unused(hass, entry, parent_identifier)
+    assert removed_devices == [parent_device.id]
 
 
 @pytest.mark.asyncio
