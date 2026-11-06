@@ -54,11 +54,13 @@ from custom_components.curbcharge.sensor import (
     OccupiedConnectorsSensor,
     OperatorInsightsSensor,
     PricePerKwhSensor,
+    SiteSummarySensor,
     StatusSummarySensor,
     TopNearbyChargersSensor,
     TotalConnectorsSensor,
     UnavailableConnectorsSensor,
     async_setup_dynamic_favorite_status_sensors,
+    async_setup_dynamic_site_summary_sensors,
 )
 from custom_components.curbcharge.statistics import MAX_OPERATOR_SUMMARIES
 from tests.conftest import FakeProvider
@@ -142,6 +144,139 @@ def _favourite_reference(station):
         latitude=station.latitude,
         longitude=station.longitude,
     )
+
+
+def test_site_summary_sensor_reports_fresh_partial_availability(hass, sample_stations):
+    base = sample_stations[0]
+    location = ChargingLocation(
+        provider_id="site-1",
+        provider=PROVIDER_ECO_MOVEMENT_BE,
+        provider_name="Eco-Movement Belgium",
+        country_code="BE",
+        name="Example site",
+        latitude=50.85,
+        longitude=4.35,
+        address="Example address",
+        operator="Example CPO",
+        last_updated=None,
+    )
+    available = _belgian_evse(base, location, "evse-available", 2, 1)
+    none_available = replace(
+        _belgian_evse(base, location, "evse-none", 3, 0),
+        evse_status=EVSEStatus.UNKNOWN,
+    )
+    unknown = replace(
+        _belgian_evse(base, location, "evse-unknown", 4, None),
+        evse_status=EVSEStatus.UNKNOWN,
+    )
+    stale = replace(
+        _belgian_evse(base, location, "evse-stale", 9, 0),
+        evse_status=EVSEStatus.UNKNOWN,
+        is_stale=True,
+    )
+    coordinator = _coordinator(
+        hass,
+        available,
+        favourites=(_favourite_reference(none_available),),
+    )
+    coordinator.async_set_updated_data(
+        {
+            station.provider_id: station
+            for station in (available, none_available, unknown, stale)
+        }
+    )
+    coordinator.nearby_station_ids = {
+        available.provider_id,
+        none_available.provider_id,
+        unknown.provider_id,
+    }
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="site-summary")
+    sensor = SiteSummarySensor(
+        coordinator,
+        entry,
+        (PROVIDER_ECO_MOVEMENT_BE, location.provider_id),
+    )
+
+    assert sensor.native_value == "available"
+    assert sensor.available
+    assert sensor.unique_id == (
+        f"{PROVIDER_ECO_MOVEMENT_BE}_site-1_site_summary_{entry.entry_id}"
+    )
+    assert sensor.device_info["identifiers"] == {
+        (DOMAIN, f"{PROVIDER_ECO_MOVEMENT_BE}:location:site-1")
+    }
+    attributes = sensor.extra_state_attributes
+    assert attributes["site_name"] == "Example site"
+    assert attributes["represented_evse_count"] == 4
+    assert attributes["fresh_evse_count"] == 3
+    assert attributes["stale_evse_count"] == 1
+    assert attributes["available_evse_count"] == 1
+    assert attributes["none_available_evse_count"] == 1
+    assert attributes["unknown_availability_evse_count"] == 1
+    assert attributes["available_connectors"] == 1
+    assert attributes["total_connectors"] == 5
+    assert attributes["reported_total_connectors"] == 9
+    assert attributes["connector_availability_percentage"] == 20.0
+    assert attributes["connector_availability_coverage_percentage"] == 55.6
+    assert attributes["in_search_area"]
+    assert attributes["favorite_evse_count"] == 1
+    assert "provider_station_id" not in attributes
+
+
+def test_site_summary_sensor_is_unavailable_without_fresh_data(hass, sample_stations):
+    base = sample_stations[0]
+    location = ChargingLocation(
+        provider_id="site-stale",
+        provider=PROVIDER_ECO_MOVEMENT_BE,
+        provider_name="Eco-Movement Belgium",
+        country_code="BE",
+        name="Stale site",
+        latitude=50.85,
+        longitude=4.35,
+        address=None,
+        operator=None,
+        last_updated=None,
+    )
+    stale = replace(
+        _belgian_evse(base, location, "evse-stale", 2, 0),
+        evse_status=EVSEStatus.UNKNOWN,
+        is_stale=True,
+    )
+    coordinator = _coordinator(hass, stale)
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="stale-site-summary")
+    sensor = SiteSummarySensor(
+        coordinator,
+        entry,
+        (PROVIDER_ECO_MOVEMENT_BE, location.provider_id),
+    )
+
+    assert not sensor.available
+    assert sensor.native_value == "unknown"
+    assert sensor.extra_state_attributes["fresh_evse_count"] == 0
+    assert sensor.extra_state_attributes["available_connectors"] is None
+
+    coordinator.async_set_updated_data({})
+    assert not sensor.available
+    assert sensor.extra_state_attributes["represented_evse_count"] == 0
+
+
+@pytest.mark.asyncio
+async def test_site_summary_setup_requires_an_active_platform(
+    hass, monkeypatch, sample_stations
+):
+    monkeypatch.setattr(
+        "custom_components.curbcharge.sensor.async_get_current_platform",
+        lambda: None,
+    )
+    coordinator = _coordinator(hass, sample_stations[0])
+
+    with pytest.raises(RuntimeError, match="require an active platform"):
+        await async_setup_dynamic_site_summary_sensors(
+            hass,
+            MockConfigEntry(domain=DOMAIN, unique_id="site-no-platform"),
+            coordinator,
+            lambda _entities: None,
+        )
 
 
 def test_nearby_charging_units_counts_current_records_and_reports_scope(
@@ -788,6 +923,9 @@ def test_connector_group_sensor_exposes_provider_group_counts(hass, sample_stati
     coordinator.async_set_updated_data({station.provider_id: station})
     assert sensor.available
     assert sensor.native_value == connector.count
+
+    coordinator.async_set_updated_data({})
+    assert sensor.connector is None
 
     unknown_connector = replace(connector, connector_type=None)
     unknown_sensor = ConnectorGroupSensor(coordinator, station, unknown_connector)

@@ -164,6 +164,64 @@ def get_or_create_location_device(
     return parent_device, parent_identifier
 
 
+def cleanup_location_device_if_unused(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    parent_identifier: tuple[str, str],
+) -> None:
+    """Remove this entry from an empty location device and delete it if orphaned."""
+    device_registry = dr.async_get(hass)
+    entity_registry = er.async_get(hass)
+    device = next(
+        (
+            candidate
+            for candidate in dr.async_entries_for_config_entry(
+                device_registry, entry.entry_id
+            )
+            if parent_identifier in candidate.identifiers
+        ),
+        None,
+    )
+    if device is None:
+        return
+
+    get_children = getattr(dr, "async_entries_for_parent_device", None)
+    has_children = (
+        bool(get_children(device_registry, device.id))
+        if get_children is not None
+        else False
+    )
+    has_legacy_children = any(
+        getattr(candidate, "via_device_id", None) == device.id
+        for candidate in dr.async_entries_for_config_entry(
+            device_registry, entry.entry_id
+        )
+    )
+    has_entities = any(
+        registry_entry.config_entry_id == entry.entry_id
+        for registry_entry in er.async_entries_for_device(entity_registry, device.id)
+    )
+    if has_children or has_legacy_children or has_entities:
+        return
+
+    device = device_registry.async_update_device(
+        device.id, remove_config_entry_id=entry.entry_id
+    )
+    if device is None:
+        return
+    has_children = (
+        bool(get_children(device_registry, device.id))
+        if get_children is not None
+        else False
+    )
+    if (
+        not device.config_entries
+        and not has_children
+        and not er.async_entries_for_device(entity_registry, device.id)
+    ):
+        device_registry.async_remove_device(device.id)
+
+
 def setup_dynamic_station_entities(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -338,47 +396,7 @@ def setup_dynamic_station_entities(
                     or parent_identifier in parent_identifiers_by_station.values()
                 ):
                     continue
-
-                device = next(
-                    (
-                        candidate
-                        for candidate in dr.async_entries_for_config_entry(
-                            device_registry, entry.entry_id
-                        )
-                        if parent_identifier in candidate.identifiers
-                    ),
-                    None,
-                )
-                if device is None:
-                    continue
-
-                get_children = getattr(dr, "async_entries_for_parent_device", None)
-                has_child_devices = (
-                    bool(get_children(device_registry, device.id))
-                    if get_children is not None
-                    else False
-                )
-                has_legacy_children = any(
-                    getattr(candidate, "via_device_id", None) == device.id
-                    for candidate in dr.async_entries_for_config_entry(
-                        device_registry, entry.entry_id
-                    )
-                )
-                if not has_legacy_children and not any(
-                    registry_entry.config_entry_id == entry.entry_id
-                    for registry_entry in er.async_entries_for_device(
-                        entity_registry, device.id
-                    )
-                ):
-                    device = device_registry.async_update_device(
-                        device.id, remove_config_entry_id=entry.entry_id
-                    )
-                    if (
-                        device is not None
-                        and not device.config_entries
-                        and not has_child_devices
-                    ):
-                        device_registry.async_remove_device(device.id)
+                cleanup_location_device_if_unused(hass, entry, parent_identifier)
 
     add_stations(coordinator.data or {})
 

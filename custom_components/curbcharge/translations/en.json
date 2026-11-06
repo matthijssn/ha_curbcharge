@@ -420,6 +420,14 @@
           "unknown": "Unknown"
         }
       },
+      "site_summary": {
+        "name": "Site summary",
+        "state": {
+          "available": "Available",
+          "none_available": "None available",
+          "unknown": "Unknown"
+        }
+      },
       "favorite_status": {
         "name": "Favorite status",
         "state": {

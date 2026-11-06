@@ -5,6 +5,7 @@ import logging
 from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
@@ -43,6 +44,7 @@ from custom_components.curbcharge.const import (
 )
 from custom_components.curbcharge.coordinator import CurbChargeCoordinator
 from custom_components.curbcharge.entity import (
+    cleanup_location_device_if_unused,
     location_device_identifier,
     station_device_identifier,
 )
@@ -1759,6 +1761,49 @@ async def test_stations_with_the_same_address_get_unique_device_names(
     }
 
 
+def test_empty_location_device_cleanup_removes_orphaned_device(hass, monkeypatch):
+    entry = _entry()
+    parent_identifier = location_device_identifier(
+        PROVIDER_ECO_MOVEMENT_BE, "empty-site"
+    )
+    parent_device = SimpleNamespace(
+        id="parent-device",
+        identifiers={parent_identifier},
+        config_entries=set(),
+    )
+    removed_devices = []
+    device_registry = SimpleNamespace(
+        async_update_device=lambda _device_id, **_kwargs: parent_device,
+        async_remove_device=removed_devices.append,
+    )
+    monkeypatch.setattr(
+        curbcharge_entity.dr,
+        "async_get",
+        lambda _hass: device_registry,
+    )
+    monkeypatch.setattr(
+        curbcharge_entity.dr,
+        "async_entries_for_config_entry",
+        lambda _registry, _entry_id: [parent_device],
+    )
+    monkeypatch.setattr(
+        curbcharge_entity.dr,
+        "async_entries_for_parent_device",
+        lambda _registry, _device_id: (),
+        raising=False,
+    )
+    monkeypatch.setattr(curbcharge_entity.er, "async_get", lambda _hass: object())
+    monkeypatch.setattr(
+        curbcharge_entity.er,
+        "async_entries_for_device",
+        lambda _registry, _device_id: (),
+    )
+
+    cleanup_location_device_if_unused(hass, entry, parent_identifier)
+
+    assert removed_devices == [parent_device.id]
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "remove_parent_before_final_cleanup",
@@ -1856,6 +1901,19 @@ async def test_belgium_evse_devices_are_children_of_location_and_cleanup_parent(
             None,
         )
 
+    entity_registry = er.async_get(hass)
+    site_summary_unique_id = (
+        f"{PROVIDER_ECO_MOVEMENT_BE}_site-1_site_summary_{entry.entry_id}"
+    )
+    site_summary_entry = next(
+        registry_entry
+        for registry_entry in er.async_entries_for_config_entry(
+            entity_registry, entry.entry_id
+        )
+        if registry_entry.unique_id == site_summary_unique_id
+    )
+    assert site_summary_entry.device_id == parent_device.id
+
     first_device = evse_device("evse-1")
     second_device = evse_device("evse-2")
     assert first_device is not None
@@ -1875,6 +1933,12 @@ async def test_belgium_evse_devices_are_children_of_location_and_cleanup_parent(
     assert parent_device in dr.async_entries_for_config_entry(
         device_registry, entry.entry_id
     )
+    assert site_summary_unique_id in {
+        registry_entry.unique_id
+        for registry_entry in er.async_entries_for_config_entry(
+            entity_registry, entry.entry_id
+        )
+    }
 
     if remove_parent_before_final_cleanup:
         device_registry.async_remove_device(parent_device.id)
@@ -1883,6 +1947,12 @@ async def test_belgium_evse_devices_are_children_of_location_and_cleanup_parent(
         await entry.runtime_data.async_refresh()
         await hass.async_block_till_done()
     assert evse_device("evse-2") is None
+    assert site_summary_unique_id not in {
+        registry_entry.unique_id
+        for registry_entry in er.async_entries_for_config_entry(
+            entity_registry, entry.entry_id
+        )
+    }
     assert parent_identifier not in {
         identifier
         for device in dr.async_entries_for_config_entry(device_registry, entry.entry_id)

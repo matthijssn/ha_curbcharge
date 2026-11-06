@@ -16,6 +16,7 @@ from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfLength, UnitOf
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import (
     AddEntitiesCallback,
@@ -33,12 +34,19 @@ from .coordinator import (
 )
 from .entity import (
     CurbChargeStationEntity,
+    cleanup_location_device_if_unused,
     get_or_create_location_device,
+    location_device_identifier,
     migrate_entity_unique_id,
     setup_dynamic_station_entities,
 )
 from .models import ChargingConnector, ChargingStation, ChargingTariff, TariffStatus
-from .statistics import availability_statistics
+from .statistics import (
+    SiteAvailabilityStatistics,
+    availability_statistics,
+    group_stations_by_site,
+    site_availability_statistics,
+)
 
 PARALLEL_UPDATES = 0
 _TOP_NEARBY_LIMIT = 5
@@ -60,6 +68,9 @@ async def async_setup_entry(
         lambda station, existing_unique_ids: create_missing_connector_group_sensors(
             coordinator, station, existing_unique_ids
         ),
+    )
+    await async_setup_dynamic_site_summary_sensors(
+        hass, entry, coordinator, async_add_entities
     )
     await async_setup_dynamic_favorite_status_sensors(
         hass, entry, coordinator, async_add_entities
@@ -83,6 +94,58 @@ async def async_setup_entry(
     ]
     _migrate_aggregate_entity_ids(hass, entry, aggregate_entities)
     async_add_entities(aggregate_entities)
+
+
+async def async_setup_dynamic_site_summary_sensors(
+    hass: HomeAssistant,
+    entry: ConfigEntry[CurbChargeCoordinator],
+    coordinator: CurbChargeCoordinator,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Keep one summary entity per provider-reported site in coordinator data."""
+    platform = async_get_current_platform()
+    if not isinstance(platform, EntityPlatform):
+        raise RuntimeError("CurbCharge site sensors require an active platform")
+
+    entity_registry = er.async_get(hass)
+    entities_by_site: dict[tuple[str, str], SiteSummarySensor] = {}
+    sync_lock = asyncio.Lock()
+
+    async def sync_entities() -> None:
+        async with sync_lock:
+            groups = group_stations_by_site((coordinator.data or {}).values())
+            new_entities: list[SiteSummarySensor] = []
+            for site_key in sorted(groups):
+                if site_key in entities_by_site:
+                    continue
+                entity = SiteSummarySensor(coordinator, entry, site_key)
+                entities_by_site[site_key] = entity
+                new_entities.append(entity)
+            if new_entities:
+                async_add_entities(new_entities)
+
+            for site_key in sorted(set(entities_by_site) - groups.keys()):
+                entity = entities_by_site.pop(site_key)
+                entity_id = entity.entity_id
+                if entity_id in platform.entities:
+                    await platform.async_remove_entity(entity_id)
+                registry_entry = entity_registry.entities.get(entity_id)
+                if (
+                    registry_entry is not None
+                    and registry_entry.config_entry_id == entry.entry_id
+                ):
+                    entity_registry.async_remove(entity_id)
+                cleanup_location_device_if_unused(
+                    hass, entry, location_device_identifier(*site_key)
+                )
+
+    await sync_entities()
+
+    @callback
+    def handle_coordinator_update() -> None:
+        hass.async_create_task(sync_entities())
+
+    entry.async_on_unload(coordinator.async_add_listener(handle_coordinator_update))
 
 
 def _migrate_aggregate_entity_ids(
@@ -425,6 +488,143 @@ class StatusSummarySensor(CurbChargeStationEntity, SensorEntity):
                 for connector in station.connectors
             ]
         return attributes
+
+
+class SiteSummarySensor(CoordinatorEntity[CurbChargeCoordinator], SensorEntity):
+    """Summarize fresh EVSE availability at one provider-reported location."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "site_summary"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["available", "none_available", "unknown"]
+
+    def __init__(
+        self,
+        coordinator: CurbChargeCoordinator,
+        entry: ConfigEntry[CurbChargeCoordinator],
+        site_key: tuple[str, str],
+    ) -> None:
+        super().__init__(coordinator)
+        self._site_key = site_key
+        provider, site_id = site_key
+        self._attr_unique_id = f"{provider}_{site_id}_site_summary_{entry.entry_id}"
+        self._attr_device_info = DeviceInfo(
+            identifiers={location_device_identifier(provider, site_id)}
+        )
+
+    def _site_stations(self) -> tuple[ChargingStation, ...]:
+        return group_stations_by_site((self.coordinator.data or {}).values()).get(
+            self._site_key, ()
+        )
+
+    def _site_statistics(self) -> SiteAvailabilityStatistics | None:
+        stations = self._site_stations()
+        return site_availability_statistics(stations) if stations else None
+
+    @property
+    def available(self) -> bool:
+        summary = self._site_statistics()
+        return (
+            super().available and summary is not None and summary.fresh_evse_count > 0
+        )
+
+    @property
+    def native_value(self) -> str:
+        summary = self._site_statistics()
+        return summary.state if summary is not None else "unknown"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        stations = self._site_stations()
+        provider, site_id = self._site_key
+        if not stations or stations[0].location is None:
+            return {
+                "provider": provider,
+                "provider_site_id": site_id,
+                "represented_evse_count": 0,
+                "fresh_evse_count": 0,
+                "stale_evse_count": 0,
+                "last_successful_update": _isoformat(
+                    self.coordinator.last_successful_update
+                ),
+            }
+
+        location = stations[0].location
+        summary = site_availability_statistics(stations)
+        availability = summary.availability
+        fresh_stations = tuple(station for station in stations if not station.is_stale)
+        known_connector_group_count = availability.known_connector_group_count or 0
+        has_known_connector_groups = known_connector_group_count > 0
+        available_connectors = (
+            availability.available_connectors if has_known_connector_groups else None
+        )
+        total_connectors = (
+            availability.total_connectors if has_known_connector_groups else None
+        )
+        reported_total_connectors = (
+            availability.reported_total_connectors
+            if any(station.connector_count_reported for station in fresh_stations)
+            else None
+        )
+        statistics_snapshot = self.coordinator.statistics_snapshot
+
+        return {
+            "provider": provider,
+            "provider_site_id": site_id,
+            "site_name": location.name,
+            "address": location.address,
+            "operator": location.operator,
+            "country_code": location.country_code,
+            "latitude": location.latitude,
+            "longitude": location.longitude,
+            "represented_evse_count": summary.represented_evse_count,
+            "fresh_evse_count": summary.fresh_evse_count,
+            "stale_evse_count": summary.stale_evse_count,
+            "available_evse_count": summary.available_evse_count,
+            "none_available_evse_count": summary.none_available_evse_count,
+            "unknown_availability_evse_count": (
+                summary.unknown_availability_evse_count
+            ),
+            "available_connectors": available_connectors,
+            "total_connectors": total_connectors,
+            "reported_total_connectors": reported_total_connectors,
+            "known_connector_group_count": known_connector_group_count,
+            "excluded_connector_group_count": (
+                availability.excluded_connector_group_count
+            ),
+            "connector_availability_percentage": (
+                round(100 * available_connectors / total_connectors, 1)
+                if available_connectors is not None
+                and total_connectors is not None
+                and total_connectors > 0
+                else None
+            ),
+            "connector_availability_coverage_percentage": (
+                round(100 * total_connectors / reported_total_connectors, 1)
+                if total_connectors is not None
+                and reported_total_connectors is not None
+                and reported_total_connectors > 0
+                else None
+            ),
+            "in_search_area": bool(
+                set(self.coordinator.nearby_station_ids or ())
+                & {station.provider_id for station in stations}
+            ),
+            "search_radius_m": self.coordinator.radius_m,
+            "favorite_evse_count": sum(
+                station.provider_id in self.coordinator.favourite_ids
+                for station in stations
+            ),
+            "location_last_updated": _isoformat(location.last_updated),
+            "last_successful_update": _isoformat(
+                self.coordinator.last_successful_update
+            ),
+            "results_may_be_truncated": (
+                statistics_snapshot.results_may_be_truncated
+                if statistics_snapshot is not None
+                else None
+            ),
+        }
 
 
 class FavoriteStatusSensor(CurbChargeStationEntity, SensorEntity):

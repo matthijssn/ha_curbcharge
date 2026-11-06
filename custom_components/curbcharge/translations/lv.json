@@ -420,6 +420,14 @@
           "unknown": "Nezināms"
         }
       },
+      "site_summary": {
+        "name": "Atrašanās vietas kopsavilkums",
+        "state": {
+          "available": "Pieejams",
+          "none_available": "Nav pieejamu",
+          "unknown": "Nezināms"
+        }
+      },
       "favorite_status": {
         "name": "Izlases statuss",
         "state": {

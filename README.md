@@ -48,7 +48,8 @@ relying on a provider.
   (Chargy network), and Lithuania — see
   [provider coverage and limitations](docs/usage.md#data-source-and-coverage)
   for data sources and preview status.
-- One device per nearby public charging point
+- One device per nearby public charging point, with site summaries when
+  providers report a distinct location ID
 - Provider-reported availability, connector counts, power, distance and operator
 - Tariff information when the provider data is complete and unambiguous
 - Recorder-facing availability and gross-price statistics, plus bounded

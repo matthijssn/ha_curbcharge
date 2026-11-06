@@ -420,6 +420,14 @@
           "unknown": "Unbekannt"
         }
       },
+      "site_summary": {
+        "name": "Standortübersicht",
+        "state": {
+          "available": "Verfügbar",
+          "none_available": "Keine verfügbar",
+          "unknown": "Unbekannt"
+        }
+      },
       "favorite_status": {
         "name": "Favoritenstatus",
         "state": {
