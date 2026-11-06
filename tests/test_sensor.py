@@ -924,6 +924,9 @@ def test_connector_group_sensor_exposes_provider_group_counts(hass, sample_stati
     assert sensor.available
     assert sensor.native_value == connector.count
 
+    coordinator.async_set_updated_data({})
+    assert sensor.connector is None
+
     unknown_connector = replace(connector, connector_type=None)
     unknown_sensor = ConnectorGroupSensor(coordinator, station, unknown_connector)
     assert unknown_sensor.translation_placeholders["connector_type"] == "Unknown"

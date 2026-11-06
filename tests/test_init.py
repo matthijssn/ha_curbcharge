@@ -43,6 +43,7 @@ from custom_components.curbcharge.const import (
 )
 from custom_components.curbcharge.coordinator import CurbChargeCoordinator
 from custom_components.curbcharge.entity import (
+    cleanup_location_device_if_unused,
     location_device_identifier,
     station_device_identifier,
 )
@@ -1757,6 +1758,27 @@ async def test_stations_with_the_same_address_get_unique_device_names(
         f"{station.name} ({station.provider}:{station.provider_id})"
         for station in (first, second)
     }
+
+
+def test_empty_location_device_cleanup_removes_orphaned_device(hass):
+    entry = _entry()
+    entry.add_to_hass(hass)
+    device_registry = dr.async_get(hass)
+    parent_identifier = location_device_identifier(
+        PROVIDER_ECO_MOVEMENT_BE, "empty-site"
+    )
+    parent_device = device_registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={parent_identifier},
+        name="Empty site",
+    )
+
+    cleanup_location_device_if_unused(hass, entry, parent_identifier)
+
+    assert parent_device not in dr.async_entries_for_config_entry(
+        device_registry, entry.entry_id
+    )
+    cleanup_location_device_if_unused(hass, entry, parent_identifier)
 
 
 @pytest.mark.asyncio

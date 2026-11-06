@@ -107,7 +107,6 @@ async def async_setup_dynamic_site_summary_sensors(
     if not isinstance(platform, EntityPlatform):
         raise RuntimeError("CurbCharge site sensors require an active platform")
 
-    device_registry = dr.async_get(hass)
     entity_registry = er.async_get(hass)
     entities_by_site: dict[tuple[str, str], SiteSummarySensor] = {}
     sync_lock = asyncio.Lock()
@@ -118,12 +117,6 @@ async def async_setup_dynamic_site_summary_sensors(
             new_entities: list[SiteSummarySensor] = []
             for site_key in sorted(groups):
                 if site_key in entities_by_site:
-                    continue
-                station = groups[site_key][0]
-                if (
-                    get_or_create_location_device(device_registry, entry, station)
-                    is None
-                ):
                     continue
                 entity = SiteSummarySensor(coordinator, entry, site_key)
                 entities_by_site[site_key] = entity
