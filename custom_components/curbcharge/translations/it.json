@@ -420,6 +420,14 @@
           "unknown": "Sconosciuto"
         }
       },
+      "site_summary": {
+        "name": "Riepilogo del sito",
+        "state": {
+          "available": "Disponibile",
+          "none_available": "Nessuna disponibile",
+          "unknown": "Sconosciuto"
+        }
+      },
       "favorite_status": {
         "name": "Stato preferito",
         "state": {

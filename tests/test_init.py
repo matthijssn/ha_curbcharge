@@ -1856,6 +1856,19 @@ async def test_belgium_evse_devices_are_children_of_location_and_cleanup_parent(
             None,
         )
 
+    entity_registry = er.async_get(hass)
+    site_summary_unique_id = (
+        f"{PROVIDER_ECO_MOVEMENT_BE}_site-1_site_summary_{entry.entry_id}"
+    )
+    site_summary_entry = next(
+        registry_entry
+        for registry_entry in er.async_entries_for_config_entry(
+            entity_registry, entry.entry_id
+        )
+        if registry_entry.unique_id == site_summary_unique_id
+    )
+    assert site_summary_entry.device_id == parent_device.id
+
     first_device = evse_device("evse-1")
     second_device = evse_device("evse-2")
     assert first_device is not None
@@ -1875,6 +1888,12 @@ async def test_belgium_evse_devices_are_children_of_location_and_cleanup_parent(
     assert parent_device in dr.async_entries_for_config_entry(
         device_registry, entry.entry_id
     )
+    assert site_summary_unique_id in {
+        registry_entry.unique_id
+        for registry_entry in er.async_entries_for_config_entry(
+            entity_registry, entry.entry_id
+        )
+    }
 
     if remove_parent_before_final_cleanup:
         device_registry.async_remove_device(parent_device.id)
@@ -1883,6 +1902,12 @@ async def test_belgium_evse_devices_are_children_of_location_and_cleanup_parent(
         await entry.runtime_data.async_refresh()
         await hass.async_block_till_done()
     assert evse_device("evse-2") is None
+    assert site_summary_unique_id not in {
+        registry_entry.unique_id
+        for registry_entry in er.async_entries_for_config_entry(
+            entity_registry, entry.entry_id
+        )
+    }
     assert parent_identifier not in {
         identifier
         for device in dr.async_entries_for_config_entry(device_registry, entry.entry_id)

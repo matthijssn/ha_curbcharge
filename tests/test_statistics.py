@@ -7,11 +7,13 @@ from decimal import Decimal
 import pytest
 
 from custom_components.curbcharge.const import (
+    PROVIDER_DIGITRAFFIC_AFIR_FI,
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_NDW_DOT_NL,
 )
 from custom_components.curbcharge.models import (
     ChargingConnector,
+    ChargingLocation,
     ChargingStation,
     ChargingTariff,
     ConnectorStatus,
@@ -22,6 +24,8 @@ from custom_components.curbcharge.statistics import (
     MAX_OPERATOR_SUMMARIES,
     availability_statistics,
     calculate_statistics_snapshot,
+    group_stations_by_site,
+    site_availability_statistics,
     tariff_statistics,
 )
 
@@ -142,6 +146,126 @@ def test_availability_statistics_distinguish_missing_and_successful_empty():
     assert empty.available_connectors == 0
     assert empty.total_connectors == 0
     assert empty.unknown_availability_station_count == 0
+
+
+def test_group_stations_by_site_requires_matching_distinct_provider_identity(
+    sample_stations,
+):
+    base = sample_stations[0]
+    location = ChargingLocation(
+        provider_id="site-1",
+        provider=PROVIDER_ECO_MOVEMENT_BE,
+        provider_name="Eco-Movement Belgium",
+        country_code="BE",
+        name="Example site",
+        latitude=50.85,
+        longitude=4.35,
+        address=None,
+        operator=None,
+        last_updated=None,
+    )
+    first = replace(
+        base,
+        provider_id="evse-1",
+        provider=PROVIDER_ECO_MOVEMENT_BE,
+        location=location,
+    )
+    second = replace(first, provider_id="evse-2")
+    finnish_location = replace(
+        location,
+        provider=PROVIDER_DIGITRAFFIC_AFIR_FI,
+        provider_name="Digitraffic AFIR Finland",
+        country_code="FI",
+    )
+    finnish_station = replace(
+        first,
+        provider=PROVIDER_DIGITRAFFIC_AFIR_FI,
+        location=finnish_location,
+    )
+    mismatched_provider = replace(
+        first,
+        provider=PROVIDER_NDW_DOT_NL,
+    )
+    one_to_one = replace(first, provider_id=location.provider_id)
+
+    groups = group_stations_by_site(
+        (first, second, finnish_station, mismatched_provider, one_to_one)
+    )
+
+    assert groups == {
+        (PROVIDER_ECO_MOVEMENT_BE, "site-1"): (first, second),
+        (PROVIDER_DIGITRAFFIC_AFIR_FI, "site-1"): (finnish_station,),
+    }
+
+
+def test_site_availability_statistics_keep_stale_and_unknown_separate(
+    sample_stations,
+):
+    base = sample_stations[0]
+    available = replace(
+        base,
+        provider_id="available",
+        connectors=(_connector("available", 2, 1),),
+        availability_reported=True,
+        connector_count_reported=True,
+    )
+    none_available = replace(
+        base,
+        provider_id="none-available",
+        connectors=(_connector("none-available", 3, 0),),
+        availability_reported=True,
+        connector_count_reported=True,
+    )
+    unknown = replace(
+        base,
+        provider_id="unknown",
+        connectors=(_connector("unknown", 4, None),),
+        availability_reported=True,
+        connector_count_reported=True,
+    )
+    stale = replace(
+        none_available,
+        provider_id="stale",
+        connectors=(_connector("stale", 9, 0),),
+        is_stale=True,
+    )
+
+    summary = site_availability_statistics((available, none_available, unknown, stale))
+
+    assert summary.state == "available"
+    assert summary.represented_evse_count == 4
+    assert summary.fresh_evse_count == 3
+    assert summary.stale_evse_count == 1
+    assert summary.available_evse_count == 1
+    assert summary.none_available_evse_count == 1
+    assert summary.unknown_availability_evse_count == 1
+    assert summary.availability.available_connectors == 1
+    assert summary.availability.total_connectors == 5
+    assert summary.availability.reported_total_connectors == 9
+
+
+def test_site_availability_statistics_require_complete_fresh_data_for_zero(
+    sample_stations,
+):
+    base = sample_stations[0]
+    none_available = replace(
+        base,
+        connectors=(_connector("none-available", 2, 0),),
+        availability_reported=True,
+        connector_count_reported=True,
+        is_stale=False,
+    )
+    stale = replace(none_available, provider_id="stale", is_stale=True)
+
+    complete = site_availability_statistics((none_available,))
+    incomplete = site_availability_statistics((none_available, stale))
+    stale_only = site_availability_statistics((stale,))
+
+    assert complete.state == "none_available"
+    assert incomplete.state == "unknown"
+    assert stale_only.state == "unknown"
+    assert stale_only.fresh_evse_count == 0
+    assert stale_only.availability.available_connectors is None
 
 
 def test_station_comparable_price_is_finite_available_and_currency_normalized(

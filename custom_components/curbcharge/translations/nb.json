@@ -420,6 +420,14 @@
           "unknown": "Ukjent"
         }
       },
+      "site_summary": {
+        "name": "Stedsoversikt",
+        "state": {
+          "available": "Ledig",
+          "none_available": "Ingen ledige",
+          "unknown": "Ukjent"
+        }
+      },
       "favorite_status": {
         "name": "Favorittstatus",
         "state": {

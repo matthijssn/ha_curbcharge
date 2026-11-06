@@ -420,6 +420,14 @@
           "unknown": "Okänt"
         }
       },
+      "site_summary": {
+        "name": "Platsöversikt",
+        "state": {
+          "available": "Ledig",
+          "none_available": "Inga lediga",
+          "unknown": "Okänt"
+        }
+      },
       "favorite_status": {
         "name": "Favoritstatus",
         "state": {

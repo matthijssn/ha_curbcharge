@@ -30,11 +30,30 @@ CurbCharge's multi-factor ranking; it is not necessarily the closest station.
 Use **Nearest available charger** when distance alone should determine the
 selection.
 
+For providers with a distinct site ID, a native Entities card can show the
+parent location's site summary alongside the per-EVSE entities:
+
+```yaml
+type: entities
+entities:
+  - entity: sensor.your_site_summary
+```
+
 ### Native map and tap-to-navigate links
 
 The built-in Map card can plot any entity with `latitude` and `longitude`
 attributes. Per-station **Status summary** sensors already provide them;
-**Best nearby** provides the selected destination coordinates. In the
+**Best nearby** provides the selected destination coordinates, and a supported
+provider's **Site summary** provides the parent location coordinates. To map a
+site rather than each EVSE, use:
+
+```yaml
+type: map
+entities:
+  - entity: sensor.your_site_summary
+```
+
+In the
 [complete Map card example](../examples/curbcharge-map.yaml), replace both
 example IDs with the entities from your instance, or remove the Status summary
 row if it would duplicate the Best nearby marker. The card may also show Home

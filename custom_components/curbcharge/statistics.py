@@ -31,6 +31,20 @@ class AvailabilityStatistics:
 
 
 @dataclass(frozen=True, slots=True)
+class SiteAvailabilityStatistics:
+    """Freshness-aware availability summary for one provider location."""
+
+    state: str
+    represented_evse_count: int
+    fresh_evse_count: int
+    stale_evse_count: int
+    available_evse_count: int
+    none_available_evse_count: int
+    unknown_availability_evse_count: int
+    availability: AvailabilityStatistics
+
+
+@dataclass(frozen=True, slots=True)
 class TariffStatistics:
     """Single-currency station-price summary and explicit exclusions."""
 
@@ -162,6 +176,62 @@ def availability_statistics(
         known_availability_station_count,
         available_station_count,
         contributing_station_count,
+    )
+
+
+def group_stations_by_site(
+    stations: Iterable[ChargingStation],
+) -> dict[tuple[str, str], tuple[ChargingStation, ...]]:
+    """Group stations only by a matching provider's distinct location ID."""
+    groups: dict[tuple[str, str], list[ChargingStation]] = {}
+    for station in stations:
+        location = station.location
+        if (
+            location is None
+            or location.provider != station.provider
+            or location.provider_id == station.provider_id
+        ):
+            continue
+        groups.setdefault((station.provider, location.provider_id), []).append(station)
+    return {key: tuple(group) for key, group in groups.items()}
+
+
+def site_availability_statistics(
+    stations: Iterable[ChargingStation],
+) -> SiteAvailabilityStatistics:
+    """Summarize fresh EVSE availability without treating stale data as zero."""
+    station_values = tuple(stations)
+    fresh_stations = tuple(
+        station for station in station_values if not station.is_stale
+    )
+    availability_states = tuple(
+        station.has_available_connectors for station in fresh_stations
+    )
+    available_evse_count = sum(state is True for state in availability_states)
+    none_available_evse_count = sum(state is False for state in availability_states)
+    unknown_availability_evse_count = sum(
+        state is None for state in availability_states
+    )
+    if available_evse_count:
+        state = "available"
+    elif (
+        fresh_stations
+        and len(fresh_stations) == len(station_values)
+        and none_available_evse_count == len(fresh_stations)
+    ):
+        state = "none_available"
+    else:
+        state = "unknown"
+
+    return SiteAvailabilityStatistics(
+        state=state,
+        represented_evse_count=len(station_values),
+        fresh_evse_count=len(fresh_stations),
+        stale_evse_count=len(station_values) - len(fresh_stations),
+        available_evse_count=available_evse_count,
+        none_available_evse_count=none_available_evse_count,
+        unknown_availability_evse_count=unknown_availability_evse_count,
+        availability=availability_statistics(fresh_stations or None),
     )
 
 

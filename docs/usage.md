@@ -448,6 +448,9 @@ Each charging point is one Home Assistant device. CurbCharge creates:
 - **Status summary**, including connector types, operator, address, provider
   status, tariff details, coordinates, provider timestamp provenance, and
   provider-record age when known.
+- **Site summary** on the parent location device when a provider reports a
+  distinct site ID. This is currently supported by Belgium, Finland,
+  Switzerland, and Lithuania, including sites with one EVSE.
 - The Status summary's `is_favorite` attribute identifies stations selected
   as favourites for this config entry.
 - One **Favorite status** sensor is created for each saved favourite and
@@ -458,6 +461,20 @@ Each charging point is one Home Assistant device. CurbCharge creates:
   `provider_update_success`, and `missing_refresh_count`. Numeric attributes
   expose available/total connectors, maximum power, price/currency, and
   provider-data freshness for automation triggers.
+- Site summaries count the EVSE records in the current coordinator snapshot,
+  not necessarily the complete physical site inventory. `in_search_area` shows
+  whether any represented EVSE is in the configured radius, and
+  `favorite_evse_count` identifies represented favorites. `results_may_be_truncated`
+  indicates when the nearby result set may be capped. Stale EVSEs are excluded
+  from availability and connector totals. The state is `available` when any
+  fresh EVSE reports availability, `none_available` only when every represented
+  EVSE is fresh and known unavailable, and `unknown` otherwise; the sensor is
+  unavailable when no fresh EVSE remains or a coordinator update fails.
+  `available_connectors` and `total_connectors` include only connector groups
+  with known availability; `reported_total_connectors` and
+  `connector_availability_coverage_percentage` disclose total reports and
+  coverage. `connector_availability_percentage` is the available-to-known-total
+  ratio. Prices are not aggregated because tariffs can differ by EVSE.
 - The entry-level **Favorite summary** state is the configured favourite
   count. Its attributes report configured, discovered, known, available,
   unknown, stale, and confirmed-missing favourite counts, the last successful

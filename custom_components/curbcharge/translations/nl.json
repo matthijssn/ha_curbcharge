@@ -420,6 +420,14 @@
           "unknown": "Onbekend"
         }
       },
+      "site_summary": {
+        "name": "Locatieoverzicht",
+        "state": {
+          "available": "Beschikbaar",
+          "none_available": "Geen beschikbaar",
+          "unknown": "Onbekend"
+        }
+      },
       "favorite_status": {
         "name": "Favorietstatus",
         "state": {

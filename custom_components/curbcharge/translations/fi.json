@@ -420,6 +420,14 @@
           "unknown": "Tuntematon"
         }
       },
+      "site_summary": {
+        "name": "Sijainnin yhteenveto",
+        "state": {
+          "available": "Käytettävissä",
+          "none_available": "Ei vapaita",
+          "unknown": "Tuntematon"
+        }
+      },
       "favorite_status": {
         "name": "Suosikin tila",
         "state": {
