@@ -12,6 +12,11 @@ for environment setup, test and formatting commands, and release workflow. The
   [`tests/fixtures/`](tests/fixtures/) and are loaded by
   [`tests/conftest.py`](tests/conftest.py). Keep examples minimal, sanitized,
   and free of credentials or private provider data.
+- Treat `pytest`, `pytest-homeassistant-custom-component`, and the current
+  Home Assistant pin as a compatible dependency set. Before updating them,
+  check the plugin's version requirements, verify the full requirements file
+  resolves, and pass both the minimum and current CI test environments. See
+  the [development guide](docs/development.md#development).
 - Update user-facing strings in
   [`custom_components/curbcharge/strings.json`](custom_components/curbcharge/strings.json)
   and keep all nine locales (`en`, `nl`, `fr`, `de`, `nb`, `sv`, `fi`, `it`,

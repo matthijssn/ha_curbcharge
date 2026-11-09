@@ -59,6 +59,13 @@ relying on a provider.
   fallback explanations
 - A bundled dashboard card, plus copyable dashboard and automation examples
 
+## Versioning and compatibility
+
+Beginning with 1.0.0, patch and minor releases will preserve CurbCharge's
+documented configuration, provider, device/entity, service, sensor-state, and
+dashboard-card contracts. Breaking changes require a major version and
+documented upgrade steps. See the [1.x compatibility contract](docs/development.md#1x-compatibility-contract).
+
 ## Documentation
 
 - [User guide: coverage, setup, entities, updates, and privacy](docs/usage.md)

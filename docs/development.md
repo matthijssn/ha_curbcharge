@@ -14,6 +14,13 @@ teardown leak. The current-version job runs Home Assistant 2026.10.4 on
 Python 3.14.2; Dependabot keeps that pin reviewable. The current-version test
 run exposes `DeprecationWarning` messages.
 
+Treat the `pytest`, `pytest-homeassistant-custom-component`, and current
+Home Assistant pins as a tested set: the test plugin may pin exact pytest and
+Home Assistant versions. Before updating any member, verify that
+`pip install -r requirements-dev.txt` resolves and run the minimum and current
+Home Assistant test environments. The minimum environment has its own plugin
+and constraints; keep those separate unless that matrix is tested too.
+
 The supported development environments are Linux:
 
 - Minimum: CPython 3.12, Home Assistant 2024.12.0, and the same pinned test
@@ -192,6 +199,30 @@ stored-data format change requires a versioned config-entry migration and
 tests using an existing entry; identity changes need an explicit compatibility
 and migration plan. Include required user actions in both the pull request and
 release notes.
+
+### 1.x compatibility contract
+
+The supported 1.x compatibility surface is the documented behavior users and
+automations can persist against:
+
+- Config-entry identity, stored data/options, and `CONFIG_ENTRY_VERSION`.
+- Provider IDs stored in existing entries.
+- Station, site, device, and entity unique IDs registered by Home Assistant.
+- Service names and documented service payload fields.
+- Documented entity states, result/status codes, and attributes consumed by the
+  bundled card, blueprints, and dashboard examples.
+
+Within 1.x, patch and minor releases may add providers, entities, attributes,
+and optional behavior, but must preserve existing identifiers and documented
+meanings. They must not silently remove or repurpose a state, service field, or
+card-consumed attribute. Required compatibility changes need a major version;
+config-entry format changes also need a migration and tests against an existing
+entry. Internal Python classes and coordinator implementation details are not
+public APIs unless explicitly documented above.
+
+The stability promise covers CurbCharge's behavior, not external provider
+availability, source completeness, freshness, rate limits, or tariffs. Continue
+to document provider-specific preview status, terms, and unknown-data limits.
 
 ## Provider architecture
 
