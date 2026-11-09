@@ -12,7 +12,9 @@ counts, power, distance and unambiguous tariff data, plus a recommendation for
 the best nearby station. Favorites can be monitored with sensors and managed
 with admin-only actions.
 
-![CurbCharge banner showing Home Assistant with a charger map and nearby recommendations](docs/images/curbcharge-home-assistant-banner.png)
+<p align="center">
+  <img src="docs/images/curbcharge-home-assistant-banner.png" alt="CurbCharge banner showing Home Assistant with a charger map and nearby recommendations" width="720">
+</p>
 
 ![CurbCharge dashboard showing nearby charger availability and price](docs/images/curbcharge-dashboard-screenshot.png)
 
