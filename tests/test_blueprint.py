@@ -86,7 +86,7 @@ def _condition_template(automation: dict) -> str:
     return automation["conditions"][0]["value_template"].template
 
 
-def _render_condition(hass, automation: dict, variables: dict[str, object]) -> str:
+def _render_condition(hass, automation: dict, variables: dict[str, object]) -> bool:
     return Template(_condition_template(automation), hass).async_render(variables)
 
 
@@ -127,8 +127,8 @@ async def test_availability_blueprint_only_matches_selected_known_transitions(ha
     template = _condition_template(automation)
     condition = Template(template, hass)
 
-    async def allows(previous: str | None, current: str, transition: str) -> str:
-        return await condition.async_render(
+    def allows(previous: str | None, current: str, transition: str) -> bool:
+        return condition.async_render(
             {
                 "availability_transition": transition,
                 "trigger": {
@@ -138,14 +138,14 @@ async def test_availability_blueprint_only_matches_selected_known_transitions(ha
             }
         )
 
-    assert await allows("none_available", "available", "becomes_available")
-    assert not await allows("available", "none_available", "becomes_available")
-    assert await allows("available", "none_available", "becomes_unavailable")
-    assert await allows("none_available", "available", "any_known_change")
-    assert await allows("available", "none_available", "any_known_change")
-    assert not await allows("unknown", "available", "any_known_change")
-    assert not await allows("unavailable", "available", "any_known_change")
-    assert not await allows(None, "available", "any_known_change")
+    assert allows("none_available", "available", "becomes_available")
+    assert not allows("available", "none_available", "becomes_available")
+    assert allows("available", "none_available", "becomes_unavailable")
+    assert allows("none_available", "available", "any_known_change")
+    assert allows("available", "none_available", "any_known_change")
+    assert not allows("unknown", "available", "any_known_change")
+    assert not allows("unavailable", "available", "any_known_change")
+    assert not allows(None, "available", "any_known_change")
 
 
 @pytest.mark.asyncio
@@ -208,12 +208,10 @@ async def test_nearby_availability_blueprint_only_triggers_on_numeric_increases(
     automation = _automation_config(blueprint)
 
     assert len(automation["triggers"]) == 1
-    assert automation["triggers"][0]["entity_id"] == [
-        "sensor.nearby_available_stations"
-    ]
+    assert automation["triggers"][0]["entity_id"] == "sensor.nearby_available_stations"
 
-    async def allows(previous: str | None, current: str) -> str:
-        return await _render_condition(
+    def allows(previous: str | None, current: str) -> bool:
+        return _render_condition(
             hass,
             automation,
             {
@@ -224,13 +222,13 @@ async def test_nearby_availability_blueprint_only_triggers_on_numeric_increases(
             },
         )
 
-    assert await allows("0", "1")
-    assert await allows("1", "3")
-    assert not await allows("1", "1")
-    assert not await allows("2", "1")
-    assert not await allows("unknown", "1")
-    assert not await allows("unavailable", "1")
-    assert not await allows(None, "1")
+    assert allows("0", "1")
+    assert allows("1", "3")
+    assert not allows("1", "1")
+    assert not allows("2", "1")
+    assert not allows("unknown", "1")
+    assert not allows("unavailable", "1")
+    assert not allows(None, "1")
 
 
 @pytest.mark.asyncio
@@ -239,13 +237,13 @@ async def test_favorite_data_blueprint_distinguishes_stale_and_failed_updates(ha
     automation = _automation_config(blueprint)
     condition = Template(_condition_template(automation), hass)
 
-    async def allows(
+    def allows(
         previous: str | None,
         current: str,
         previous_attributes: dict[str, object],
         current_attributes: dict[str, object],
-    ) -> str:
-        return await condition.async_render(
+    ) -> bool:
+        return condition.async_render(
             {
                 "trigger": {
                     "from_state": (
@@ -265,19 +263,19 @@ async def test_favorite_data_blueprint_distinguishes_stale_and_failed_updates(ha
         "stale_count": 0,
         "missing_count": 0,
     }
-    assert await allows(
+    assert allows(
         "2",
         "2",
         current,
         {**current, "stale_count": 1},
     )
-    assert await allows(
+    assert allows(
         "2",
         "2",
         {**current, "stale_count": 1},
         {**current, "stale_count": 1, "missing_count": 1},
     )
-    assert await allows(
+    assert allows(
         "2",
         "unavailable",
         current,
@@ -287,7 +285,7 @@ async def test_favorite_data_blueprint_distinguishes_stale_and_failed_updates(ha
             "last_successful_update": current["last_successful_update"],
         },
     )
-    assert not await allows(
+    assert not allows(
         "unknown",
         "unavailable",
         {"configured_count": 2, "provider_update_success": False},
@@ -297,7 +295,7 @@ async def test_favorite_data_blueprint_distinguishes_stale_and_failed_updates(ha
             "last_successful_update": None,
         },
     )
-    assert not await allows(
+    assert not allows(
         "unavailable",
         "unavailable",
         {
@@ -311,7 +309,7 @@ async def test_favorite_data_blueprint_distinguishes_stale_and_failed_updates(ha
             "last_successful_update": current["last_successful_update"],
         },
     )
-    assert not await allows(
+    assert not allows(
         "2",
         "unavailable",
         {**current, "provider_update_success": False},
@@ -321,8 +319,8 @@ async def test_favorite_data_blueprint_distinguishes_stale_and_failed_updates(ha
             "last_successful_update": current["last_successful_update"],
         },
     )
-    assert not await allows("2", "2", current, current)
-    assert not await allows(
+    assert not allows("2", "2", current, current)
+    assert not allows(
         "unavailable",
         "2",
         {"configured_count": 2, "provider_update_success": False},
@@ -336,13 +334,13 @@ async def test_favorite_tariff_blueprint_only_alerts_on_valid_currency_crossing(
     automation = _automation_config(blueprint)
     template = Template(_condition_template(automation), hass)
 
-    async def allows(
+    def allows(
         previous: dict[str, object] | None,
         current: dict[str, object],
         *,
         direction: str = "below",
-    ) -> str:
-        return await template.async_render(
+    ) -> bool:
+        return template.async_render(
             {
                 "price_threshold": 0.35,
                 "currency": "EUR",
@@ -365,16 +363,12 @@ async def test_favorite_tariff_blueprint_only_alerts_on_valid_currency_crossing(
             "is_stale": False,
         }
 
-    assert await allows(tariff(0.40), tariff(0.30))
-    assert not await allows(tariff(0.30), tariff(0.20))
-    assert await allows(tariff(0.30), tariff(0.40), direction="above")
-    assert not await allows(tariff(0.40), tariff(0.30, currency="USD"))
-    assert not await allows(tariff(0.40), tariff(0.30, status="incomplete"))
-    assert not await allows(None, tariff(0.30))
-    assert not await allows(
-        tariff(0.40), {"currency": "EUR", "tariff_status": "available"}
-    )
-    assert not await allows(tariff(0.40), {**tariff(0.30), "is_stale": True})
-    assert not await allows(
-        tariff(0.40), {**tariff(0.30), "provider_update_success": False}
-    )
+    assert allows(tariff(0.40), tariff(0.30))
+    assert not allows(tariff(0.30), tariff(0.20))
+    assert allows(tariff(0.30), tariff(0.40), direction="above")
+    assert not allows(tariff(0.40), tariff(0.30, currency="USD"))
+    assert not allows(tariff(0.40), tariff(0.30, status="incomplete"))
+    assert not allows(None, tariff(0.30))
+    assert not allows(tariff(0.40), {"currency": "EUR", "tariff_status": "available"})
+    assert not allows(tariff(0.40), {**tariff(0.30), "is_stale": True})
+    assert not allows(tariff(0.40), {**tariff(0.30), "provider_update_success": False})
