@@ -12,7 +12,7 @@ Assistant forms, and charging data is exposed through Home Assistant entities.
 The bundled Lovelace card is designed for Home Assistant dashboards. Its
 accessibility depends on the Home Assistant frontend, browser, operating system,
 and assistive technology in use. CurbCharge supports the Home Assistant versions
-listed in [hacs.json](hacs.json); it does not certify every browser or assistive
+listed in [hacs.json](../hacs.json); it does not certify every browser or assistive
 technology combination.
 
 When a map or custom-card presentation is not suitable, the same sensor data can
@@ -51,5 +51,5 @@ and include the Home Assistant and CurbCharge versions, the affected surface,
 browser and operating system, assistive technology if relevant, reproduction
 steps, and the expected and actual behavior. Remove credentials, exact home
 coordinates, and personal information from reports and screenshots. Report
-security vulnerabilities through the private process in [SECURITY.md](SECURITY.md),
+security vulnerabilities through the private process in [SECURITY.md](../SECURITY.md),
 not in a public issue.

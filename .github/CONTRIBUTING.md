@@ -1,33 +1,33 @@
 # Contributing
 
-Thanks for helping improve CurbCharge. Start with the [development guide](docs/development.md)
+Thanks for helping improve CurbCharge. Start with the [development guide](../docs/development.md)
 for environment setup, test and formatting commands, and release workflow. The
-[user guide](docs/usage.md) describes integration behavior and privacy.
+[user guide](../docs/usage.md) describes integration behavior and privacy.
 
 ## Contribution checklist
 
 - Keep changes focused, work from `main`, and open one pull request per issue.
   Link the issue and explain the user-visible change and validation performed.
 - Add or update tests for behavior changes. Shared fixtures are in
-  [`tests/fixtures/`](tests/fixtures/) and are loaded by
-  [`tests/conftest.py`](tests/conftest.py). Keep examples minimal, sanitized,
+  [`tests/fixtures/`](../tests/fixtures/) and are loaded by
+  [`tests/conftest.py`](../tests/conftest.py). Keep examples minimal, sanitized,
   and free of credentials or private provider data.
 - Treat `pytest`, `pytest-homeassistant-custom-component`, and the current
   Home Assistant pin as a compatible dependency set. Before updating them,
   check the plugin's version requirements, verify the full requirements file
   resolves, and pass both the minimum and current CI test environments. See
-  the [development guide](docs/development.md#development).
+  the [development guide](../docs/development.md#development).
 - Update user-facing strings in
-  [`custom_components/curbcharge/strings.json`](custom_components/curbcharge/strings.json)
+  [`custom_components/curbcharge/strings.json`](../custom_components/curbcharge/strings.json)
   and keep all nine locales (`en`, `nl`, `fr`, `de`, `nb`, `sv`, `fi`, `it`,
   `lv`) in
-  [`custom_components/curbcharge/translations/`](custom_components/curbcharge/translations/)
+  [`custom_components/curbcharge/translations/`](../custom_components/curbcharge/translations/)
   aligned, with identical keys, nonempty values, and matching placeholders.
   Keep `en.json` identical to `strings.json`. For card-facing changes, update
   all nine dictionaries in
-  [`curbcharge-card.js`](custom_components/curbcharge/www/curbcharge-card.js)
+  [`curbcharge-card.js`](../custom_components/curbcharge/www/curbcharge-card.js)
   and the applicable cases in
-  [`tests/curbcharge-card.test.mjs`](tests/curbcharge-card.test.mjs).
+  [`tests/curbcharge-card.test.mjs`](../tests/curbcharge-card.test.mjs).
   Run `pytest tests/test_translations.py` and
   `node --test tests/curbcharge-card.test.mjs`. Review natural UTF-8 wording
   and consistent charging terminology; structural tests do not prove language
@@ -40,12 +40,12 @@ for environment setup, test and formatting commands, and release workflow. The
   credentials, exact home coordinates, personal information, or unredacted
   provider responses.
 - For provider architecture, normalized models, and source-specific tests, see
-  the [provider development guide](docs/development.md#provider-architecture).
+  the [provider development guide](../docs/development.md#provider-architecture).
   Keep API credentials and provider payloads private unless their terms allow
   sharing.
 
-Follow the checks in the [development guide](docs/development.md) before
+Follow the checks in the [development guide](../docs/development.md) before
 submitting. The pull request template lists the compatibility, privacy, and
 validation details reviewers need.
 
-See the [Code of Conduct](CODE_OF_CONDUCT.md) and [Security policy](SECURITY.md).
+See the [Code of Conduct](CODE_OF_CONDUCT.md) and [Security policy](../SECURITY.md).

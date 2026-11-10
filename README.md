@@ -75,8 +75,8 @@ documented upgrade steps. See the [1.x compatibility contract](docs/development.
 - [User guide: coverage, setup, entities, updates, and privacy](docs/usage.md)
 - [Dashboards, cards, and automations](docs/dashboards-and-automations.md)
 - [Development and releases](docs/development.md)
-- [Accessibility statement](ACCESSIBILITY.md)
-- [Contributing](CONTRIBUTING.md) | [Code of Conduct](CODE_OF_CONDUCT.md) | [Security policy](SECURITY.md)
+- [Accessibility statement](.github/ACCESSIBILITY.md)
+- [Contributing](.github/CONTRIBUTING.md) | [Code of Conduct](.github/CODE_OF_CONDUCT.md) | [Security policy](SECURITY.md)
 - [Copyable YAML examples](examples/)
 - [Favorite services and automation guide](docs/dashboards-and-automations.md#favorite-services-and-automations)
 
