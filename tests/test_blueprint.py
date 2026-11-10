@@ -87,7 +87,8 @@ def _condition_template(automation: dict) -> str:
 
 
 def _render_condition(hass, automation: dict, variables: dict[str, object]) -> bool:
-    return Template(_condition_template(automation), hass).async_render(variables)
+    result = Template(_condition_template(automation), hass).async_render(variables)
+    return result if isinstance(result, bool) else result.strip().lower() == "true"
 
 
 @pytest.mark.asyncio
@@ -124,18 +125,18 @@ async def test_blueprint_parses_and_only_triggers_on_known_unavailable_to_availa
 @pytest.mark.asyncio
 async def test_availability_blueprint_only_matches_selected_known_transitions(hass):
     automation = _automation_config(_blueprint())
-    template = _condition_template(automation)
-    condition = Template(template, hass)
 
     def allows(previous: str | None, current: str, transition: str) -> bool:
-        return condition.async_render(
+        return _render_condition(
+            hass,
+            automation,
             {
                 "availability_transition": transition,
                 "trigger": {
                     "from_state": None if previous is None else _state(previous),
                     "to_state": _state(current),
                 },
-            }
+            },
         )
 
     assert allows("none_available", "available", "becomes_available")
@@ -235,7 +236,6 @@ async def test_nearby_availability_blueprint_only_triggers_on_numeric_increases(
 async def test_favorite_data_blueprint_distinguishes_stale_and_failed_updates(hass):
     blueprint = _blueprint(FAVORITE_DATA_BLUEPRINT_PATH)
     automation = _automation_config(blueprint)
-    condition = Template(_condition_template(automation), hass)
 
     def allows(
         previous: str | None,
@@ -243,7 +243,9 @@ async def test_favorite_data_blueprint_distinguishes_stale_and_failed_updates(ha
         previous_attributes: dict[str, object],
         current_attributes: dict[str, object],
     ) -> bool:
-        return condition.async_render(
+        return _render_condition(
+            hass,
+            automation,
             {
                 "trigger": {
                     "from_state": (
@@ -253,7 +255,7 @@ async def test_favorite_data_blueprint_distinguishes_stale_and_failed_updates(ha
                     ),
                     "to_state": _state(current, current_attributes),
                 }
-            }
+            },
         )
 
     current = {
@@ -332,7 +334,6 @@ async def test_favorite_data_blueprint_distinguishes_stale_and_failed_updates(ha
 async def test_favorite_tariff_blueprint_only_alerts_on_valid_currency_crossing(hass):
     blueprint = _blueprint(FAVORITE_TARIFF_BLUEPRINT_PATH)
     automation = _automation_config(blueprint)
-    template = Template(_condition_template(automation), hass)
 
     def allows(
         previous: dict[str, object] | None,
@@ -340,7 +341,9 @@ async def test_favorite_tariff_blueprint_only_alerts_on_valid_currency_crossing(
         *,
         direction: str = "below",
     ) -> bool:
-        return template.async_render(
+        return _render_condition(
+            hass,
+            automation,
             {
                 "price_threshold": 0.35,
                 "currency": "EUR",
@@ -351,7 +354,7 @@ async def test_favorite_tariff_blueprint_only_alerts_on_valid_currency_crossing(
                     else _state("available", previous),
                     "to_state": _state("available", current),
                 },
-            }
+            },
         )
 
     def tariff(price: float, currency: str = "EUR", status: str = "available"):
