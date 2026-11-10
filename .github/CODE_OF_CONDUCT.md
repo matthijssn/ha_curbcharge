@@ -12,4 +12,4 @@ For behavior on GitHub, use its **Report content** action on the relevant
 issue, pull request, or comment. Avoid posting personal or sensitive details
 publicly. Maintainers may edit or remove content, close contributions, or
 restrict participation to enforce this policy. For security vulnerabilities,
-follow the private process in [SECURITY.md](../SECURITY.md).
+follow the private process in [SECURITY.md](SECURITY.md).

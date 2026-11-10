@@ -23,5 +23,5 @@ options and requirements.
   and [contributing](https://github.com/matthijssn/ha_curbcharge/blob/main/.github/CONTRIBUTING.md).
 
 For help, [open an issue](https://github.com/matthijssn/ha_curbcharge/issues)
-or see the [security policy](https://github.com/matthijssn/ha_curbcharge/blob/main/SECURITY.md)
+or see the [security policy](https://github.com/matthijssn/ha_curbcharge/blob/main/.github/SECURITY.md)
 for private vulnerability reports.
