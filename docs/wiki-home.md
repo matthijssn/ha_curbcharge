@@ -20,7 +20,7 @@ options and requirements.
   the bundled card, native dashboards, maps, and automation examples.
 - [Copyable YAML examples](https://github.com/matthijssn/ha_curbcharge/tree/main/examples).
 - [Development and releases](https://github.com/matthijssn/ha_curbcharge/blob/main/docs/development.md)
-  and [contributing](https://github.com/matthijssn/ha_curbcharge/blob/main/CONTRIBUTING.md).
+  and [contributing](https://github.com/matthijssn/ha_curbcharge/blob/main/.github/CONTRIBUTING.md).
 
 For help, [open an issue](https://github.com/matthijssn/ha_curbcharge/issues)
 or see the [security policy](https://github.com/matthijssn/ha_curbcharge/blob/main/SECURITY.md)
