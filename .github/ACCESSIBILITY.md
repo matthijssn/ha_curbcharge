@@ -51,5 +51,5 @@ and include the Home Assistant and CurbCharge versions, the affected surface,
 browser and operating system, assistive technology if relevant, reproduction
 steps, and the expected and actual behavior. Remove credentials, exact home
 coordinates, and personal information from reports and screenshots. Report
-security vulnerabilities through the private process in [SECURITY.md](../SECURITY.md),
+security vulnerabilities through the private process in [SECURITY.md](SECURITY.md),
 not in a public issue.

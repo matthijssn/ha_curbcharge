@@ -263,7 +263,7 @@ See [Luxembourg source research](provider-research/luxembourg.md).
 
 Security fixes are supported for the latest stable CurbCharge release. Older
 release backports are considered case by case; no response or backport timeline
-is promised. Report privately using [SECURITY.md](../SECURITY.md).
+is promised. Report privately using [SECURITY.md](../.github/SECURITY.md).
 
 GitHub Actions are pinned by commit SHA and Dependabot reviews updates weekly.
 The pinned HACS validator currently pulls its official `main` container image,

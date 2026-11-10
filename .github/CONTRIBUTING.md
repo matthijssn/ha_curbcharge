@@ -48,4 +48,4 @@ Follow the checks in the [development guide](../docs/development.md) before
 submitting. The pull request template lists the compatibility, privacy, and
 validation details reviewers need.
 
-See the [Code of Conduct](CODE_OF_CONDUCT.md) and [Security policy](../SECURITY.md).
+See the [Code of Conduct](CODE_OF_CONDUCT.md) and [Security policy](SECURITY.md).
