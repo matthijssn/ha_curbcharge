@@ -1,18 +1,18 @@
 blueprint:
-  name: Notify when a CurbCharge charging point becomes available
+  name: Notify on CurbCharge charging point availability
   description: >
-    Run a user-selected notification action when a CurbCharge Status summary
-    changes from known no availability to available. Home Assistant startup,
-    unknown/unavailable recovery, and provider data outages do not trigger this
-    automation. CurbCharge polls providers on a schedule, so notifications are
-    not real-time. The optional provider age check uses the provider's
-    last_updated timestamp, which may not represent an availability change.
+    Run a user-selected notification action for a known availability change on
+    selected CurbCharge Status summary or Favorite Status sensors. Unknown or
+    unavailable recovery and provider data outages do not count as availability
+    changes. CurbCharge polls providers on a schedule, so notifications are not
+    real-time. The optional provider age check uses provider timestamp data,
+    which may not represent an availability change.
   domain: automation
   source_url: https://github.com/matthijssn/ha_curbcharge/blob/main/blueprints/automation/curbcharge/notify_when_charging_point_available.yaml
   input:
     station_entities:
-      name: Charging points
-      description: Select one or more CurbCharge Status summary sensors.
+      name: Charging points and favorites
+      description: Select one or more CurbCharge Status summary or Favorite Status sensors.
       selector:
         entity:
           multiple: true
@@ -20,10 +20,23 @@ blueprint:
             - integration: curbcharge
               domain: sensor
               device_class: enum
+    availability_transition:
+      name: Availability transition
+      description: Choose which known availability change triggers the action.
+      default: becomes_available
+      selector:
+        select:
+          options:
+            - label: Becomes available
+              value: becomes_available
+            - label: Reports no available connectors
+              value: becomes_unavailable
+            - label: Any known availability change
+              value: any_known_change
     minimum_available_duration:
-      name: Minimum available duration
+      name: Minimum target status duration
       description: >
-        Wait this long after the charger becomes available before notifying.
+        Wait this long after the selected target status is reported before notifying.
         The timer resets if Home Assistant restarts or the automation reloads.
       default:
         hours: 0
@@ -59,15 +72,28 @@ blueprint:
         action: {}
 
 variables:
+  availability_transition: !input availability_transition
   check_provider_data_age: !input check_provider_data_age
   maximum_provider_data_age_minutes: !input maximum_provider_data_age_minutes
 
 trigger:
   - platform: state
     entity_id: !input station_entities
-    from: "none_available"
-    to: "available"
     for: !input minimum_available_duration
+
+condition:
+  - condition: template
+    value_template: >-
+      {% set previous_status = trigger.from_state.state if trigger.from_state is not none else none %}
+      {% set current_status = trigger.to_state.state if trigger.to_state is not none else none %}
+      {{ previous_status in ['available', 'none_available']
+         and current_status in ['available', 'none_available']
+         and previous_status != current_status
+         and (
+           availability_transition == 'any_known_change'
+           or availability_transition == 'becomes_available' and current_status == 'available'
+           or availability_transition == 'becomes_unavailable' and current_status == 'none_available'
+         ) }}
 
 action:
   - variables:
@@ -76,6 +102,8 @@ action:
            or trigger.to_state.attributes.get('friendly_name')
            or trigger.entity_id }}
       station_entity: "{{ trigger.entity_id }}"
+      previous_status: "{{ trigger.from_state.state }}"
+      current_status: "{{ trigger.to_state.state }}"
   - choose:
       - conditions:
           - condition: template
@@ -83,11 +111,18 @@ action:
               {% if not check_provider_data_age %}
                 true
               {% else %}
-                {% set provider_timestamp = as_timestamp(state_attr(trigger.entity_id, 'last_updated'), default=none) %}
-                {% set age_seconds = as_timestamp(now()) - provider_timestamp if provider_timestamp is not none else none %}
-                {{ age_seconds is not none
-                   and age_seconds >= 0
-                   and age_seconds <= (maximum_provider_data_age_minutes | float(0)) * 60 }}
+                {% set provider_age = state_attr(trigger.entity_id, 'provider_data_age_seconds') %}
+                {% if provider_age is not none %}
+                  {{ is_number(provider_age)
+                     and (provider_age | float(0)) >= 0
+                     and (provider_age | float(0)) <= (maximum_provider_data_age_minutes | float(0)) * 60 }}
+                {% else %}
+                  {% set provider_timestamp = as_timestamp(state_attr(trigger.entity_id, 'last_updated'), default=none) %}
+                  {% set age_seconds = as_timestamp(now()) - provider_timestamp if provider_timestamp is not none else none %}
+                  {{ age_seconds is not none
+                     and age_seconds >= 0
+                     and age_seconds <= (maximum_provider_data_age_minutes | float(0)) * 60 }}
+                {% endif %}
               {% endif %}
         sequence: !input notification_action
 

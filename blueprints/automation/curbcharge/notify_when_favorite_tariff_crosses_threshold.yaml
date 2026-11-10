@@ -1,0 +1,114 @@
+blueprint:
+  name: Notify when a CurbCharge favorite tariff crosses a threshold
+  description: >
+    Run a user-selected action when a selected favorite's valid, unambiguous
+    price per kWh crosses the chosen threshold in the selected direction. The
+    price and currency must be reported before and after the crossing.
+  domain: automation
+  source_url: https://github.com/matthijssn/ha_curbcharge/blob/main/blueprints/automation/curbcharge/notify_when_favorite_tariff_crosses_threshold.yaml
+  input:
+    favorite_status_entities:
+      name: Favorite status sensors
+      description: Select one or more CurbCharge Favorite Status sensors.
+      selector:
+        entity:
+          multiple: true
+          filter:
+            - integration: curbcharge
+              domain: sensor
+              device_class: enum
+    price_threshold:
+      name: Price threshold
+      description: Price per kWh in the selected currency.
+      selector:
+        number:
+          min: 0
+          step: 0.01
+          mode: box
+    currency:
+      name: Currency
+      description: Enter the three-letter currency code reported by the selected stations.
+      selector:
+        text: {}
+    threshold_direction:
+      name: Threshold direction
+      description: Choose which threshold crossing triggers the action.
+      default: below
+      selector:
+        select:
+          options:
+            - label: Crosses below
+              value: below
+            - label: Crosses above
+              value: above
+    notification_action:
+      name: Notification action
+      description: >
+        Choose what Home Assistant should do. The action can use station_name,
+        station_entity, previous_price, current_price, currency,
+        price_threshold, and threshold_direction.
+      selector:
+        action: {}
+
+variables:
+  price_threshold: !input price_threshold
+  currency: !input currency
+  threshold_direction: !input threshold_direction
+
+trigger:
+  - platform: state
+    entity_id: !input favorite_status_entities
+
+condition:
+  - condition: template
+    value_template: >-
+      {% if trigger.from_state is none or trigger.to_state is none %}
+        false
+      {% else %}
+        {% set previous_price = trigger.from_state.attributes.get('price_per_kwh') %}
+        {% set current_price = trigger.to_state.attributes.get('price_per_kwh') %}
+        {% set previous_currency = trigger.from_state.attributes.get('currency') %}
+        {% set current_currency = trigger.to_state.attributes.get('currency') %}
+        {% set previous_tariff_status = trigger.from_state.attributes.get('tariff_status') %}
+        {% set current_tariff_status = trigger.to_state.attributes.get('tariff_status') %}
+        {% if trigger.from_state.state == 'unavailable'
+           or trigger.to_state.state == 'unavailable'
+           or trigger.from_state.attributes.get('provider_update_success') is not true
+           or trigger.to_state.attributes.get('provider_update_success') is not true
+           or trigger.from_state.attributes.get('is_stale') is not false
+           or trigger.to_state.attributes.get('is_stale') is not false
+           or not is_number(price_threshold)
+           or not currency | trim
+           or previous_tariff_status != 'available'
+           or current_tariff_status != 'available'
+           or not is_number(previous_price)
+           or not is_number(current_price)
+           or (previous_currency | string | trim | upper) != (currency | string | trim | upper)
+           or (current_currency | string | trim | upper) != (currency | string | trim | upper) %}
+          false
+        {% elif threshold_direction == 'below' %}
+          {{ (previous_price | float(0)) > (price_threshold | float(0))
+             and (current_price | float(0)) <= (price_threshold | float(0)) }}
+        {% elif threshold_direction == 'above' %}
+          {{ (previous_price | float(0)) < (price_threshold | float(0))
+             and (current_price | float(0)) >= (price_threshold | float(0)) }}
+        {% else %}
+          false
+        {% endif %}
+      {% endif %}
+
+action:
+  - variables:
+      station_entity: "{{ trigger.entity_id }}"
+      station_name: >-
+        {{ trigger.to_state.attributes.get('station_name')
+           or trigger.to_state.attributes.get('friendly_name')
+           or trigger.entity_id }}
+      previous_price: "{{ trigger.from_state.attributes.get('price_per_kwh') }}"
+      current_price: "{{ trigger.to_state.attributes.get('price_per_kwh') }}"
+      currency: "{{ trigger.to_state.attributes.get('currency') }}"
+      price_threshold: "{{ price_threshold }}"
+      threshold_direction: "{{ threshold_direction }}"
+  - sequence: !input notification_action
+
+mode: single

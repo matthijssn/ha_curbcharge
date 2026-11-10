@@ -1,0 +1,63 @@
+blueprint:
+  name: Notify when nearby CurbCharge availability increases
+  description: >
+    Run a user-selected action when the number of nearby stations reporting an
+    available connector increases. Unknown/unavailable recovery does not trigger
+    this automation. The Top nearby chargers recommendations are current
+    context, not a claim about which station changed. CurbCharge polls
+    providers on a schedule, so notifications are not real-time.
+  domain: automation
+  source_url: https://github.com/matthijssn/ha_curbcharge/blob/main/blueprints/automation/curbcharge/notify_when_nearby_station_becomes_available.yaml
+  input:
+    available_stations_entity:
+      name: Nearby available stations
+      description: Select the CurbCharge Nearby available stations sensor.
+      selector:
+        entity:
+          filter:
+            - integration: curbcharge
+              domain: sensor
+    top_nearby_entity:
+      name: Top nearby chargers
+      description: Select the Top nearby chargers sensor from the same CurbCharge entry.
+      selector:
+        entity:
+          filter:
+            - integration: curbcharge
+              domain: sensor
+    notification_action:
+      name: Notification action
+      description: >
+        Choose what Home Assistant should do. The action can use
+        previous_available_station_count, available_station_count,
+        available_stations_entity, top_nearby_entity, and
+        current_top_nearby_recommendations.
+      selector:
+        action: {}
+
+variables:
+  top_nearby_entity: !input top_nearby_entity
+
+trigger:
+  - platform: state
+    entity_id: !input available_stations_entity
+
+condition:
+  - condition: template
+    value_template: >-
+      {% set previous_count = trigger.from_state.state if trigger.from_state is not none else none %}
+      {% set current_count = trigger.to_state.state if trigger.to_state is not none else none %}
+      {{ is_number(previous_count)
+         and is_number(current_count)
+         and (current_count | int(0)) > (previous_count | int(0)) }}
+
+action:
+  - variables:
+      previous_available_station_count: "{{ trigger.from_state.state | int(0) }}"
+      available_station_count: "{{ trigger.to_state.state | int(0) }}"
+      available_stations_entity: "{{ trigger.entity_id }}"
+      current_top_nearby_recommendations: >-
+        {{ state_attr(top_nearby_entity, 'recommendations') or [] }}
+  - sequence: !input notification_action
+
+mode: single
