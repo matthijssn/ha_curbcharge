@@ -210,6 +210,14 @@ async def test_nearby_availability_blueprint_only_triggers_on_numeric_increases(
 
     assert len(automation["triggers"]) == 1
     assert automation["triggers"][0]["entity_id"] == "sensor.nearby_available_stations"
+    action_variables = automation["actions"][0]["variables"].as_dict()
+    assert {
+        "previous_available_station_count",
+        "available_station_count",
+        "available_stations_entity",
+        "top_nearby_entity",
+        "current_top_nearby_recommendations",
+    } <= action_variables.keys()
 
     def allows(previous: str | None, current: str) -> bool:
         return _render_condition(
@@ -236,6 +244,15 @@ async def test_nearby_availability_blueprint_only_triggers_on_numeric_increases(
 async def test_favorite_data_blueprint_distinguishes_stale_and_failed_updates(hass):
     blueprint = _blueprint(FAVORITE_DATA_BLUEPRINT_PATH)
     automation = _automation_config(blueprint)
+    action_variables = automation["actions"][0]["variables"].as_dict()
+    assert {
+        "data_issue",
+        "favorite_summary_entity",
+        "stale_favorite_count",
+        "confirmed_missing_favorite_count",
+        "configured_favorite_count",
+        "last_successful_update",
+    } <= action_variables.keys()
 
     def allows(
         previous: str | None,
@@ -334,6 +351,16 @@ async def test_favorite_data_blueprint_distinguishes_stale_and_failed_updates(ha
 async def test_favorite_tariff_blueprint_only_alerts_on_valid_currency_crossing(hass):
     blueprint = _blueprint(FAVORITE_TARIFF_BLUEPRINT_PATH)
     automation = _automation_config(blueprint)
+    action_variables = automation["actions"][0]["variables"].as_dict()
+    assert {
+        "station_name",
+        "station_entity",
+        "previous_price",
+        "current_price",
+        "currency",
+        "price_threshold",
+        "threshold_direction",
+    } <= action_variables.keys()
 
     def allows(
         previous: dict[str, object] | None,
