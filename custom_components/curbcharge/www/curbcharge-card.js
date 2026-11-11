@@ -16,10 +16,35 @@ const BOOLEAN_OPTIONS = [
 const EDITOR_LABELS = {
   entity: "entity",
   layout: "layout",
+  title: "cardTitle",
+  hide_fields: "hideFields",
   show_price: "showPrice",
   show_connector_details: "showConnectorDetails",
   show_station_details: "showStationDetails",
   show_update_times: "showUpdateTimes",
+};
+const FIELD_LABELS = {
+  available_connectors: "availableConnectors",
+  price_per_kwh: "price",
+  occupied_connectors: "occupiedConnectors",
+  unavailable_connectors: "unavailableConnectors",
+  total_connectors: "totalConnectors",
+  operator: "operator",
+  address: "address",
+  max_power_kw: "maximumPower",
+  distance_m: "distance",
+  is_open: "providerOpenStatus",
+  provider_last_updated: "providerUpdated",
+  provider_timestamp_source: "providerTimestampSource",
+  provider_data_age_seconds: "providerDataAge",
+  last_successful_update: "integrationUpdated",
+  rank: "rank",
+  score: "score",
+  reason: "reason",
+  personalization: "personalized",
+  preset: "preset",
+  matched_connector_group: "matchedConnectorGroup",
+  fallback_reason: "fallbackReason",
 };
 
 const TEXT = {
@@ -86,6 +111,8 @@ const TEXT = {
     layout: "Layout",
     standard: "Standard",
     compact: "Compact",
+    cardTitle: "Card title",
+    hideFields: "Hide fields",
     showPrice: "Show price",
     showConnectorDetails: "Show connector details",
     showStationDetails: "Show station details",
@@ -157,6 +184,8 @@ const TEXT = {
     layout: "Weergave",
     standard: "Standaard",
     compact: "Compact",
+    cardTitle: "Kaarttitel",
+    hideFields: "Velden verbergen",
     showPrice: "Toon prijs",
     showConnectorDetails: "Toon connectordetails",
     showStationDetails: "Toon stationdetails",
@@ -228,6 +257,8 @@ const TEXT = {
     layout: "Présentation",
     standard: "Standard",
     compact: "Compact",
+    cardTitle: "Titre de la carte",
+    hideFields: "Masquer des champs",
     showPrice: "Afficher le prix",
     showConnectorDetails: "Afficher les détails des connecteurs",
     showStationDetails: "Afficher les détails de la station",
@@ -299,6 +330,8 @@ const TEXT = {
     layout: "Layout",
     standard: "Standard",
     compact: "Kompakt",
+    cardTitle: "Kartentitel",
+    hideFields: "Felder ausblenden",
     showPrice: "Preis anzeigen",
     showConnectorDetails: "Anschlussdetails anzeigen",
     showStationDetails: "Stationsdetails anzeigen",
@@ -370,6 +403,8 @@ const TEXT = {
     layout: "Oppsett",
     standard: "Standard",
     compact: "Kompakt",
+    cardTitle: "Korttittel",
+    hideFields: "Skjul felt",
     showPrice: "Vis pris",
     showConnectorDetails: "Vis kontaktdetaljer",
     showStationDetails: "Vis stasjonsdetaljer",
@@ -441,6 +476,8 @@ const TEXT = {
     layout: "Layout",
     standard: "Standard",
     compact: "Kompakt",
+    cardTitle: "Korttitel",
+    hideFields: "Dölj fält",
     showPrice: "Visa pris",
     showConnectorDetails: "Visa kontaktdetaljer",
     showStationDetails: "Visa stationsdetaljer",
@@ -512,6 +549,8 @@ const TEXT = {
     layout: "Asettelu",
     standard: "Vakio",
     compact: "Tiivis",
+    cardTitle: "Kortin otsikko",
+    hideFields: "Piilota kenttiä",
     showPrice: "Näytä hinta",
     showConnectorDetails: "Näytä liitintiedot",
     showStationDetails: "Näytä asematiedot",
@@ -583,6 +622,8 @@ const TEXT = {
     layout: "Layout",
     standard: "Standard",
     compact: "Compatto",
+    cardTitle: "Titolo della scheda",
+    hideFields: "Nascondi campi",
     showPrice: "Mostra prezzo",
     showConnectorDetails: "Mostra dettagli connettori",
     showStationDetails: "Mostra dettagli stazione",
@@ -654,6 +695,8 @@ const TEXT = {
     layout: "Izkārtojums",
     standard: "Standarta",
     compact: "Kompakts",
+    cardTitle: "Kartītes virsraksts",
+    hideFields: "Slēpt laukus",
     showPrice: "Rādīt cenu",
     showConnectorDetails: "Rādīt savienotāju informāciju",
     showStationDetails: "Rādīt stacijas informāciju",
@@ -778,15 +821,17 @@ function formatRecommendation(item, hass, text, options) {
       ],
     );
   }
-  const personalizationRows = formatPersonalizationRows(
-    recommendation.personalization,
-    hass,
+  const hideFields = options.hide_fields || [];
+  const visibleRows = filterHiddenRows(rows, hideFields, text);
+  const personalizationRows = filterHiddenRows(
+    formatPersonalizationRows(recommendation.personalization, hass, text),
+    hideFields,
     text,
   );
   return personalizationRows.length
     ? {
         name,
-        rows,
+        rows: visibleRows,
         personalizationRows,
         personalizationLabel: text.personalized,
         personalizationKey: String(
@@ -795,7 +840,7 @@ function formatRecommendation(item, hass, text, options) {
             name,
         ),
       }
-    : { name, rows };
+    : { name, rows: visibleRows };
 }
 
 function formatPersonalizationRows(personalization, hass, text) {
@@ -931,11 +976,26 @@ export function validateConfig(config) {
   const normalized = { ...DEFAULT_CONFIG, ...config };
   if (
     !["standard", "compact"].includes(normalized.layout) ||
-    BOOLEAN_OPTIONS.some((option) => typeof normalized[option] !== "boolean")
+    BOOLEAN_OPTIONS.some((option) => typeof normalized[option] !== "boolean") ||
+    (normalized.title !== undefined && typeof normalized.title !== "string") ||
+    (normalized.hide_fields !== undefined &&
+      (!Array.isArray(normalized.hide_fields) ||
+        normalized.hide_fields.some(
+          (field) =>
+            typeof field !== "string" ||
+            !Object.hasOwn(FIELD_LABELS, field),
+        )))
   ) {
     throw new Error(TEXT.en.invalidConfig);
   }
   return normalized;
+}
+
+function filterHiddenRows(rows, hideFields, text) {
+  const hiddenLabels = new Set(
+    hideFields.map((field) => text[FIELD_LABELS[field]]),
+  );
+  return rows.filter(([label]) => !hiddenLabels.has(label));
 }
 
 export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
@@ -1011,6 +1071,7 @@ export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
       ? undefined
       : values.last_updated;
   const navigationLinks = buildNavigationLinks(entity, attributes, text);
+  const hideFields = options.hide_fields || [];
   const primaryRows = hasRecommendationList
     ? []
     : [
@@ -1102,6 +1163,7 @@ export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
 
   return {
     title:
+      (typeof options.title === "string" && options.title.trim()) ||
       (hasRecommendationList
         ? attributes.friendly_name || text.topNearby
         : values.station_name ||
@@ -1116,8 +1178,8 @@ export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
     detailsLabel: text.details,
     navigationLabel: text.navigate,
     navigationLinks,
-    primaryRows,
-    detailsRows,
+    primaryRows: filterHiddenRows(primaryRows, hideFields, text),
+    detailsRows: filterHiddenRows(detailsRows, hideFields, text),
     ...(hasRecommendationList
       ? { recommendations, recommendationsLabel: text.recommendations }
       : {}),
@@ -1139,6 +1201,22 @@ function getEditorSchema(text) {
             { value: "standard", label: text.standard },
             { value: "compact", label: text.compact },
           ],
+        },
+      },
+    },
+    {
+      name: "title",
+      selector: { text: {} },
+    },
+    {
+      name: "hide_fields",
+      selector: {
+        select: {
+          multiple: true,
+          options: Object.entries(FIELD_LABELS).map(([value, labelKey]) => ({
+            value,
+            label: text[labelKey],
+          })),
         },
       },
     },
@@ -1191,6 +1269,17 @@ class CurbChargeCard extends HTMLElement {
       return;
     }
 
+    const entity = this._hass.states[this._config.entity];
+    const language =
+      this._hass.locale?.language || this._hass.language || "en";
+    if (
+      this._lastRenderedConfig === this._config &&
+      this._lastRenderedEntity === entity &&
+      this._lastRenderedLanguage === language
+    ) {
+      return;
+    }
+
     const openDetails = new Map(
       [...this.shadowRoot.querySelectorAll("details")].map((details) => [
         details.dataset.focusKey,
@@ -1199,7 +1288,7 @@ class CurbChargeCard extends HTMLElement {
     );
     const focusedKey = this.shadowRoot.activeElement?.dataset.focusKey;
     const data = buildCardData(
-      this._hass.states[this._config.entity],
+      entity,
       this._hass,
       this._config,
     );
@@ -1300,6 +1389,9 @@ class CurbChargeCard extends HTMLElement {
       error.setAttribute("role", "alert");
       error.textContent = data.error;
       card.append(error);
+      this._lastRenderedConfig = this._config;
+      this._lastRenderedEntity = entity;
+      this._lastRenderedLanguage = language;
       return;
     }
 
@@ -1421,6 +1513,9 @@ class CurbChargeCard extends HTMLElement {
         .find((element) => element.dataset.focusKey === focusedKey)
         ?.focus();
     }
+    this._lastRenderedConfig = this._config;
+    this._lastRenderedEntity = entity;
+    this._lastRenderedLanguage = language;
   }
 }
 
