@@ -91,7 +91,7 @@ const cardSource = await readFile(
   "utf8",
 );
 const cardModule = await import(
-  `data:text/javascript;base64,${Buffer.from(`${cardSource}\nexport { TEXT };`).toString("base64")}`
+  `data:text/javascript;base64,${Buffer.from(`${cardSource}\nexport { TEXT, FIELD_LABELS };`).toString("base64")}`
 );
 const SUPPORTED_LANGUAGES = ["en", "nl", "fr", "de", "nb", "sv", "fi", "it", "lv"];
 
@@ -118,6 +118,30 @@ test("rejects invalid configuration and non-CurbCharge entities", () => {
   const card = new Card();
 
   assert.throws(() => card.setConfig({}), /status or recommendation sensor/);
+  assert.throws(
+    () =>
+      cardModule.validateConfig({
+        entity: "sensor.station_status_summary",
+        hide_fields: ["not_a_field"],
+      }),
+    /supported display options/,
+  );
+  assert.throws(
+    () =>
+      cardModule.validateConfig({
+        entity: "sensor.station_status_summary",
+        hide_fields: "price_per_kwh",
+      }),
+    /supported display options/,
+  );
+  assert.throws(
+    () =>
+      cardModule.validateConfig({
+        entity: "sensor.station_status_summary",
+        title: 42,
+      }),
+    /supported display options/,
+  );
   assert.deepEqual(
     cardModule.buildCardData(
       { entity_id: "sensor.other", state: "1", attributes: {} },
@@ -149,9 +173,11 @@ test("keeps entity-only YAML compatible and exposes editor options", () => {
   const form = editor.shadowRoot.children[0];
 
   assert.equal(form.tagName, "ha-form");
-  assert.equal(form.schema.length, 6);
+  assert.equal(form.schema.length, 8);
   assert.equal(form.data.layout, "standard");
   assert.equal(form.computeLabel({ name: "layout" }), "Weergave");
+  assert.equal(form.schema[2].name, "title");
+  assert.deepEqual(form.schema[3].selector.select.multiple, true);
 
   let changedConfig;
   editor.addEventListener("config-changed", (event) => {
@@ -163,6 +189,8 @@ test("keeps entity-only YAML compatible and exposes editor options", () => {
       value: {
         entity: "sensor.station_status_summary",
         layout: "compact",
+        title: "Home charger",
+        hide_fields: ["address"],
         show_price: false,
       },
     },
@@ -170,6 +198,8 @@ test("keeps entity-only YAML compatible and exposes editor options", () => {
   });
 
   assert.equal(changedConfig.layout, "compact");
+  assert.equal(changedConfig.title, "Home charger");
+  assert.deepEqual(changedConfig.hide_fields, ["address"]);
   assert.equal(changedConfig.show_price, false);
   assert.equal(changedConfig.show_connector_details, true);
 });
@@ -179,6 +209,8 @@ test("localizes editor controls in every supported language", () => {
     en: {
       entity: "Station entity",
       layout: "Layout",
+      title: "Card title",
+      hide_fields: "Hide fields",
       standard: "Standard",
       compact: "Compact",
       show_price: "Show price",
@@ -190,6 +222,8 @@ test("localizes editor controls in every supported language", () => {
     nl: {
       entity: "Station-entiteit",
       layout: "Weergave",
+      title: "Kaarttitel",
+      hide_fields: "Velden verbergen",
       standard: "Standaard",
       compact: "Compact",
       show_price: "Toon prijs",
@@ -201,6 +235,8 @@ test("localizes editor controls in every supported language", () => {
     fr: {
       entity: "Entité de station",
       layout: "Présentation",
+      title: "Titre de la carte",
+      hide_fields: "Masquer des champs",
       standard: "Standard",
       compact: "Compact",
       show_price: "Afficher le prix",
@@ -212,6 +248,8 @@ test("localizes editor controls in every supported language", () => {
     de: {
       entity: "Station-Entität",
       layout: "Layout",
+      title: "Kartentitel",
+      hide_fields: "Felder ausblenden",
       standard: "Standard",
       compact: "Kompakt",
       show_price: "Preis anzeigen",
@@ -223,6 +261,8 @@ test("localizes editor controls in every supported language", () => {
     nb: {
       entity: "Stasjonsentitet",
       layout: "Oppsett",
+      title: "Korttittel",
+      hide_fields: "Skjul felt",
       standard: "Standard",
       compact: "Kompakt",
       show_price: "Vis pris",
@@ -234,6 +274,8 @@ test("localizes editor controls in every supported language", () => {
     sv: {
       entity: "Stationsentitet",
       layout: "Layout",
+      title: "Korttitel",
+      hide_fields: "Dölj fält",
       standard: "Standard",
       compact: "Kompakt",
       show_price: "Visa pris",
@@ -245,6 +287,8 @@ test("localizes editor controls in every supported language", () => {
     fi: {
       entity: "Asemaentiteetti",
       layout: "Asettelu",
+      title: "Kortin otsikko",
+      hide_fields: "Piilota kenttiä",
       standard: "Vakio",
       compact: "Tiivis",
       show_price: "Näytä hinta",
@@ -256,6 +300,8 @@ test("localizes editor controls in every supported language", () => {
     it: {
       entity: "Entità stazione",
       layout: "Layout",
+      title: "Titolo della scheda",
+      hide_fields: "Nascondi campi",
       standard: "Standard",
       compact: "Compatto",
       show_price: "Mostra prezzo",
@@ -267,6 +313,8 @@ test("localizes editor controls in every supported language", () => {
     lv: {
       entity: "Stacijas entītija",
       layout: "Izkārtojums",
+      title: "Kartītes virsraksts",
+      hide_fields: "Slēpt laukus",
       standard: "Standarta",
       compact: "Kompakts",
       show_price: "Rādīt cenu",
@@ -293,6 +341,13 @@ test("localizes editor controls in every supported language", () => {
     assert.deepEqual(
       form.schema[1].selector.select.options.map((option) => option.label),
       [expected.standard, expected.compact],
+    );
+    assert.deepEqual(
+      form.schema[3].selector.select.options,
+      Object.entries(cardModule.FIELD_LABELS).map(([value, labelKey]) => ({
+        value,
+        label: cardModule.TEXT[language][labelKey],
+      })),
     );
     assert.equal(
       cardModule.buildCardData(
@@ -1470,6 +1525,81 @@ test("uses display options and starts details collapsed", () => {
   assert.doesNotMatch(visibleText(haCard), /Price per kWh|More details/);
 });
 
+test("overrides card titles and hides selected rows in station and recommendation views", () => {
+  const station = {
+    entity_id: "sensor.station_status_summary",
+    state: "available",
+    attributes: {
+      provider_station_id: "station-1",
+      station_name: "Station One",
+      available_connectors: 2,
+      occupied_connectors: 1,
+      price_per_kwh: 0.4,
+      currency: "EUR",
+      address: "Example Street 1",
+    },
+  };
+  const stationConfig = {
+    title: "Home charging options",
+    hide_fields: ["available_connectors", "price_per_kwh", "address"],
+  };
+  const stationData = cardModule.buildCardData(station, { language: "en" }, stationConfig);
+
+  assert.equal(stationData.title, "Home charging options");
+  assert.deepEqual(stationData.primaryRows, []);
+  assert.ok(
+    stationData.detailsRows.some(([label]) => label === "Occupied connectors"),
+  );
+  assert.ok(
+    stationData.detailsRows.every(([label]) => label !== "Address"),
+  );
+  assert.equal(
+    cardModule.buildCardData(station, { language: "en" }, { title: "  " }).title,
+    "Station One",
+  );
+
+  const recommendations = {
+    entity_id: "sensor.top_nearby_chargers",
+    state: "Top nearby chargers",
+    attributes: {
+      result_status: "selected",
+      friendly_name: "Top Nearby",
+      recommendations: [
+        {
+          name: "Station One",
+          rank: 1,
+          score: 90,
+          reason: "best_nearby_rank",
+          available_connectors: 2,
+          price_per_kwh: 0.4,
+          currency: "EUR",
+          max_power_kw: 150,
+          distance_m: 1200,
+        },
+      ],
+    },
+  };
+  const recommendationData = cardModule.buildCardData(
+    recommendations,
+    { language: "en" },
+    { title: "Nearby picks", hide_fields: ["rank", "price_per_kwh", "distance_m"] },
+  );
+
+  assert.equal(recommendationData.title, "Nearby picks");
+  assert.deepEqual(
+    recommendationData.recommendations[0].rows.map(([label]) => label),
+    ["Score", "Reason", "Available connectors", "Maximum charging power"],
+  );
+  assert.equal(
+    cardModule.buildCardData(
+      recommendations,
+      { language: "en" },
+      { title: "" },
+    ).title,
+    "Top Nearby",
+  );
+});
+
 test("renders keyboard-accessible details collapsed by default", () => {
   const Card = elements.get("curbcharge-card");
   const card = new Card();
@@ -1496,6 +1626,50 @@ test("renders keyboard-accessible details collapsed by default", () => {
   assert.equal(details.children[0].tagName, "summary");
   assert.equal(details.children[0].textContent, "More details");
   assert.equal(haCard.children[0].children[1].attributes.get("role"), "status");
+});
+
+test("skips unchanged card renders but rerenders selected entity, config, and locale changes", () => {
+  const Card = elements.get("curbcharge-card");
+  const card = new Card();
+  const entity = {
+    entity_id: "sensor.station_status_summary",
+    state: "available",
+    attributes: { provider_station_id: "station-1", available_connectors: 2 },
+  };
+  const hass = {
+    language: "en",
+    states: { [entity.entity_id]: entity },
+  };
+  card.setConfig({ entity: entity.entity_id });
+  card.hass = hass;
+  const firstRender = card.shadowRoot.children[1];
+
+  card.hass = {
+    ...hass,
+    states: { ...hass.states, "sensor.unrelated": { state: "updated" } },
+  };
+  assert.equal(card.shadowRoot.children[1], firstRender);
+
+  const updatedEntity = {
+    ...entity,
+    attributes: { ...entity.attributes, available_connectors: 3 },
+  };
+  card.hass = { ...hass, states: { [entity.entity_id]: updatedEntity } };
+  const updatedRender = card.shadowRoot.children[1];
+  assert.notEqual(updatedRender, firstRender);
+  assert.match(visibleText(updatedRender), /3/);
+
+  card.setConfig({ entity: entity.entity_id, title: "My station" });
+  const configuredRender = card.shadowRoot.children[1];
+  assert.notEqual(configuredRender, updatedRender);
+  assert.match(visibleText(configuredRender), /My station/);
+
+  card.hass = {
+    language: "nl",
+    states: { [entity.entity_id]: updatedEntity },
+  };
+  assert.notEqual(card.shadowRoot.children[1], configuredRender);
+  assert.match(visibleText(card.shadowRoot), /Beschikbaar/);
 });
 
 test("preserves disclosure state and keyboard focus across Home Assistant updates", () => {

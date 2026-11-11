@@ -120,10 +120,14 @@ available:
 type: custom:curbcharge-card
 entity: sensor.your_best_nearby_charger
 layout: compact
+title: Nearby chargers
 show_price: true
 show_connector_details: true
 show_station_details: false
 show_update_times: false
+hide_fields:
+  - price_per_kwh
+  - available_connectors
 ```
 
 With only `entity` set, all metric groups are shown by default.
@@ -133,6 +137,18 @@ power, distance, and provider-reported open status; `show_update_times` controls
 the provider record timestamp, timestamp source and age, and last successful
 Home Assistant refresh. Missing or unsupported provider source/age displays
 **Unknown**; it does not imply stale data or change the availability status.
+`title` is an optional plain-text card heading; when it is omitted or blank,
+the existing station or recommendation heading is used. `hide_fields` hides
+individual rows across station summaries and Top nearby recommendations while
+leaving the status, navigation, and accessibility structure intact. Its field
+IDs are `available_connectors`, `price_per_kwh`, `occupied_connectors`,
+`unavailable_connectors`, `total_connectors`, `operator`, `address`,
+`max_power_kw`, `distance_m`, `is_open`, `provider_last_updated`,
+`provider_timestamp_source`, `provider_data_age_seconds`,
+`last_successful_update`, `rank`, `score`, `reason`, `personalization`,
+`preset`, `matched_connector_group`, and `fallback_reason`. Existing
+`show_*` options continue to control their metric groups; omitting
+`hide_fields` leaves all rows enabled.
 
 The card reads only the selected Home Assistant entity; it makes no provider
 requests. It displays the station name and operator when available, address,
