@@ -130,7 +130,9 @@ With only `entity` set, all metric groups are shown by default.
 `show_price` controls price; `show_connector_details` controls occupied,
 unavailable, and total counts; `show_station_details` controls address, maximum
 power, distance, and provider-reported open status; `show_update_times` controls
-provider and Home Assistant timestamps.
+the provider record timestamp, timestamp source and age, and last successful
+Home Assistant refresh. Missing or unsupported provider source/age displays
+**Unknown**; it does not imply stale data or change the availability status.
 
 The card reads only the selected Home Assistant entity; it makes no provider
 requests. It displays the station name and operator when available, address,
@@ -164,7 +166,8 @@ and `unavailable`. Unknown values are not zero; when the entity is unavailable,
 the bundled card does not show old measurements as current. The Status summary
 and Best nearby also expose `provider_timestamp_source` and
 `provider_data_age_seconds`; see [Data updates](usage.md#data-updates) for their
-semantics.
+semantics. With update times enabled, the card shows the provider timestamp,
+source and age separately from the last successful Home Assistant refresh.
 
 ### Norwegian Bokmål and Swedish release smoke check
 

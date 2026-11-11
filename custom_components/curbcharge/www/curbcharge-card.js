@@ -54,6 +54,8 @@ const TEXT = {
     open: "Open",
     closed: "Closed",
     providerUpdated: "Provider station update",
+    providerTimestampSource: "Provider timestamp source",
+    providerDataAge: "Provider record age",
     integrationUpdated: "Last successful update",
     details: "More details",
     personalized: "Personalized",
@@ -123,6 +125,8 @@ const TEXT = {
     open: "Open",
     closed: "Gesloten",
     providerUpdated: "Laatste providerupdate",
+    providerTimestampSource: "Bron van providertimestamp",
+    providerDataAge: "Leeftijd van providergegevens",
     integrationUpdated: "Laatste geslaagde update",
     details: "Meer details",
     personalized: "Gepersonaliseerd",
@@ -192,6 +196,8 @@ const TEXT = {
     open: "Ouverte",
     closed: "Fermée",
     providerUpdated: "Dernière mise à jour du fournisseur",
+    providerTimestampSource: "Source de l'horodatage du fournisseur",
+    providerDataAge: "Âge des données du fournisseur",
     integrationUpdated: "Dernière actualisation réussie",
     details: "Plus de détails",
     personalized: "Personnalisé",
@@ -261,6 +267,8 @@ const TEXT = {
     open: "Geöffnet",
     closed: "Geschlossen",
     providerUpdated: "Letzte Aktualisierung des Anbieters",
+    providerTimestampSource: "Quelle des Anbieterzeitstempels",
+    providerDataAge: "Alter des Anbieterdatensatzes",
     integrationUpdated: "Letzte erfolgreiche Aktualisierung",
     details: "Weitere Details",
     personalized: "Personalisiert",
@@ -330,6 +338,8 @@ const TEXT = {
     open: "Åpen",
     closed: "Stengt",
     providerUpdated: "Leverandørens siste oppdatering",
+    providerTimestampSource: "Kilde for leverandørens tidsstempel",
+    providerDataAge: "Alder på leverandørdata",
     integrationUpdated: "Siste vellykkede oppdatering",
     details: "Flere detaljer",
     personalized: "Personlig tilpasning",
@@ -399,6 +409,8 @@ const TEXT = {
     open: "Öppen",
     closed: "Stängd",
     providerUpdated: "Leverantörens senaste uppdatering",
+    providerTimestampSource: "Källa för leverantörens tidsstämpel",
+    providerDataAge: "Ålder på leverantörsdata",
     integrationUpdated: "Senaste lyckade uppdatering",
     details: "Fler detaljer",
     personalized: "Personlig anpassning",
@@ -468,6 +480,8 @@ const TEXT = {
     open: "Avoinna",
     closed: "Suljettu",
     providerUpdated: "Palveluntarjoajan asemapäivitys",
+    providerTimestampSource: "Palveluntarjoajan aikaleiman lähde",
+    providerDataAge: "Palveluntarjoajan tietueen ikä",
     integrationUpdated: "Viimeisin onnistunut päivitys",
     details: "Lisätiedot",
     personalized: "Personoitu",
@@ -537,6 +551,8 @@ const TEXT = {
     open: "Aperto",
     closed: "Chiuso",
     providerUpdated: "Aggiornamento stazione del fornitore",
+    providerTimestampSource: "Fonte del timestamp del fornitore",
+    providerDataAge: "Età dei dati del fornitore",
     integrationUpdated: "Ultimo aggiornamento riuscito",
     details: "Maggiori dettagli",
     personalized: "Personalizzato",
@@ -606,6 +622,8 @@ const TEXT = {
     open: "Atvērts",
     closed: "Slēgts",
     providerUpdated: "Stacijas atjauninājums no pakalpojumu sniedzēja",
+    providerTimestampSource: "Pakalpojumu sniedzēja laikspiedola avots",
+    providerDataAge: "Pakalpojumu sniedzēja datu vecums",
     integrationUpdated: "Pēdējais veiksmīgais atjauninājums",
     details: "Papildinformācija",
     personalized: "Personalizēts",
@@ -687,6 +705,18 @@ function formatTimestamp(value, hass, unknown) {
     dateStyle: "short",
     timeStyle: "short",
   }).format(date);
+}
+
+function formatProviderDataAge(value, hass, unknown) {
+  return Number.isInteger(value) && value >= 0
+    ? `${formatCount(value, hass, unknown)} s`
+    : unknown;
+}
+
+function formatTimestampSource(value, unknown) {
+  return typeof value === "string" && value.trim()
+    ? value.trim().replaceAll("_", " ")
+    : unknown;
 }
 
 function formatPrice(price, currency, hass, unknown) {
@@ -952,6 +982,9 @@ export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
     ? "unavailable"
     : Object.hasOwn(statusLabels, attributes.result_status)
       ? attributes.result_status
+      : entity.state === "unknown" &&
+          typeof attributes.provider_station_id === "string"
+        ? "unknown_availability"
       : Object.hasOwn(statusLabels, entity.state)
         ? entity.state
         : typeof attributes.provider_station_id === "string"
@@ -1042,6 +1075,18 @@ export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
       [
         text.providerUpdated,
         formatTimestamp(providerUpdatedAt, hass, text.unknown),
+      ],
+      [
+        text.providerTimestampSource,
+        formatTimestampSource(values.provider_timestamp_source, text.unknown),
+      ],
+      [
+        text.providerDataAge,
+        formatProviderDataAge(
+          values.provider_data_age_seconds,
+          hass,
+          text.unknown,
+        ),
       ],
       [
         text.integrationUpdated,

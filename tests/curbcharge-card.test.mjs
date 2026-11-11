@@ -349,6 +349,8 @@ test("shows reported zeroes and leaves unknown counts unknown", () => {
       "Closed",
       "Unknown",
       "Unknown",
+      "Unknown",
+      "Unknown",
     ],
   );
 });
@@ -373,6 +375,8 @@ test("renders recommendation payload and separates provider and HA timestamps", 
         price_per_kwh: 0.42,
         currency: "EUR",
         provider_last_updated: providerTime,
+        provider_timestamp_source: "nobil",
+        provider_data_age_seconds: 900,
         last_updated: refreshTime,
         last_successful_update: refreshTime,
       },
@@ -396,16 +400,27 @@ test("renders recommendation payload and separates provider and HA timestamps", 
       ["Distance", "120 m"],
     ],
   );
-  assert.notEqual(data.detailsRows[8][1], data.detailsRows[9][1]);
+  const freshnessRows = new Map(
+    data.detailsRows.map(([label, value]) => [label, value]),
+  );
+  assert.notEqual(
+    freshnessRows.get("Provider station update"),
+    freshnessRows.get("Last successful update"),
+  );
   assert.equal(
-    data.detailsRows[8][1],
+    freshnessRows.get("Provider station update"),
     new Intl.DateTimeFormat("en", {
       dateStyle: "short",
       timeStyle: "short",
     }).format(new Date(providerTime)),
   );
   assert.equal(
-    data.detailsRows[9][1],
+    freshnessRows.get("Provider timestamp source"),
+    "nobil",
+  );
+  assert.equal(freshnessRows.get("Provider record age"), "900 s");
+  assert.equal(
+    freshnessRows.get("Last successful update"),
     new Intl.DateTimeFormat("en", {
       dateStyle: "short",
       timeStyle: "short",
@@ -1622,6 +1637,17 @@ test("keeps availability separate and localizes status labels", () => {
     "Statut d'ouverture indiqué par le fournisseur",
   );
   assert.equal(data.detailsRows[6][1], "Ouverte");
+
+  const unknown = cardModule.buildCardData(
+    {
+      entity_id: "sensor.station_status_summary",
+      state: "unknown",
+      attributes: { provider_station_id: "station-1" },
+    },
+    { locale: { language: "fr-FR" } },
+  );
+  assert.equal(unknown.status, "Disponibilité inconnue");
+  assert.equal(unknown.statusKey, "unknown_availability");
 });
 
 test("labels the provider open flag separately from available connectors", () => {
@@ -1692,6 +1718,10 @@ test("shows unavailable station state without reusing stale measurements", () =>
         price_per_kwh: 0.4,
         currency: "EUR",
         is_favorite: true,
+        provider_data_age_seconds: 20,
+        provider_timestamp_source: "ndw_feature",
+        last_updated: "2026-01-02T03:04:05Z",
+        last_successful_update: "2026-01-02T03:05:00Z",
       },
     },
     { language: "en" },
@@ -1701,7 +1731,7 @@ test("shows unavailable station state without reusing stale measurements", () =>
   assert.equal(data.isFavorite, true);
   assert.deepEqual(
     [...data.primaryRows, ...data.detailsRows].map(([, value]) => value),
-    Array(11).fill("Unknown"),
+    Array(13).fill("Unknown"),
   );
 });
 
@@ -1768,6 +1798,8 @@ test("switches existing cards and editors through HA locales independently of pr
           price_per_kwh: 1234.56,
           currency,
           last_updated: providerTime,
+          provider_data_age_seconds: 300,
+          provider_timestamp_source: "ndw_feature",
           last_successful_update: refreshTime,
           latitude: 0,
           longitude: 0,
@@ -1850,10 +1882,81 @@ test("switches existing cards and editors through HA locales independently of pr
             ],
           );
         }
+        assert.deepEqual(
+          data.detailsRows.find(
+            ([label]) => label === text.providerTimestampSource,
+          ),
+          [text.providerTimestampSource, "ndw feature"],
+        );
+        assert.deepEqual(
+          data.detailsRows.find(([label]) => label === text.providerDataAge),
+          [
+            text.providerDataAge,
+            `${new Intl.NumberFormat(language || "en").format(300)} s`,
+          ],
+        );
         assert.deepEqual(entity, original);
       }
     }
   }
+});
+
+test("keeps missing and unsupported provider freshness unknown", () => {
+  const staticFallback = cardModule.buildCardData(
+    {
+      entity_id: "sensor.station_status_summary",
+      state: "available",
+      attributes: {
+        provider_station_id: "station-1",
+        station_name: "Station One",
+        provider_timestamp_source: "belgium_static_fallback",
+        provider_data_age_seconds: null,
+        last_updated: "2026-01-02T03:04:05Z",
+        last_successful_update: "2026-01-02T03:05:00Z",
+      },
+    },
+    { language: "en" },
+  );
+  assert.equal(staticFallback.status, "Available");
+  assert.deepEqual(
+    staticFallback.detailsRows.find(
+      ([label]) => label === "Provider timestamp source",
+    ),
+    ["Provider timestamp source", "belgium static fallback"],
+  );
+  assert.deepEqual(
+    staticFallback.detailsRows.find(([label]) => label === "Provider record age"),
+    ["Provider record age", "Unknown"],
+  );
+
+  const missing = cardModule.buildCardData(
+    {
+      entity_id: "sensor.station_status_summary",
+      state: "none_available",
+      attributes: {
+        provider_station_id: "station-1",
+        provider_timestamp_source: null,
+        provider_data_age_seconds: null,
+        last_updated: null,
+      },
+    },
+    { language: "en" },
+  );
+  assert.equal(missing.status, "None available");
+  assert.deepEqual(
+    missing.detailsRows.find(([label]) => label === "Provider station update"),
+    ["Provider station update", "Unknown"],
+  );
+  assert.deepEqual(
+    missing.detailsRows.find(
+      ([label]) => label === "Provider timestamp source",
+    ),
+    ["Provider timestamp source", "Unknown"],
+  );
+  assert.deepEqual(
+    missing.detailsRows.find(([label]) => label === "Provider record age"),
+    ["Provider record age", "Unknown"],
+  );
 });
 
 test("keeps positive, zero, unknown, and unavailable data distinct in nb and sv", () => {
