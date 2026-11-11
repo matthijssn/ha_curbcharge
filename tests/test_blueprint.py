@@ -210,7 +210,10 @@ async def test_nearby_availability_blueprint_only_triggers_on_numeric_increases(
 
     assert len(automation["triggers"]) == 1
     assert automation["triggers"][0]["entity_id"] == "sensor.nearby_available_stations"
-    assert "top_nearby_entity" in automation["variables"].as_dict()
+    assert (
+        automation["variables"].as_dict()["top_nearby_entity"]
+        == "sensor.top_nearby_chargers"
+    )
     action_variables = automation["actions"][0]["variables"].as_dict()
     assert {
         "previous_available_station_count",
@@ -218,6 +221,9 @@ async def test_nearby_availability_blueprint_only_triggers_on_numeric_increases(
         "available_stations_entity",
         "current_top_nearby_recommendations",
     } <= action_variables.keys()
+    assert "state_attr(top_nearby_entity" in (
+        action_variables["current_top_nearby_recommendations"].template
+    )
 
     def allows(previous: str | None, current: str) -> bool:
         return _render_condition(
