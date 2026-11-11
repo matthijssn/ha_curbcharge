@@ -1,0 +1,83 @@
+blueprint:
+  name: Notify when CurbCharge favorite data needs attention
+  description: >
+    Run a user-selected action when a successful refresh finds stale or
+    confirmed-missing favorites, or when provider updates fail after at least
+    one successful refresh. Home Assistant startup and recovery from an
+    unavailable state do not trigger this automation. These alerts describe
+    data quality, not charger availability.
+  domain: automation
+  source_url: https://github.com/matthijssn/ha_curbcharge/blob/main/blueprints/automation/curbcharge/notify_when_favorite_data_needs_attention.yaml
+  input:
+    favorite_summary_entity:
+      name: Favorite summary
+      description: Select the CurbCharge Favorite summary sensor for one entry.
+      selector:
+        entity:
+          filter:
+            - integration: curbcharge
+              domain: sensor
+    notification_action:
+      name: Notification action
+      description: >
+        Choose what Home Assistant should do. The action can use data_issue,
+        favorite_summary_entity, stale_favorite_count,
+        confirmed_missing_favorite_count, configured_favorite_count, and
+        last_successful_update.
+      selector:
+        action: {}
+
+trigger:
+  - platform: state
+    entity_id: !input favorite_summary_entity
+
+condition:
+  - condition: template
+    value_template: >-
+      {% if trigger.from_state is none or trigger.to_state is none %}
+        false
+      {% elif trigger.from_state.state == 'unavailable' %}
+        false
+      {% elif trigger.to_state.attributes.get('configured_count', 0) | int(0) < 1 %}
+        false
+      {% elif trigger.to_state.attributes.get('provider_update_success') is false %}
+        {{ trigger.from_state.attributes.get('provider_update_success') is not false
+           and trigger.to_state.attributes.get('last_successful_update') is not none }}
+      {% elif trigger.to_state.attributes.get('provider_update_success') is true %}
+        {% set old_stale_count = trigger.from_state.attributes.get('stale_count') %}
+        {% set new_stale_count = trigger.to_state.attributes.get('stale_count') %}
+        {% set old_missing_count = trigger.from_state.attributes.get('missing_count') %}
+        {% set new_missing_count = trigger.to_state.attributes.get('missing_count') %}
+        {{ (is_number(old_stale_count)
+            and is_number(new_stale_count)
+            and (new_stale_count | int(0)) > (old_stale_count | int(0)))
+           or (is_number(old_missing_count)
+            and is_number(new_missing_count)
+            and (new_missing_count | int(0)) > (old_missing_count | int(0))) }}
+      {% else %}
+        false
+      {% endif %}
+
+action:
+  - variables:
+      favorite_summary_entity: "{{ trigger.entity_id }}"
+      data_issue: >-
+        {% set previous_missing_count = trigger.from_state.attributes.get('missing_count') %}
+        {% set current_missing_count = trigger.to_state.attributes.get('missing_count') %}
+        {% if trigger.to_state.attributes.get('provider_update_success') is false %}
+          provider_update_failed
+        {% elif is_number(previous_missing_count)
+           and is_number(current_missing_count)
+           and (current_missing_count | int(0)) > (previous_missing_count | int(0)) %}
+          favorites_confirmed_missing
+        {% else %}
+          favorites_stale
+        {% endif %}
+      stale_favorite_count: "{{ trigger.to_state.attributes.get('stale_count') }}"
+      confirmed_missing_favorite_count: "{{ trigger.to_state.attributes.get('missing_count') }}"
+      configured_favorite_count: "{{ trigger.to_state.attributes.get('configured_count') }}"
+      last_successful_update: >-
+        {{ trigger.to_state.attributes.get('last_successful_update') }}
+  - sequence: !input notification_action
+
+mode: single
