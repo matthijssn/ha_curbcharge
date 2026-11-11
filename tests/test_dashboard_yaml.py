@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import yaml
+from homeassistant.helpers.template import Template
 
 REPOSITORY_ROOT = Path(__file__).parent.parent
 README_PATH = REPOSITORY_ROOT / "README.md"
@@ -148,3 +149,52 @@ def test_documented_personalization_templates_and_trigger_parse():
     assert trigger["trigger"][0]["platform"] == "state"
     assert trigger["condition"][0]["condition"] == "template"
     assert "provider_station_id" in trigger["condition"][0]["value_template"]
+
+
+def test_coverage_aware_availability_history_example(hass):
+    guide = GUIDE_PATH.read_text(encoding="utf-8")
+    config = _yaml_block_containing(guide, "name: Station available time today")
+
+    available_time, known_time = config["sensor"]
+    assert available_time["state"] == "on"
+    assert available_time["type"] == known_time["type"] == "time"
+    assert known_time["state"] == ["on", "off"]
+    assert available_time["start"] == known_time["start"]
+    assert available_time["end"] == known_time["end"]
+
+    templates = {
+        sensor["name"]: sensor["state"] for sensor in config["template"][0]["sensor"]
+    }
+    availability = Template(
+        templates["Station availability among known time today"], hass
+    )
+    coverage = Template(templates["Station known data coverage today"], hass)
+
+    assert availability.async_render().strip() == "unknown"
+    assert coverage.async_render().strip() == "unknown"
+
+    hass.states.async_set(
+        "sensor.station_known_availability_time_today",
+        "4",
+    )
+    hass.states.async_set("sensor.station_available_time_today", "0")
+    assert float(availability.async_render()) == 0
+
+    period_hours = float(
+        Template(
+            "{{ (as_timestamp(now()) - as_timestamp(today_at())) / 3600 }}", hass
+        ).async_render()
+    )
+    hass.states.async_set(
+        "sensor.station_known_availability_time_today",
+        str(period_hours / 2),
+    )
+    hass.states.async_set(
+        "sensor.station_available_time_today",
+        str(period_hours / 4),
+    )
+    assert float(availability.async_render()) == 50
+    if period_hours > 0:
+        assert float(coverage.async_render()) == 50
+    else:
+        assert coverage.async_render().strip() == "unknown"

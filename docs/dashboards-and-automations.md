@@ -746,28 +746,65 @@ history or meaning.
 
 To calculate how long a station was reported available, create Home Assistant's
 built-in [History Stats](https://www.home-assistant.io/integrations/history_stats/)
-helper for its **Available** binary sensor. Choose `time` for hours in the
-selected period or `ratio` for the portion of that period spent in `on`.
-For example, this YAML configuration creates a daily ratio:
+helpers for its **Available** binary sensor. This daily example reports
+available time, known `on`/`off` time, availability among known time, and
+coverage of today's period. Replace the binary sensor entity ID and adjust the
+start/end templates for another station or period:
 
 ```yaml
 sensor:
   - platform: history_stats
-    name: Station available today
+    name: Station available time today
     entity_id: binary_sensor.your_station_available
     state: "on"
-    type: ratio
+    type: time
     start: "{{ today_at() }}"
     end: "{{ now() }}"
+  - platform: history_stats
+    name: Station known availability time today
+    entity_id: binary_sensor.your_station_available
+    state:
+      - "on"
+      - "off"
+    type: time
+    start: "{{ today_at() }}"
+    end: "{{ now() }}"
+
+template:
+  - sensor:
+      - name: Station availability among known time today
+        unit_of_measurement: "%"
+        state: >
+          {% set available = states('sensor.station_available_time_today') %}
+          {% set known = states('sensor.station_known_availability_time_today') %}
+          {% if is_number(available) and is_number(known) and known | float(0) > 0 %}
+            {{ (100 * (available | float) / (known | float)) | round(1) }}
+          {% else %}
+            unknown
+          {% endif %}
+      - name: Station known data coverage today
+        unit_of_measurement: "%"
+        state: >
+          {% set known = states('sensor.station_known_availability_time_today') %}
+          {% set period_hours = (as_timestamp(now()) - as_timestamp(today_at())) / 3600 %}
+          {% if is_number(known) and known | float(0) > 0 and period_hours > 0 %}
+            {{ (100 * (known | float) / period_hours) | round(1) }}
+          {% else %}
+            unknown
+          {% endif %}
 ```
 
 The helper uses Home Assistant's [History](https://www.home-assistant.io/integrations/history/)
 data, which is stored by [Recorder](https://www.home-assistant.io/integrations/recorder/),
-and is limited by its retention. Unknown provider availability appears as
-unknown, while stale station data or a coordinator failure can make the
-entities unavailable. These are gaps, not confirmation that the station was
-unavailable; review the source timeline before interpreting a ratio as complete
-uptime.
+and is limited by its retention. The `time` helpers report hours and count only
+`on` and `off`;
+unknown provider availability and unavailable entities are gaps, not known
+downtime. The availability percentage divides available time by known time,
+while coverage divides known time by the requested period. Both remain unknown
+when no known time is available, instead of reporting a misleading zero. Keep
+the requested period within Recorder's retained history: purged or excluded
+history cannot be recovered, and this calculation describes provider-reported
+observations, not guaranteed charger uptime.
 
 Use a [History Graph](https://www.home-assistant.io/dashboards/history-graph/)
 for recent state changes and connector counts:
