@@ -692,6 +692,7 @@ async def test_favorite_sensors_follow_coordinator_changes_without_provider_call
     [
         (PROVIDER_NDW_DOT_NL, "NDW DOT-NL", "NL"),
         (PROVIDER_ECO_MOVEMENT_BE, "Eco-Movement Belgium", "BE"),
+        ("open_charge_map", "Open Charge Map (global)", None),
     ],
 )
 async def test_setup_unload_and_reload_keep_stable_entities(
@@ -707,7 +708,7 @@ async def test_setup_unload_and_reload_keep_stable_entities(
     provider.country_code = country_code
     monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
     overrides: dict[str, object] = {CONF_PROVIDER: provider_id}
-    if provider_id == PROVIDER_ECO_MOVEMENT_BE:
+    if provider_id in (PROVIDER_ECO_MOVEMENT_BE, "open_charge_map"):
         overrides[CONF_API_TOKEN] = "test-token"
     entry = _entry(
         overrides,

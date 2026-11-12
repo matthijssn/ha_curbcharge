@@ -152,6 +152,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         )
         self.favourite_ids = {favourite.provider_id for favourite in favourites}
         self.nearby_station_ids: set[str] | None = None
+        self.results_may_be_truncated = False
         self._config_entry_data = (
             dict(config_entry.data) if config_entry is not None else None
         )
@@ -224,6 +225,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
             self._update_unavailable = False
         self.update_interval = self._default_update_interval
         self.nearby_station_ids = {station.provider_id for station in stations.nearby}
+        self.results_may_be_truncated = stations.results_may_be_truncated
         current = {
             station.provider_id: station
             for station in stations.nearby
@@ -464,7 +466,7 @@ def _favourite_placeholder(
     favourite: FavouriteStationReference,
     provider: str,
     provider_name: str,
-    country_code: str,
+    country_code: str | None,
     latitude: float,
     longitude: float,
 ) -> ChargingStation:

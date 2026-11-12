@@ -154,6 +154,26 @@
         "data_description": {
           "api_token": "La chiave è memorizzata in questa voce di configurazione e oscurata nella diagnostica."
         }
+      },
+      "openchargemap_credentials": {
+        "title": "Connetti a Open Charge Map",
+        "description": "Inserisci la tua chiave API di [Open Charge Map]({openchargemap_api_url}) (My apps). Sono inclusi solo dati pubblici con licenza aperta. Disponibilità in tempo reale e prezzi sono sconosciuti. Le richieste identiche riuscite sono memorizzate nella cache per un'ora, anche con aggiornamento manuale.",
+        "data": {
+          "api_token": "Chiave API Open Charge Map"
+        },
+        "data_description": {
+          "api_token": "La chiave è salvata in questa configurazione e oscurata nella diagnostica. Non condividerla."
+        }
+      },
+      "openchargemap_reauth_confirm": {
+        "title": "Aggiorna le credenziali Open Charge Map",
+        "description": "Inserisci la tua chiave API di [Open Charge Map]({openchargemap_api_url}) (My apps). Sono inclusi solo dati pubblici con licenza aperta. Disponibilità in tempo reale e prezzi sono sconosciuti. Le richieste identiche riuscite sono memorizzate nella cache per un'ora, anche con aggiornamento manuale.",
+        "data": {
+          "api_token": "Chiave API Open Charge Map"
+        },
+        "data_description": {
+          "api_token": "La chiave è salvata in questa configurazione e oscurata nella diagnostica. Non condividerla."
+        }
       }
     },
     "error": {
@@ -168,7 +188,8 @@
       "invalid_response": "Il fornitore ha restituito dati in un formato imprevisto.",
       "location_not_configured": "Le coordinate casa non sono configurate in Home Assistant.",
       "rate_limited": "Il fornitore sta limitando le richieste. Riprova più tardi.",
-      "unsupported_provider": "Il fornitore selezionato non è supportato."
+      "unsupported_provider": "Il fornitore selezionato non è supportato.",
+      "invalid_openchargemap_api_key": "Inserisci una chiave API Open Charge Map non vuota con caratteri ASCII stampabili."
     },
     "abort": {
       "already_configured": "Questo fornitore e quest'area di ricerca sono già configurati.",
@@ -176,7 +197,8 @@
       "reconfigure_successful": "Posizione di ricerca aggiornata.",
       "reauth_successful": "Credenziali Eco-Movement aggiornate.",
       "nobil_reauth_successful": "Chiave API NOBIL aggiornata.",
-      "afdc_reauth_successful": "Chiave API NLR aggiornata."
+      "afdc_reauth_successful": "Chiave API NLR aggiornata.",
+      "openchargemap_reauth_successful": "Credenziali Open Charge Map aggiornate."
     }
   },
   "options": {
@@ -371,7 +393,8 @@
         "digitraffic_afir_fi": "Digitraffic AFIR Finlandia",
         "ich_tanke_strom_ch": "ich-tanke-strom Svizzera",
         "chargy_lu": "Chargy Luxembourg",
-        "via_lietuva_lt": "Via Lietuva Lithuania"
+        "via_lietuva_lt": "Via Lietuva Lithuania",
+        "open_charge_map": "Open Charge Map (globale)"
       }
     }
   },

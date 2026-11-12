@@ -27,6 +27,7 @@ from custom_components.curbcharge.models import (
     OperatorReference,
     PersonalizationProfile,
     ProviderTimestampSource,
+    StationDiscoveryResult,
     TariffStatus,
 )
 from custom_components.curbcharge.providers.base import ChargingProviderError
@@ -64,6 +65,71 @@ from custom_components.curbcharge.sensor import (
 )
 from custom_components.curbcharge.statistics import MAX_OPERATOR_SUMMARIES
 from tests.conftest import FakeProvider
+
+
+async def test_global_directory_attribution_and_truncation(hass, sample_stations):
+    station = replace(
+        sample_stations[0],
+        provider="open_charge_map",
+        provider_name="Open Charge Map (global)",
+        country_code="DE",
+        availability_reported=False,
+        tariff=None,
+        source_name="Synthetic contributor",
+        source_url="https://example.org",
+        source_license="CC BY 4.0",
+        last_updated=datetime(2026, 1, 1, tzinfo=UTC),
+        last_updated_source=ProviderTimestampSource.OPEN_CHARGE_MAP,
+    )
+    provider = FakeProvider()
+    provider.provider_id = "open_charge_map"
+    provider.provider_name = "Open Charge Map (global)"
+    provider.country_code = None
+
+    async def get_stations(*_args, **_kwargs):
+        return StationDiscoveryResult((station,), (), results_may_be_truncated=True)
+
+    provider.async_get_stations = get_stations
+    coordinator = _coordinator(hass, station, provider=provider)
+    await coordinator.async_refresh()
+    summary = StatusSummarySensor(coordinator, station)
+    assert summary.attribution == station.attribution
+    assert "Synthetic contributor" in summary.attribution
+    assert summary.extra_state_attributes["source_license"] == "CC BY 4.0"
+    assert summary.extra_state_attributes["country_code"] == "DE"
+    assert summary.native_value == "unknown"
+    entry = MockConfigEntry(domain=DOMAIN)
+    best = BestNearbyChargerSensor(coordinator, entry)
+    assert best.native_value is None
+    top = TopNearbyChargersSensor(coordinator, entry)
+    assert top.extra_state_attributes["recommendations"] == []
+    nearby = NearbyChargingUnitsSensor(coordinator, entry)
+    assert nearby.extra_state_attributes["country_code"] is None
+    assert nearby.extra_state_attributes["global_provider"] is True
+    assert nearby.extra_state_attributes["results_may_be_truncated"] is True
+    assert (
+        station.provider_data_age_seconds(datetime(2030, 1, 1, tzinfo=UTC)) is not None
+    )
+    coordinator.async_set_updated_data({})
+    assert summary.attribution is None
+
+
+def test_source_metadata_reaches_selected_and_ranked_payloads(hass, sample_stations):
+    station = replace(
+        sample_stations[0],
+        source_name="Synthetic contributor",
+        source_url="https://example.org",
+        source_license="CC BY 4.0",
+    )
+    coordinator = _coordinator(hass, station)
+    entry = MockConfigEntry(domain=DOMAIN)
+    best = BestNearbyChargerSensor(coordinator, entry)
+    assert best.extra_state_attributes["source_url"] == station.source_url
+    top = TopNearbyChargersSensor(coordinator, entry)
+    assert (
+        top.extra_state_attributes["recommendations"][0]["attribution"]
+        == station.attribution
+    )
 
 
 def _coordinator(

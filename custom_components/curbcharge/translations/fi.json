@@ -154,6 +154,26 @@
         "data_description": {
           "api_token": "Avain tallennetaan tähän asetuskohteeseen ja piilotetaan diagnostiikasta."
         }
+      },
+      "openchargemap_credentials": {
+        "title": "Yhdistä Open Charge Mapiin",
+        "description": "Anna oma API-avaimesi [Open Charge Mapista]({openchargemap_api_url}) (My apps). Mukaan otetaan vain julkiset, avoimesti lisensoidut hakemistotiedot. Reaaliaikainen saatavuus ja hinnat ovat tuntemattomia. Samat onnistuneet haut tallennetaan välimuistiin tunniksi, myös manuaalisesti päivitettäessä.",
+        "data": {
+          "api_token": "Open Charge Mapin API-avain"
+        },
+        "data_description": {
+          "api_token": "Avain tallennetaan tähän määritykseen ja peitetään diagnostiikassa. Älä jaa sitä."
+        }
+      },
+      "openchargemap_reauth_confirm": {
+        "title": "Päivitä Open Charge Mapin tunnistetiedot",
+        "description": "Anna oma API-avaimesi [Open Charge Mapista]({openchargemap_api_url}) (My apps). Mukaan otetaan vain julkiset, avoimesti lisensoidut hakemistotiedot. Reaaliaikainen saatavuus ja hinnat ovat tuntemattomia. Samat onnistuneet haut tallennetaan välimuistiin tunniksi, myös manuaalisesti päivitettäessä.",
+        "data": {
+          "api_token": "Open Charge Mapin API-avain"
+        },
+        "data_description": {
+          "api_token": "Avain tallennetaan tähän määritykseen ja peitetään diagnostiikassa. Älä jaa sitä."
+        }
       }
     },
     "error": {
@@ -168,7 +188,8 @@
       "invalid_response": "Palveluntarjoaja palautti tietoja odottamattomassa muodossa.",
       "location_not_configured": "Kotikoordinaatteja ei ole määritetty Home Assistantissa.",
       "rate_limited": "Palveluntarjoaja rajoittaa pyyntöjen määrää. Yritä myöhemmin uudelleen.",
-      "unsupported_provider": "Valittua palveluntarjoajaa ei tueta."
+      "unsupported_provider": "Valittua palveluntarjoajaa ei tueta.",
+      "invalid_openchargemap_api_key": "Anna Open Charge Mapin API-avain, joka ei ole tyhjä ja sisältää tulostettavia ASCII-merkkejä."
     },
     "abort": {
       "already_configured": "Tämä palveluntarjoaja ja hakualue on jo määritetty.",
@@ -176,7 +197,8 @@
       "reconfigure_successful": "Hakusijainti päivitetty.",
       "reauth_successful": "Eco-Movement-tunnistetiedot päivitetty.",
       "nobil_reauth_successful": "NOBIL API-avain päivitetty.",
-      "afdc_reauth_successful": "NLR API-avain päivitetty."
+      "afdc_reauth_successful": "NLR API-avain päivitetty.",
+      "openchargemap_reauth_successful": "Open Charge Mapin tunnistetiedot päivitetty."
     }
   },
   "options": {
@@ -371,7 +393,8 @@
         "digitraffic_afir_fi": "Digitraffic AFIR Suomi",
         "ich_tanke_strom_ch": "ich-tanke-strom Sveitsi",
         "chargy_lu": "Chargy Luxembourg",
-        "via_lietuva_lt": "Via Lietuva Lithuania"
+        "via_lietuva_lt": "Via Lietuva Lithuania",
+        "open_charge_map": "Open Charge Map (maailmanlaajuinen)"
       }
     }
   },

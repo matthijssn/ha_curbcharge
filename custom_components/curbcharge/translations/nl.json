@@ -154,6 +154,26 @@
         "data_description": {
           "api_token": "De sleutel wordt in deze integratie opgeslagen en in diagnostiek afgeschermd."
         }
+      },
+      "openchargemap_credentials": {
+        "title": "Verbinden met Open Charge Map",
+        "description": "Voer je eigen API-sleutel van [Open Charge Map]({openchargemap_api_url}) in (My apps). Alleen openbare registergegevens met een open licentie worden opgenomen. Actuele beschikbaarheid en prijzen zijn onbekend. Identieke geslaagde zoekopdrachten worden een uur gecachet, ook bij handmatig vernieuwen.",
+        "data": {
+          "api_token": "Open Charge Map-API-sleutel"
+        },
+        "data_description": {
+          "api_token": "De sleutel wordt in deze configuratie opgeslagen en uit diagnostiek verwijderd. Deel deze niet."
+        }
+      },
+      "openchargemap_reauth_confirm": {
+        "title": "Open Charge Map-inloggegevens bijwerken",
+        "description": "Voer je eigen API-sleutel van [Open Charge Map]({openchargemap_api_url}) in (My apps). Alleen openbare registergegevens met een open licentie worden opgenomen. Actuele beschikbaarheid en prijzen zijn onbekend. Identieke geslaagde zoekopdrachten worden een uur gecachet, ook bij handmatig vernieuwen.",
+        "data": {
+          "api_token": "Open Charge Map-API-sleutel"
+        },
+        "data_description": {
+          "api_token": "De sleutel wordt in deze configuratie opgeslagen en uit diagnostiek verwijderd. Deel deze niet."
+        }
       }
     },
     "error": {
@@ -168,7 +188,8 @@
       "invalid_response": "De provider heeft gegevens in een onverwacht formaat geretourneerd.",
       "location_not_configured": "De thuiscoördinaten zijn niet ingesteld in Home Assistant.",
       "rate_limited": "De provider beperkt het aantal verzoeken. Probeer het later opnieuw.",
-      "unsupported_provider": "De geselecteerde provider wordt niet ondersteund."
+      "unsupported_provider": "De geselecteerde provider wordt niet ondersteund.",
+      "invalid_openchargemap_api_key": "Voer een niet-lege Open Charge Map-API-sleutel met afdrukbare ASCII-tekens in."
     },
     "abort": {
       "already_configured": "Deze provider en zoeklocatie zijn al ingesteld.",
@@ -176,7 +197,8 @@
       "reconfigure_successful": "De zoeklocatie is bijgewerkt.",
       "reauth_successful": "De Eco-Movement-inloggegevens zijn bijgewerkt.",
       "nobil_reauth_successful": "De NOBIL API-sleutel is bijgewerkt.",
-      "afdc_reauth_successful": "De NLR API-sleutel is bijgewerkt."
+      "afdc_reauth_successful": "De NLR API-sleutel is bijgewerkt.",
+      "openchargemap_reauth_successful": "Open Charge Map-inloggegevens bijgewerkt."
     }
   },
   "options": {
@@ -371,7 +393,8 @@
         "digitraffic_afir_fi": "Digitraffic AFIR Finland",
         "ich_tanke_strom_ch": "ich-tanke-strom Zwitserland",
         "chargy_lu": "Chargy Luxembourg",
-        "via_lietuva_lt": "Via Lietuva Lithuania"
+        "via_lietuva_lt": "Via Lietuva Lithuania",
+        "open_charge_map": "Open Charge Map (wereldwijd)"
       }
     }
   },

@@ -94,6 +94,12 @@ class CurbChargeStationEntity(CoordinatorEntity[CurbChargeCoordinator]):
         return (self.coordinator.data or {}).get(self._station_id)
 
     @property
+    def attribution(self) -> str | None:
+        """Expose upstream source and license in Home Assistant's entity UI."""
+        station = self.station
+        return station.attribution if station is not None else None
+
+    @property
     def available(self) -> bool:
         """Mark retained stations unavailable while they are absent upstream."""
         station = self.station

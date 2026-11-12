@@ -63,6 +63,7 @@ from .const import (
     NDW_CONNECTOR_TYPE_SELECTOR_OPTIONS,
     NOBIL_API_KEY_INFO_URL,
     NOBIL_PROVIDER_IDS,
+    OPEN_CHARGE_MAP_API_KEY_URL,
     PERSONALIZATION_PROFILE_VERSION,
     PROVIDER_AFDC_US,
     PROVIDER_CHARGY_LU,
@@ -72,6 +73,7 @@ from .const import (
     PROVIDER_NDW_DOT_NL,
     PROVIDER_NOBIL_NO,
     PROVIDER_NOBIL_SE,
+    PROVIDER_OPEN_CHARGE_MAP,
     PROVIDER_VIA_LIETUVA_LT,
     SUPPORTED_PROVIDER_IDS,
 )
@@ -101,6 +103,7 @@ from .providers.base import (
 )
 from .providers.belgium import is_valid_belgium_api_token
 from .providers.nobil import is_valid_nobil_api_key
+from .providers.openchargemap import is_valid_openchargemap_api_key
 from .schema import vol
 
 type FlowSchema = Any
@@ -187,6 +190,17 @@ def afdc_credentials_schema() -> FlowSchema:
     )
 
 
+def openchargemap_credentials_schema() -> FlowSchema:
+    """Return a password field for the user's Open Charge Map API key."""
+    return vol.Schema(
+        {
+            vol.Required(CONF_API_TOKEN): selector.TextSelector(
+                selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)
+            )
+        }
+    )
+
+
 def _scan_interval_field(default: Any) -> tuple[Any, Any]:
     return (
         vol.Required(CONF_SCAN_INTERVAL, default=default),
@@ -244,6 +258,7 @@ def station_options_schema(
                         PROVIDER_ICH_TANKE_STROM_CH,
                         PROVIDER_CHARGY_LU,
                         PROVIDER_VIA_LIETUVA_LT,
+                        PROVIDER_OPEN_CHARGE_MAP,
                     ],
                     mode=selector.SelectSelectorMode.DROPDOWN,
                     translation_key="provider",
@@ -676,6 +691,8 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return await self.async_step_nobil_reauth_confirm()
         if provider_id == PROVIDER_AFDC_US:
             return await self.async_step_afdc_reauth_confirm()
+        if provider_id == PROVIDER_OPEN_CHARGE_MAP:
+            return await self.async_step_openchargemap_reauth_confirm()
         return self.async_abort(reason="unsupported_provider")
 
     async def async_step_reauth_confirm(
@@ -790,6 +807,52 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             entry,
             data=data,
             reason="nobil_reauth_successful",
+        )
+
+    async def async_step_openchargemap_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Validate a replacement key without changing the saved search identity."""
+        entry = self._get_reauth_entry()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            api_key = user_input[CONF_API_TOKEN]
+            if not is_valid_openchargemap_api_key(api_key):
+                errors["base"] = "invalid_openchargemap_api_key"
+            else:
+                options = {**entry.data, **entry.options}
+                if options.get(CONF_PROVIDER) != PROVIDER_OPEN_CHARGE_MAP:
+                    return self.async_abort(reason="unsupported_provider")
+                location = _entry_location(self.hass, entry.data)
+                if location is None:
+                    return self.async_abort(reason="location_not_configured")
+                try:
+                    provider = create_provider(
+                        PROVIDER_OPEN_CHARGE_MAP,
+                        async_get_clientsession(self.hass),
+                        self.hass,
+                        api_key,
+                    )
+                    await provider.async_validate_connection(
+                        *location,
+                        int(options.get(CONF_SEARCH_RADIUS, DEFAULT_SEARCH_RADIUS_M)),
+                    )
+                except ChargingProviderError as err:
+                    errors["base"] = _flow_error(err)
+                else:
+                    return self._update_entry_and_abort(
+                        entry,
+                        data={**entry.data, CONF_API_TOKEN: api_key},
+                        reason="openchargemap_reauth_successful",
+                    )
+        return _show_form(
+            self,
+            step_id="openchargemap_reauth_confirm",
+            data_schema=openchargemap_credentials_schema(),
+            errors=errors,
+            description_placeholders={
+                "openchargemap_api_url": OPEN_CHARGE_MAP_API_KEY_URL
+            },
         )
 
     async def async_step_afdc_reauth_confirm(
@@ -1096,6 +1159,8 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return await self.async_step_nobil_credentials()
             if provider_id == PROVIDER_AFDC_US:
                 return await self.async_step_afdc_credentials()
+            if provider_id == PROVIDER_OPEN_CHARGE_MAP:
+                return await self.async_step_openchargemap_credentials()
             if provider_id == PROVIDER_NDW_DOT_NL:
                 return await self.async_step_discovery_filters()
             return await self._async_validate_and_create_entry()
@@ -1205,6 +1270,27 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
         return await self._async_validate_and_create_entry(api_key)
 
+    async def async_step_openchargemap_credentials(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Collect the user's key for the global directory provider."""
+        if user_input is not None:
+            api_key = user_input[CONF_API_TOKEN]
+            if is_valid_openchargemap_api_key(api_key):
+                return await self._async_validate_and_create_entry(api_key)
+            errors = {"base": "invalid_openchargemap_api_key"}
+        else:
+            errors = {}
+        return _show_form(
+            self,
+            step_id="openchargemap_credentials",
+            data_schema=openchargemap_credentials_schema(),
+            errors=errors,
+            description_placeholders={
+                "openchargemap_api_url": OPEN_CHARGE_MAP_API_KEY_URL
+            },
+        )
+
     async def _async_validate_and_create_entry(
         self, token: str | None = None
     ) -> FlowResult:
@@ -1224,6 +1310,16 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._latitude, self._longitude, self._search_radius
             )
         except ChargingProviderError as err:
+            if self._provider_id == PROVIDER_OPEN_CHARGE_MAP:
+                return _show_form(
+                    self,
+                    step_id="openchargemap_credentials",
+                    data_schema=openchargemap_credentials_schema(),
+                    errors={"base": _flow_error(err)},
+                    description_placeholders={
+                        "openchargemap_api_url": OPEN_CHARGE_MAP_API_KEY_URL
+                    },
+                )
             if self._provider_id == PROVIDER_ECO_MOVEMENT_BE:
                 return _show_form(
                     self,
