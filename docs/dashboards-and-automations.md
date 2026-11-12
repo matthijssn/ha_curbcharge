@@ -53,6 +53,20 @@ entities:
   - entity: sensor.your_site_summary
 ```
 
+The **Show chargers on the Home Assistant map** option is enabled by default.
+It adds a `device_tracker` for each discovered charger, named after the
+charging station. Add a tracker to the map to show that charger directly:
+
+```yaml
+type: map
+entities:
+  - entity: device_tracker.your_charger
+```
+
+Trackers follow the configured nearby-station limit and favorites. Disable the
+option in **CurbCharge → General settings** to remove them; the existing
+station summary sensors remain available.
+
 In the
 [complete Map card example](../examples/curbcharge-map.yaml), replace both
 example IDs with the entities from your instance, or remove the Status summary

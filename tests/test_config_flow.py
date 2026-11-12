@@ -17,6 +17,7 @@ from custom_components.curbcharge.const import (
     CONF_API_TOKEN,
     CONF_CONNECTOR_TYPE_IDS,
     CONF_CONNECTOR_TYPES,
+    CONF_DEVICE_TRACKERS,
     CONF_EXCLUDED_OPERATORS,
     CONF_FAVOURITES,
     CONF_INCLUDE_UNKNOWN,
@@ -1675,6 +1676,10 @@ def test_ndw_discovery_filter_options_default_and_validate():
     assert defaults[CONF_CONNECTOR_TYPES] == []
     assert defaults[CONF_MIN_POWER_KW] is None
     assert defaults[CONF_REQUIRE_AVAILABLE] is False
+    assert defaults[CONF_DEVICE_TRACKERS] is True
+    assert (
+        schema({**values, CONF_DEVICE_TRACKERS: False})[CONF_DEVICE_TRACKERS] is False
+    )
 
     restored_schema = config_flow.options_schema(
         {
@@ -2001,6 +2006,7 @@ async def test_options_flow_saves_integer_intervals_and_search_limits(hass):
             CONF_MAX_STATIONS: 5.0,
             CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
             CONF_INCLUDE_UNKNOWN: False,
+            CONF_DEVICE_TRACKERS: False,
             **_discovery_filters(["IEC_62196_T2"], 11.0, True),
         },
     )
@@ -2012,6 +2018,7 @@ async def test_options_flow_saves_integer_intervals_and_search_limits(hass):
         CONF_MAX_STATIONS: 5,
         CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
         CONF_INCLUDE_UNKNOWN: False,
+        CONF_DEVICE_TRACKERS: False,
         CONF_CONNECTOR_TYPES: ["IEC_62196_T2"],
         CONF_MIN_POWER_KW: 11.0,
         CONF_REQUIRE_AVAILABLE: True,
