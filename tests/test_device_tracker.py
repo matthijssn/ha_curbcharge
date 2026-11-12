@@ -3,9 +3,9 @@
 from dataclasses import replace
 
 import pytest
-from homeassistant.config_entries import MockConfigEntry
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
 from homeassistant.helpers import entity_registry as er
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components import curbcharge
 from custom_components.curbcharge.const import (
