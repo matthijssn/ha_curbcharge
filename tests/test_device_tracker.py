@@ -3,7 +3,7 @@
 from dataclasses import replace
 
 import pytest
-from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
+from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE, STATE_UNAVAILABLE
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -81,7 +81,10 @@ async def test_trackers_follow_coordinates_and_unload(
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     await hass.async_block_till_done()
-    assert hass.states.get(tracker.entity_id) is None
+    state = hass.states.get(tracker.entity_id)
+    assert state is not None
+    assert state.state == STATE_UNAVAILABLE
+    assert state.attributes["restored"] is True
 
 
 @pytest.mark.asyncio
