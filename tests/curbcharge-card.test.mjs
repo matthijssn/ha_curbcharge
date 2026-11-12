@@ -142,6 +142,30 @@ test("rejects invalid configuration and non-CurbCharge entities", () => {
       }),
     /supported display options/,
   );
+  assert.throws(
+    () =>
+      cardModule.validateConfig({
+        entity: "sensor.station_status_summary",
+        enable_ev_estimates: "true",
+      }),
+    /supported display options/,
+  );
+  assert.throws(
+    () =>
+      cardModule.validateConfig({
+        entity: "sensor.station_status_summary",
+        ev_target_soc: 101,
+      }),
+    /supported display options/,
+  );
+  assert.throws(
+    () =>
+      cardModule.validateConfig({
+        entity: "sensor.station_status_summary",
+        ev_assumed_power_kw: 0,
+      }),
+    /supported display options/,
+  );
   assert.deepEqual(
     cardModule.buildCardData(
       { entity_id: "sensor.other", state: "1", attributes: {} },
@@ -162,6 +186,8 @@ test("keeps entity-only YAML compatible and exposes editor options", () => {
     show_connector_details: true,
     show_station_details: true,
     show_update_times: true,
+    enable_ev_estimates: false,
+    ev_target_soc: 100,
   });
 
   const Card = elements.get("curbcharge-card");
@@ -173,11 +199,12 @@ test("keeps entity-only YAML compatible and exposes editor options", () => {
   const form = editor.shadowRoot.children[0];
 
   assert.equal(form.tagName, "ha-form");
-  assert.equal(form.schema.length, 8);
+  assert.equal(form.schema.length, 17);
   assert.equal(form.data.layout, "standard");
   assert.equal(form.computeLabel({ name: "layout" }), "Weergave");
   assert.equal(form.schema[2].name, "title");
   assert.deepEqual(form.schema[3].selector.select.multiple, true);
+  assert.equal(form.computeLabel({ name: "enable_ev_estimates" }), "EV-schattingen tonen");
 
   let changedConfig;
   editor.addEventListener("config-changed", (event) => {
@@ -360,6 +387,22 @@ test("localizes editor controls in every supported language", () => {
       ).detailsLabel,
       expected.details,
     );
+    for (const [name, labelKey] of Object.entries({
+      enable_ev_estimates: "enableEvEstimates",
+      ev_soc_entity: "socEntity",
+      ev_soc_attribute: "sensorAttribute",
+      ev_capacity_entity: "capacityEntity",
+      ev_capacity_attribute: "sensorAttribute",
+      ev_power_entity: "powerEntity",
+      ev_power_attribute: "sensorAttribute",
+      ev_target_soc: "targetSoc",
+      ev_assumed_power_kw: "assumedPower",
+    })) {
+      assert.equal(
+        form.computeLabel({ name }),
+        cardModule.TEXT[language][labelKey],
+      );
+    }
   }
 });
 
@@ -481,6 +524,259 @@ test("renders recommendation payload and separates provider and HA timestamps", 
       timeStyle: "short",
     }).format(new Date(refreshTime)),
   );
+});
+
+test("keeps EV estimates opt-in and calculates single-station estimates", () => {
+  const config = {
+    entity: "sensor.station_status_summary",
+    enable_ev_estimates: true,
+    ev_soc_entity: "sensor.ev_soc",
+    ev_capacity_entity: "sensor.ev_capacity",
+    ev_power_entity: "sensor.ev_power",
+    ev_target_soc: 80,
+  };
+  const station = {
+    entity_id: config.entity,
+    state: "available",
+    attributes: {
+      provider_station_id: "station-1",
+      tariff_status: "available",
+      price_per_kwh: 0.5,
+      currency: "EUR",
+      session_fee: 0.75,
+      price_per_minute: null,
+    },
+  };
+  const hass = {
+    language: "en",
+    states: {
+      [config.entity]: station,
+      "sensor.ev_soc": {
+        state: "25",
+        attributes: { unit_of_measurement: "%" },
+      },
+      "sensor.ev_capacity": {
+        state: "60",
+        attributes: { unit_of_measurement: "kWh" },
+      },
+      "sensor.ev_power": {
+        state: "7.5",
+        attributes: { unit_of_measurement: "kW" },
+      },
+    },
+  };
+
+  const data = cardModule.buildCardData(station, hass, config);
+  assert.deepEqual(data.evEstimateRows, [
+    ["Battery energy needed", "33 kWh"],
+    [
+      "Estimated cost to target",
+      new Intl.NumberFormat("en", {
+        style: "currency",
+        currency: "EUR",
+      }).format(17.25),
+    ],
+    ["Estimated time to target", "4.4 h"],
+  ]);
+  assert.match(data.evEstimateNote, /charging losses/);
+  assert.deepEqual(
+    cardModule.buildCardData(station, hass, {
+      ...config,
+      enable_ev_estimates: false,
+    }).evEstimateRows,
+    [],
+  );
+  assert.deepEqual(
+    cardModule.buildCardData(
+      {
+        entity_id: "sensor.top_nearby_chargers",
+        state: 1,
+        attributes: {
+          result_status: "selected",
+          recommendations: [],
+        },
+      },
+      hass,
+      { ...config, entity: "sensor.top_nearby_chargers" },
+    ).evEstimateRows,
+    [],
+  );
+});
+
+test("suppresses estimates for invalid inputs and incomplete tariff components", () => {
+  const config = {
+    entity: "sensor.station_status_summary",
+    enable_ev_estimates: true,
+    ev_soc_entity: "sensor.ev_soc",
+    ev_capacity_entity: "sensor.ev_capacity",
+    ev_assumed_power_kw: 10,
+  };
+  const station = {
+    entity_id: config.entity,
+    state: "available",
+    attributes: {
+      provider_station_id: "station-1",
+      tariff_status: "available",
+      price_per_kwh: 0.5,
+      currency: "EUR",
+      session_fee: null,
+      price_per_minute: 0.1,
+    },
+  };
+  const hass = {
+    language: "en",
+    states: {
+      [config.entity]: station,
+      "sensor.ev_soc": {
+        state: "25",
+        attributes: { unit_of_measurement: "%" },
+      },
+      "sensor.ev_capacity": {
+        state: "60",
+        attributes: { unit_of_measurement: "kWh" },
+      },
+      "sensor.ev_power": {
+        state: "unavailable",
+        attributes: { unit_of_measurement: "kW" },
+      },
+    },
+  };
+
+  const estimate = cardModule.buildCardData(station, hass, {
+    ...config,
+    ev_power_entity: "sensor.ev_power",
+  });
+  assert.deepEqual(
+    estimate.evEstimateRows.map(([label]) => label),
+    ["Battery energy needed"],
+  );
+
+  hass.states["sensor.ev_soc"] = {
+    state: "101",
+    attributes: { unit_of_measurement: "%" },
+  };
+  assert.deepEqual(
+    cardModule.buildCardData(station, hass, config).evEstimateRows,
+    [],
+  );
+});
+
+test("reads configured vehicle attributes without guessing their units", () => {
+  const config = {
+    entity: "sensor.station_status_summary",
+    enable_ev_estimates: true,
+    ev_soc_entity: "sensor.ev",
+    ev_soc_attribute: "battery_percent",
+    ev_capacity_entity: "sensor.ev",
+    ev_capacity_attribute: "usable_capacity",
+    ev_assumed_power_kw: 10,
+    ev_target_soc: 75,
+  };
+  const station = {
+    entity_id: config.entity,
+    state: "available",
+    attributes: {
+      provider_station_id: "station-1",
+      tariff_status: "available",
+      price_per_kwh: 0.5,
+      currency: "EUR",
+      session_fee: null,
+      price_per_minute: null,
+    },
+  };
+  const hass = {
+    language: "en",
+    states: {
+      [config.entity]: station,
+      "sensor.ev": {
+        state: "25",
+        attributes: {
+          unit_of_measurement: "mi",
+          battery_percent: 25,
+          usable_capacity: 60,
+          is_stale: false,
+        },
+      },
+    },
+  };
+
+  assert.deepEqual(
+    cardModule.buildCardData(station, hass, config).evEstimateRows,
+    [
+      ["Battery energy needed", "30 kWh"],
+      [
+        "Estimated cost to target",
+        new Intl.NumberFormat("en", {
+          style: "currency",
+          currency: "EUR",
+        }).format(15),
+      ],
+      ["Estimated time to target", "3 h"],
+    ],
+  );
+  hass.states["sensor.ev"].attributes.restored = true;
+  assert.deepEqual(
+    cardModule.buildCardData(station, hass, config).evEstimateRows,
+    [],
+  );
+});
+
+test("rerenders EV estimates when a configured vehicle sensor changes", () => {
+  const Card = elements.get("curbcharge-card");
+  const card = new Card();
+  const config = {
+    entity: "sensor.station_status_summary",
+    enable_ev_estimates: true,
+    ev_soc_entity: "sensor.ev_soc",
+    ev_capacity_entity: "sensor.ev_capacity",
+    ev_assumed_power_kw: 10,
+  };
+  const station = {
+    entity_id: config.entity,
+    state: "available",
+    attributes: {
+      provider_station_id: "station-1",
+      tariff_status: "available",
+      price_per_kwh: 0.5,
+      currency: "EUR",
+      session_fee: null,
+      price_per_minute: null,
+    },
+  };
+  card.setConfig(config);
+  card.hass = {
+    language: "en",
+    states: {
+      [config.entity]: station,
+      "sensor.ev_soc": {
+        state: "25",
+        attributes: { unit_of_measurement: "%" },
+      },
+      "sensor.ev_capacity": {
+        state: "60",
+        attributes: { unit_of_measurement: "kWh" },
+      },
+    },
+  };
+  const firstRender = card.shadowRoot.children[1];
+  assert.match(visibleText(firstRender), /45 kWh/);
+
+  card.hass = {
+    language: "en",
+    states: {
+      [config.entity]: station,
+      "sensor.ev_soc": {
+        state: "50",
+        attributes: { unit_of_measurement: "%" },
+      },
+      "sensor.ev_capacity": {
+        state: "60",
+        attributes: { unit_of_measurement: "kWh" },
+      },
+    },
+  };
+  assert.notEqual(card.shadowRoot.children[1], firstRender);
+  assert.match(visibleText(card.shadowRoot), /30 kWh/);
 });
 
 test("renders a server-ordered recommendation list with unknown and zero values", () => {

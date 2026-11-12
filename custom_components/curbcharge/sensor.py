@@ -1925,6 +1925,13 @@ def _selection_station_data_attributes(station: ChargingStation) -> dict[str, An
         "max_power_kw": station.max_power_kw,
         "price_per_kwh": price_per_kwh,
         "currency": currency,
+        "session_fee": _decimal_attribute(
+            tariff.session_fee if tariff is not None else None
+        ),
+        "price_per_minute": _decimal_attribute(
+            tariff.price_per_minute if tariff is not None else None
+        ),
+        "tariff_status": tariff_status.value,
         "provider_last_updated": _isoformat(station.last_updated),
     }
 

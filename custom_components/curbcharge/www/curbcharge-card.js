@@ -6,6 +6,8 @@ const DEFAULT_CONFIG = Object.freeze({
   show_connector_details: true,
   show_station_details: true,
   show_update_times: true,
+  enable_ev_estimates: false,
+  ev_target_soc: 100,
 });
 const BOOLEAN_OPTIONS = [
   "show_price",
@@ -22,6 +24,15 @@ const EDITOR_LABELS = {
   show_connector_details: "showConnectorDetails",
   show_station_details: "showStationDetails",
   show_update_times: "showUpdateTimes",
+  enable_ev_estimates: "enableEvEstimates",
+  ev_soc_entity: "socEntity",
+  ev_soc_attribute: "sensorAttribute",
+  ev_capacity_entity: "capacityEntity",
+  ev_capacity_attribute: "sensorAttribute",
+  ev_power_entity: "powerEntity",
+  ev_power_attribute: "sensorAttribute",
+  ev_target_soc: "targetSoc",
+  ev_assumed_power_kw: "assumedPower",
 };
 const FIELD_LABELS = {
   available_connectors: "availableConnectors",
@@ -117,6 +128,18 @@ const TEXT = {
     showConnectorDetails: "Show connector details",
     showStationDetails: "Show station details",
     showUpdateTimes: "Show update times",
+    evEstimates: "EV charging estimates",
+    enableEvEstimates: "Show EV estimates",
+    socEntity: "Battery state of charge sensor (%)",
+    capacityEntity: "Usable battery capacity sensor (kWh)",
+    powerEntity: "EV charging power sensor (kW)",
+    sensorAttribute: "Sensor attribute (optional)",
+    targetSoc: "Target charge (%)",
+    assumedPower: "Assumed charging power (kW)",
+    energyNeeded: "Battery energy needed",
+    estimatedCost: "Estimated cost to target",
+    estimatedDuration: "Estimated time to target",
+    evEstimateNote: "Estimate excludes charging losses, charging-rate changes, and unreported tariff components.",
     entityMissing: "The configured entity was not found.",
     wrongEntity: "Choose a CurbCharge status or recommendation sensor.",
     invalidConfig: "Use a CurbCharge status or recommendation sensor and supported display options.",
@@ -190,6 +213,18 @@ const TEXT = {
     showConnectorDetails: "Toon connectordetails",
     showStationDetails: "Toon stationdetails",
     showUpdateTimes: "Toon updatetijden",
+    evEstimates: "Schatting van EV-laden",
+    enableEvEstimates: "EV-schattingen tonen",
+    socEntity: "Sensor voor batterijlading (%)",
+    capacityEntity: "Sensor voor bruikbare batterijcapaciteit (kWh)",
+    powerEntity: "Sensor voor EV-laadvermogen (kW)",
+    sensorAttribute: "Sensorattribuut (optioneel)",
+    targetSoc: "Doellading (%)",
+    assumedPower: "Aangenomen laadvermogen (kW)",
+    energyNeeded: "Benodigde batterij-energie",
+    estimatedCost: "Geschatte kosten tot doellading",
+    estimatedDuration: "Geschatte tijd tot doellading",
+    evEstimateNote: "De schatting is exclusief laadverlies, wisselend laadvermogen en niet-gerapporteerde tariefcomponenten.",
     entityMissing: "De ingestelde entiteit is niet gevonden.",
     wrongEntity: "Kies een CurbCharge-status- of aanbevelingssensor.",
     invalidConfig: "Gebruik een CurbCharge-status- of aanbevelingssensor en ondersteunde weergaveopties.",
@@ -263,6 +298,18 @@ const TEXT = {
     showConnectorDetails: "Afficher les détails des connecteurs",
     showStationDetails: "Afficher les détails de la station",
     showUpdateTimes: "Afficher les heures de mise à jour",
+    evEstimates: "Estimation de recharge du véhicule",
+    enableEvEstimates: "Afficher les estimations du véhicule",
+    socEntity: "Capteur de charge de la batterie (%)",
+    capacityEntity: "Capteur de capacité utile de la batterie (kWh)",
+    powerEntity: "Capteur de puissance de recharge du véhicule (kW)",
+    sensorAttribute: "Attribut du capteur (facultatif)",
+    targetSoc: "Charge cible (%)",
+    assumedPower: "Puissance de recharge supposée (kW)",
+    energyNeeded: "Énergie à ajouter à la batterie",
+    estimatedCost: "Coût estimé jusqu'à la charge cible",
+    estimatedDuration: "Durée estimée jusqu'à la charge cible",
+    evEstimateNote: "Estimation hors pertes de recharge, variation de puissance et composants tarifaires non déclarés.",
     entityMissing: "L'entité configurée est introuvable.",
     wrongEntity: "Choisissez un capteur de statut ou de recommandation CurbCharge.",
     invalidConfig: "Utilisez un capteur de statut ou de recommandation CurbCharge et des options d'affichage prises en charge.",
@@ -336,6 +383,18 @@ const TEXT = {
     showConnectorDetails: "Anschlussdetails anzeigen",
     showStationDetails: "Stationsdetails anzeigen",
     showUpdateTimes: "Aktualisierungszeiten anzeigen",
+    evEstimates: "EV-Ladeschätzung",
+    enableEvEstimates: "EV-Schätzungen anzeigen",
+    socEntity: "Sensor für Batterieladung (%)",
+    capacityEntity: "Sensor für nutzbare Batteriekapazität (kWh)",
+    powerEntity: "Sensor für EV-Ladeleistung (kW)",
+    sensorAttribute: "Sensorattribut (optional)",
+    targetSoc: "Zielladung (%)",
+    assumedPower: "Angenommene Ladeleistung (kW)",
+    energyNeeded: "Benötigte Batterieenergie",
+    estimatedCost: "Geschätzte Kosten bis zum Ziel",
+    estimatedDuration: "Geschätzte Zeit bis zum Ziel",
+    evEstimateNote: "Schätzung ohne Ladeverluste, wechselnde Ladeleistung und nicht gemeldete Tarifbestandteile.",
     entityMissing: "Die konfigurierte Entität wurde nicht gefunden.",
     wrongEntity: "Wählen Sie einen CurbCharge-Status- oder Empfehlungssensor aus.",
     invalidConfig: "Verwenden Sie einen CurbCharge-Status- oder Empfehlungssensor und unterstützte Anzeigeoptionen.",
@@ -409,6 +468,18 @@ const TEXT = {
     showConnectorDetails: "Vis kontaktdetaljer",
     showStationDetails: "Vis stasjonsdetaljer",
     showUpdateTimes: "Vis oppdateringstider",
+    evEstimates: "Ladeestimat for elbil",
+    enableEvEstimates: "Vis estimater for elbil",
+    socEntity: "Sensor for batterinivå (%)",
+    capacityEntity: "Sensor for brukbar batterikapasitet (kWh)",
+    powerEntity: "Sensor for ladeeffekt for elbil (kW)",
+    sensorAttribute: "Sensorattributt (valgfritt)",
+    targetSoc: "Lademål (%)",
+    assumedPower: "Antatt ladeeffekt (kW)",
+    energyNeeded: "Energi til batteriet",
+    estimatedCost: "Estimert kostnad til lademålet",
+    estimatedDuration: "Estimert tid til lademålet",
+    evEstimateNote: "Estimatet utelater ladetap, varierende ladeeffekt og ikke-rapporterte tariffkomponenter.",
     entityMissing: "Den konfigurerte entiteten ble ikke funnet.",
     wrongEntity: "Velg en status- eller anbefalingssensor fra CurbCharge.",
     invalidConfig: "Bruk en status- eller anbefalingssensor fra CurbCharge og støttede visningsvalg.",
@@ -482,6 +553,18 @@ const TEXT = {
     showConnectorDetails: "Visa kontaktdetaljer",
     showStationDetails: "Visa stationsdetaljer",
     showUpdateTimes: "Visa uppdateringstider",
+    evEstimates: "Laddningsuppskattning för elbil",
+    enableEvEstimates: "Visa uppskattningar för elbil",
+    socEntity: "Sensor för batterinivå (%)",
+    capacityEntity: "Sensor för användbar batterikapacitet (kWh)",
+    powerEntity: "Sensor för elbilens laddeffekt (kW)",
+    sensorAttribute: "Sensorattribut (valfritt)",
+    targetSoc: "Laddningsmål (%)",
+    assumedPower: "Antagen laddeffekt (kW)",
+    energyNeeded: "Energi till batteriet",
+    estimatedCost: "Uppskattad kostnad till laddningsmålet",
+    estimatedDuration: "Uppskattad tid till laddningsmålet",
+    evEstimateNote: "Uppskattningen exkluderar laddningsförluster, varierande laddeffekt och ej rapporterade tariffkomponenter.",
     entityMissing: "Den konfigurerade entiteten hittades inte.",
     wrongEntity: "Välj en status- eller rekommendationssensor från CurbCharge.",
     invalidConfig: "Använd en status- eller rekommendationssensor från CurbCharge och visningsalternativ som stöds.",
@@ -555,6 +638,18 @@ const TEXT = {
     showConnectorDetails: "Näytä liitintiedot",
     showStationDetails: "Näytä asematiedot",
     showUpdateTimes: "Näytä päivitysajat",
+    evEstimates: "Sähköauton latausarvio",
+    enableEvEstimates: "Näytä sähköauton arviot",
+    socEntity: "Akun varaustason anturi (%)",
+    capacityEntity: "Akun käytettävissä olevan kapasiteetin anturi (kWh)",
+    powerEntity: "Sähköauton lataustehon anturi (kW)",
+    sensorAttribute: "Anturin attribuutti (valinnainen)",
+    targetSoc: "Tavoitevaraustaso (%)",
+    assumedPower: "Oletettu latausteho (kW)",
+    energyNeeded: "Akkuun tarvittava energia",
+    estimatedCost: "Arvioitu hinta varaustavoitteeseen",
+    estimatedDuration: "Arvioitu aika varaustavoitteeseen",
+    evEstimateNote: "Arvio ei sisällä lataushäviöitä, vaihtelevaa lataustehoa eikä ilmoittamattomia tariffikomponentteja.",
     entityMissing: "Määritettyä entiteettiä ei löytynyt.",
     wrongEntity: "Valitse CurbChargen tila- tai suositussensori.",
     invalidConfig: "Käytä CurbChargen tila- tai suositussensoria ja tuettuja näyttöasetuksia.",
@@ -628,6 +723,18 @@ const TEXT = {
     showConnectorDetails: "Mostra dettagli connettori",
     showStationDetails: "Mostra dettagli stazione",
     showUpdateTimes: "Mostra orari di aggiornamento",
+    evEstimates: "Stima di ricarica dell'auto elettrica",
+    enableEvEstimates: "Mostra le stime dell'auto elettrica",
+    socEntity: "Sensore del livello della batteria (%)",
+    capacityEntity: "Sensore della capacità utilizzabile della batteria (kWh)",
+    powerEntity: "Sensore della potenza di ricarica dell'auto (kW)",
+    sensorAttribute: "Attributo del sensore (facoltativo)",
+    targetSoc: "Livello di carica obiettivo (%)",
+    assumedPower: "Potenza di ricarica ipotizzata (kW)",
+    energyNeeded: "Energia necessaria per la batteria",
+    estimatedCost: "Costo stimato fino all'obiettivo",
+    estimatedDuration: "Tempo stimato fino all'obiettivo",
+    evEstimateNote: "La stima esclude le perdite di ricarica, le variazioni di potenza e le componenti tariffarie non comunicate.",
     entityMissing: "L'entità configurata non è stata trovata.",
     wrongEntity: "Scegli un sensore di stato o di raccomandazione CurbCharge.",
     invalidConfig: "Usa un sensore di stato o di raccomandazione CurbCharge e opzioni di visualizzazione supportate.",
@@ -701,6 +808,18 @@ const TEXT = {
     showConnectorDetails: "Rādīt savienotāju informāciju",
     showStationDetails: "Rādīt stacijas informāciju",
     showUpdateTimes: "Rādīt atjauninājumu laikus",
+    evEstimates: "Elektroauto uzlādes aprēķins",
+    enableEvEstimates: "Rādīt elektroauto aprēķinus",
+    socEntity: "Akumulatora uzlādes līmeņa sensors (%)",
+    capacityEntity: "Izmantojamās akumulatora ietilpības sensors (kWh)",
+    powerEntity: "Elektroauto uzlādes jaudas sensors (kW)",
+    sensorAttribute: "Sensora atribūts (neobligāts)",
+    targetSoc: "Mērķa uzlādes līmenis (%)",
+    assumedPower: "Pieņemtā uzlādes jauda (kW)",
+    energyNeeded: "Akumulatoram nepieciešamā enerģija",
+    estimatedCost: "Aprēķinātās izmaksas līdz mērķim",
+    estimatedDuration: "Aprēķinātais laiks līdz mērķim",
+    evEstimateNote: "Aprēķinā nav iekļauti uzlādes zudumi, jaudas izmaiņas un neziņoti tarifa komponenti.",
     entityMissing: "Konfigurētā entītija nav atrasta.",
     wrongEntity: "Izvēlieties CurbCharge statusa vai ieteikumu sensoru.",
     invalidConfig:
@@ -977,7 +1096,35 @@ export function validateConfig(config) {
   if (
     !["standard", "compact"].includes(normalized.layout) ||
     BOOLEAN_OPTIONS.some((option) => typeof normalized[option] !== "boolean") ||
+    typeof normalized.enable_ev_estimates !== "boolean" ||
+    !Number.isFinite(normalized.ev_target_soc) ||
+    normalized.ev_target_soc < 0 ||
+    normalized.ev_target_soc > 100 ||
     (normalized.title !== undefined && typeof normalized.title !== "string") ||
+    [
+      normalized.ev_soc_entity,
+      normalized.ev_capacity_entity,
+      normalized.ev_power_entity,
+    ].some(
+      (entity) =>
+        entity !== undefined &&
+        entity !== null &&
+        entity !== "" &&
+        (typeof entity !== "string" || !entity.startsWith("sensor.")),
+    ) ||
+    [
+      normalized.ev_soc_attribute,
+      normalized.ev_capacity_attribute,
+      normalized.ev_power_attribute,
+    ].some(
+      (attribute) =>
+        attribute !== undefined && typeof attribute !== "string",
+    ) ||
+    (normalized.ev_assumed_power_kw !== undefined &&
+      normalized.ev_assumed_power_kw !== null &&
+      (typeof normalized.ev_assumed_power_kw !== "number" ||
+        !Number.isFinite(normalized.ev_assumed_power_kw) ||
+        normalized.ev_assumed_power_kw <= 0)) ||
     (normalized.hide_fields !== undefined &&
       (!Array.isArray(normalized.hide_fields) ||
         normalized.hide_fields.some(
@@ -996,6 +1143,115 @@ function filterHiddenRows(rows, hideFields, text) {
     hideFields.map((field) => text[FIELD_LABELS[field]]),
   );
   return rows.filter(([label]) => !hiddenLabels.has(label));
+}
+
+function readSensorValue(hass, entityId, attribute, expectedUnit) {
+  if (typeof entityId !== "string" || !entityId) {
+    return null;
+  }
+  const entity = hass?.states?.[entityId];
+  const attributes = entity?.attributes || {};
+  if (
+    !entity ||
+    entity.state === "unknown" ||
+    entity.state === "unavailable" ||
+    attributes.is_stale === true ||
+    attributes.restored === true ||
+    (!attribute && attributes.unit_of_measurement !== expectedUnit)
+  ) {
+    return null;
+  }
+  const raw = attribute ? attributes[attribute] : entity.state;
+  if (
+    (typeof raw !== "number" && typeof raw !== "string") ||
+    (typeof raw === "string" && !raw.trim())
+  ) {
+    return null;
+  }
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
+function evEstimateRows(attributes, hass, options, text) {
+  if (!options.enable_ev_estimates) {
+    return [];
+  }
+  const stateOfCharge = readSensorValue(
+    hass,
+    options.ev_soc_entity,
+    options.ev_soc_attribute,
+    "%",
+  );
+  const capacity = readSensorValue(
+    hass,
+    options.ev_capacity_entity,
+    options.ev_capacity_attribute,
+    "kWh",
+  );
+  if (
+    stateOfCharge === null ||
+    stateOfCharge < 0 ||
+    stateOfCharge > 100 ||
+    capacity === null ||
+    capacity <= 0
+  ) {
+    return [];
+  }
+
+  const energyNeeded =
+    (capacity * Math.max(0, options.ev_target_soc - stateOfCharge)) / 100;
+  const rows = [
+    [
+      text.energyNeeded,
+      `${formatNumber(energyNeeded, hass, text.unknown)} kWh`,
+    ],
+  ];
+  const fee = attributes.session_fee;
+  const perMinutePrice = attributes.price_per_minute;
+  if (
+    attributes.tariff_status === "available" &&
+    typeof attributes.price_per_kwh === "number" &&
+    Number.isFinite(attributes.price_per_kwh) &&
+    attributes.price_per_kwh >= 0 &&
+    typeof attributes.currency === "string" &&
+    /^[A-Z]{3}$/.test(attributes.currency) &&
+    Object.hasOwn(attributes, "session_fee") &&
+    (fee === null ||
+      (typeof fee === "number" && Number.isFinite(fee) && fee >= 0)) &&
+    Object.hasOwn(attributes, "price_per_minute") &&
+    (perMinutePrice === null ||
+      (typeof perMinutePrice === "number" &&
+        Number.isFinite(perMinutePrice) &&
+        perMinutePrice === 0))
+  ) {
+    const cost =
+      energyNeeded === 0
+        ? 0
+        : energyNeeded * attributes.price_per_kwh + (fee ?? 0);
+    rows.push([
+      text.estimatedCost,
+      new Intl.NumberFormat(
+        hass?.locale?.language || hass?.language || "en",
+        { style: "currency", currency: attributes.currency },
+      ).format(cost),
+    ]);
+  }
+
+  const power = options.ev_power_entity
+    ? readSensorValue(
+        hass,
+        options.ev_power_entity,
+        options.ev_power_attribute,
+        "kW",
+      )
+    : options.ev_assumed_power_kw;
+  if (typeof power === "number" && Number.isFinite(power) && power > 0) {
+    rows.push([
+      text.estimatedDuration,
+      `${formatNumber(energyNeeded / power, hass, text.unknown)} h`,
+    ]);
+  }
+  return rows;
 }
 
 export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
@@ -1072,6 +1328,10 @@ export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
       : values.last_updated;
   const navigationLinks = buildNavigationLinks(entity, attributes, text);
   const hideFields = options.hide_fields || [];
+  const estimates =
+    !hasRecommendationList && !unavailable
+      ? evEstimateRows(values, hass, options, text)
+      : [];
   const primaryRows = hasRecommendationList
     ? []
     : [
@@ -1178,6 +1438,9 @@ export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
     detailsLabel: text.details,
     navigationLabel: text.navigate,
     navigationLinks,
+    evEstimateLabel: text.evEstimates,
+    evEstimateNote: text.evEstimateNote,
+    evEstimateRows: estimates,
     primaryRows: filterHiddenRows(primaryRows, hideFields, text),
     detailsRows: filterHiddenRows(detailsRows, hideFields, text),
     ...(hasRecommendationList
@@ -1224,6 +1487,42 @@ function getEditorSchema(text) {
       name,
       selector: { boolean: {} },
     })),
+    {
+      name: "enable_ev_estimates",
+      selector: { boolean: {} },
+    },
+    {
+      name: "ev_soc_entity",
+      selector: { entity: { domain: "sensor" } },
+    },
+    {
+      name: "ev_soc_attribute",
+      selector: { text: {} },
+    },
+    {
+      name: "ev_capacity_entity",
+      selector: { entity: { domain: "sensor" } },
+    },
+    {
+      name: "ev_capacity_attribute",
+      selector: { text: {} },
+    },
+    {
+      name: "ev_power_entity",
+      selector: { entity: { domain: "sensor" } },
+    },
+    {
+      name: "ev_power_attribute",
+      selector: { text: {} },
+    },
+    {
+      name: "ev_target_soc",
+      selector: { number: { min: 0, max: 100, step: 1, mode: "box" } },
+    },
+    {
+      name: "ev_assumed_power_kw",
+      selector: { number: { min: 0.1, step: 0.1, mode: "box" } },
+    },
   ];
 }
 
@@ -1270,11 +1569,27 @@ class CurbChargeCard extends HTMLElement {
     }
 
     const entity = this._hass.states[this._config.entity];
+    const vehicleEntities = this._config.enable_ev_estimates
+      ? [
+          this._config.ev_soc_entity,
+          this._config.ev_capacity_entity,
+          this._config.ev_power_entity,
+        ]
+          .filter(Boolean)
+          .map((entityId) => this._hass.states[entityId])
+      : [];
     const language =
       this._hass.locale?.language || this._hass.language || "en";
+    const sameVehicleEntities =
+      this._lastRenderedVehicleEntities?.length === vehicleEntities.length &&
+      vehicleEntities.every(
+        (vehicleEntity, index) =>
+          vehicleEntity === this._lastRenderedVehicleEntities[index],
+      );
     if (
       this._lastRenderedConfig === this._config &&
       this._lastRenderedEntity === entity &&
+      sameVehicleEntities &&
       this._lastRenderedLanguage === language
     ) {
       return;
@@ -1391,6 +1706,7 @@ class CurbChargeCard extends HTMLElement {
       card.append(error);
       this._lastRenderedConfig = this._config;
       this._lastRenderedEntity = entity;
+      this._lastRenderedVehicleEntities = vehicleEntities;
       this._lastRenderedLanguage = language;
       return;
     }
@@ -1411,6 +1727,23 @@ class CurbChargeCard extends HTMLElement {
     status.textContent = data.status;
     header.append(title, status);
     card.append(header);
+
+    if (data.evEstimateRows.length > 0) {
+      const section = document.createElement("section");
+      section.className = "ev-estimates";
+      const heading = document.createElement("h3");
+      heading.className = "recommendations-heading";
+      heading.textContent = data.evEstimateLabel;
+      const grid = document.createElement("div");
+      grid.className = "details-grid";
+      for (const row of data.evEstimateRows) {
+        grid.append(createMetric(row));
+      }
+      const note = document.createElement("p");
+      note.textContent = data.evEstimateNote;
+      section.append(heading, grid, note);
+      card.append(section);
+    }
 
     if (data.primaryRows.length > 0) {
       const primaryGrid = document.createElement("div");
@@ -1515,6 +1848,7 @@ class CurbChargeCard extends HTMLElement {
     }
     this._lastRenderedConfig = this._config;
     this._lastRenderedEntity = entity;
+    this._lastRenderedVehicleEntities = vehicleEntities;
     this._lastRenderedLanguage = language;
   }
 }
