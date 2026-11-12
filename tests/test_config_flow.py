@@ -77,6 +77,12 @@ from custom_components.curbcharge.providers.base import (
     UnsupportedProviderError,
 )
 from tests.conftest import FakeProvider
+from tests.providers.test_belgium import (
+    FakeResponse,
+    FakeSession,
+    NoWaitLimiter,
+    _root_locations_document,
+)
 
 flow_schema = config_flow.vol
 pytestmark = pytest.mark.usefixtures("enable_custom_integrations")
@@ -586,6 +592,49 @@ async def test_belgium_config_flow_validates_and_stores_token(hass, monkeypatch)
     assert provider.validation_calls == [(50.85, 4.35, 500)]
     assert calls[0][0] == PROVIDER_ECO_MOVEMENT_BE
     assert calls[0][2:] == (hass, token)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("valid", [True, False])
+async def test_belgium_setup_uses_real_root_publication_parser(
+    hass, monkeypatch, caplog, valid
+):
+    from custom_components.curbcharge.providers.belgium import (
+        BelgiumChargingProvider,
+        BelgiumDatexClient,
+    )
+
+    hass.config.latitude = 50.85
+    hass.config.longitude = 4.35
+    document = _root_locations_document() if valid else {"payload": "private-value"}
+    session = FakeSession([FakeResponse(document)])
+    provider = BelgiumChargingProvider(
+        BelgiumDatexClient(session, "private-token", NoWaitLimiter())
+    )
+    monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_HOME}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _station_options(PROVIDER_ECO_MOVEMENT_BE)
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: "private-token"}
+    )
+
+    if valid:
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert result["data"][CONF_PROVIDER] == PROVIDER_ECO_MOVEMENT_BE
+    else:
+        assert result["type"] is FlowResultType.FORM
+        assert result["errors"]["base"] == "invalid_response"
+        assert "locations validation failed" in caplog.text
+        assert "invalid payload" in caplog.text
+    assert "private-token" not in caplog.text
+    assert "private-value" not in caplog.text
 
 
 @pytest.mark.asyncio

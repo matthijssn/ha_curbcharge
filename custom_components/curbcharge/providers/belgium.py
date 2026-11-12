@@ -5,13 +5,16 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import math
+import re
 import time
+from collections import deque
 from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import TypedDict, cast
-from urllib.parse import quote
+from urllib.parse import quote, urljoin, urlsplit
 
 import aiohttp
 from homeassistant.core import HomeAssistant
@@ -49,12 +52,16 @@ from .base import (
 )
 
 _API_BASE_URL = "https://nap-be.eco-movement.com/datex2/v1"
+_LOCATIONS_URL = f"{_API_BASE_URL}/locations"
 _REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=20)
 _LOCATION_CACHE_SECONDS = 23 * 60 * 60
 _IP_REQUEST_INTERVAL = 10
-_LOCATION_REQUEST_INTERVAL = 120
+_LOCATION_REQUEST_WINDOW = 60 * 60
+_LOCATION_REQUEST_LIMIT = 30
+_MAX_LOCATION_PAGES = 100
 _EVSE_STATUS_INTERVAL = 30
 _REQUEST_LIMITER_DATA_KEY = "belgium_request_limiter"
+_LOGGER = logging.getLogger(__name__)
 
 
 def is_valid_belgium_api_token(token: object) -> bool:
@@ -72,6 +79,8 @@ class BelgiumDatexDocument(TypedDict, total=False):
 
     payload: dict[str, object]
     messageContainer: dict[str, object]
+    aegiEnergyInfrastructureTablePublication: dict[str, object]
+    aegiEnergyInfrastructureStatusPublication: dict[str, object]
 
 
 def _parse_datex_document(body: bytes) -> BelgiumDatexDocument:
@@ -99,14 +108,14 @@ class BelgiumRequestLimiter:
         self._lock = asyncio.Lock()
         self._last_request: float | None = None
         self._retry_after_until = 0.0
-        self._last_locations: dict[bytes, float] = {}
+        self._location_requests: dict[bytes, deque[float]] = {}
         self._last_evse_status: dict[tuple[bytes, str], float] = {}
 
     async def async_wait(self, token: str, evse_id: str | None = None) -> None:
         """Wait until this token, EVSE, and IP may safely make another request."""
         token_key = hashlib.sha256(token.encode("ascii")).digest()
-        async with self._lock:
-            while True:
+        while True:
+            async with self._lock:
                 now = time.monotonic()
                 allowed_at = max(now, self._retry_after_until)
                 if self._last_request is not None:
@@ -114,10 +123,12 @@ class BelgiumRequestLimiter:
                         allowed_at, self._last_request + _IP_REQUEST_INTERVAL
                     )
                 if evse_id is None:
-                    last_location = self._last_locations.get(token_key)
-                    if last_location is not None:
+                    locations = self._location_requests.setdefault(token_key, deque())
+                    while locations and locations[0] <= now - _LOCATION_REQUEST_WINDOW:
+                        locations.popleft()
+                    if len(locations) >= _LOCATION_REQUEST_LIMIT:
                         allowed_at = max(
-                            allowed_at, last_location + _LOCATION_REQUEST_INTERVAL
+                            allowed_at, locations[0] + _LOCATION_REQUEST_WINDOW
                         )
                 else:
                     last_status = self._last_evse_status.get((token_key, evse_id))
@@ -127,19 +138,14 @@ class BelgiumRequestLimiter:
                         )
 
                 delay = allowed_at - now
-                if delay > 0:
-                    await asyncio.sleep(delay)
-
-                if self._retry_after_until > time.monotonic():
-                    continue
-
-                requested_at = time.monotonic()
-                self._last_request = requested_at
-                if evse_id is None:
-                    self._last_locations[token_key] = requested_at
-                else:
-                    self._last_evse_status[(token_key, evse_id)] = requested_at
-                return
+                if delay <= 0:
+                    self._last_request = now
+                    if evse_id is None:
+                        locations.append(now)
+                    else:
+                        self._last_evse_status[(token_key, evse_id)] = now
+                    return
+            await asyncio.sleep(delay)
 
     def defer_requests(self, seconds: int | None) -> None:
         """Pause every client sharing this limiter for the provider's Retry-After."""
@@ -189,7 +195,35 @@ class BelgiumDatexClient:
         ):
             return self._locations
 
-        locations = await self._async_request_json("/locations")
+        tables: list[dict[str, object]] = []
+        seen_urls: set[str] = set()
+        url: str | None = _LOCATIONS_URL
+        loop = asyncio.get_running_loop()
+        try:
+            for _ in range(_MAX_LOCATION_PAGES):
+                assert url is not None
+                if url in seen_urls:
+                    raise InvalidProviderResponseError(
+                        "Belgium DATEX II returned a pagination loop"
+                    )
+                seen_urls.add(url)
+                page, url = await self._async_request_json(url)
+                tables.extend(await loop.run_in_executor(None, _static_tables, page))
+                if url is None:
+                    break
+            else:
+                raise InvalidProviderResponseError(
+                    "Belgium DATEX II exceeded the locations page bound"
+                )
+            locations = BelgiumDatexDocument(
+                aegiEnergyInfrastructureTablePublication={
+                    "energyInfrastructureTable": tables
+                }
+            )
+            await loop.run_in_executor(None, _parse_static_stations, locations, 0, 0)
+        except InvalidProviderResponseError as err:
+            _LOGGER.warning("Belgium DATEX II locations validation failed: %s", err)
+            raise
         self._locations = locations
         self._locations_cached_at = time.monotonic()
         return locations
@@ -198,21 +232,23 @@ class BelgiumDatexClient:
         """Fetch current status and ad-hoc price for one EVSE."""
         if not evse_id:
             raise InvalidProviderResponseError("Belgium returned an empty EVSE id")
-        return await self._async_request_json(
-            f"/status/{quote(evse_id, safe='')}",
+        document, _ = await self._async_request_json(
+            f"{_API_BASE_URL}/status/{quote(evse_id, safe='')}",
             evse_id=evse_id,
         )
+        return document
 
     async def _async_request_json(
-        self, path: str, *, evse_id: str | None = None
-    ) -> BelgiumDatexDocument:
+        self, url: str, *, evse_id: str | None = None
+    ) -> tuple[BelgiumDatexDocument, str | None]:
         """Request one documented endpoint without exposing credentials in errors."""
         await self._request_limiter.async_wait(self._token, evse_id)
         try:
             async with self._session.get(
-                f"{_API_BASE_URL}{path}",
+                url,
                 headers={"Authorization": f"Bearer {self._token}"},
                 timeout=_REQUEST_TIMEOUT,
+                allow_redirects=False,
             ) as response:
                 if response.status in (401, 403):
                     raise AuthenticationError(
@@ -229,9 +265,14 @@ class BelgiumDatexClient:
                     )
                 if not 200 <= response.status < 300:
                     raise ProviderConnectionError(
-                        "Eco-Movement returned an unsuccessful Belgium API response"
+                        f"Eco-Movement returned Belgium API HTTP {response.status}"
                     )
                 body = await response.read()
+                next_url = (
+                    _next_locations_url(response.headers.get("Link"), url)
+                    if evse_id is None
+                    else None
+                )
         except (
             AuthenticationError,
             ProviderConnectionError,
@@ -243,9 +284,10 @@ class BelgiumDatexClient:
                 "Could not connect to the Belgium charging-data provider"
             ) from None
 
-        return await asyncio.get_running_loop().run_in_executor(
+        document = await asyncio.get_running_loop().run_in_executor(
             None, _parse_datex_document, body
         )
+        return document, next_url
 
 
 class BelgiumChargingProvider(BaseChargingProvider):
@@ -318,7 +360,13 @@ class BelgiumChargingProvider(BaseChargingProvider):
                     updated.append(station)
                     continue
                 document = await self._client.async_get_evse_status(station.evse_id)
-                status_record = _evse_status_record(document, station.provider_id)
+                try:
+                    status_record = _evse_status_record(document, station.provider_id)
+                except InvalidProviderResponseError as err:
+                    _LOGGER.warning(
+                        "Belgium DATEX II status validation failed: %s", err
+                    )
+                    raise
                 if status_record is None:
                     updated.append(station)
                     continue
@@ -398,16 +446,8 @@ def create_belgium_provider(
 def _parse_static_stations(
     document: BelgiumDatexDocument, latitude: float, longitude: float
 ) -> list[ChargingStation]:
-    payload = _datex_object(document.get("payload"), "payload")
-    publication = _datex_object(
-        payload.get("aegiEnergyInfrastructureTablePublication"),
-        "energy-infrastructure publication",
-    )
-    tables = _datex_list(
-        publication.get("energyInfrastructureTable"), "energy-infrastructure table"
-    )
     stations: list[ChargingStation] = []
-    for table_value in tables:
+    for table_value in _static_tables(document):
         table = _datex_object(table_value, "energy-infrastructure table")
         sites = _datex_list(
             table.get("energyInfrastructureSite"), "energy-infrastructure sites"
@@ -467,11 +507,90 @@ def _parse_static_stations(
                             country_code=location.country_code,
                             location=location,
                             provider_name=PROVIDER_ECO_MOVEMENT_BE_NAME,
-                            evse_id=external_evse_id,
+                            evse_id=(
+                                evse_id if "entrance" in site else external_evse_id
+                            ),
                             connector_count_reported=connector_count_reported,
                         )
                     )
-    return stations
+    unique_stations: dict[str, ChargingStation] = {}
+    for parsed_station in stations:
+        previous = unique_stations.get(parsed_station.provider_id)
+        if previous is not None and previous != parsed_station:
+            raise InvalidProviderResponseError(
+                "Belgium DATEX II returned conflicting duplicate EVSEs"
+            )
+        unique_stations[parsed_station.provider_id] = parsed_station
+    return list(unique_stations.values())
+
+
+def _datex_publications(
+    document: BelgiumDatexDocument, name: str
+) -> list[dict[str, object]]:
+    root = _datex_object(document, "document")
+    if name in root:
+        return [_datex_object(root[name], "publication")]
+    if "messageContainer" in document:
+        container = _datex_object(document["messageContainer"], "message container")
+        payloads = _datex_list(
+            container.get("payload"), "publication payloads", optional=True
+        )
+    else:
+        payloads = [_datex_object(document.get("payload"), "payload")]
+    return [
+        _datex_object(payload[name], "publication")
+        for value in payloads
+        if name in (payload := _datex_object(value, "publication payload"))
+    ]
+
+
+def _static_tables(document: BelgiumDatexDocument) -> list[dict[str, object]]:
+    publications = _datex_publications(
+        document, "aegiEnergyInfrastructureTablePublication"
+    )
+    if not publications:
+        raise InvalidProviderResponseError(
+            "Belgium DATEX II returned no infrastructure publication"
+        )
+    return [
+        _datex_object(table, "energy-infrastructure table")
+        for publication in publications
+        for table in _datex_list(
+            publication.get("energyInfrastructureTable"), "energy-infrastructure table"
+        )
+    ]
+
+
+def _next_locations_url(link_header: str | None, current_url: str) -> str | None:
+    if not link_header:
+        return None
+    for match in re.finditer(r"<([^>]+)>\s*;([^,]+)", link_header):
+        if not re.search(r'\brel="?next"?(?:\s|;|$)', match.group(2), re.IGNORECASE):
+            continue
+        try:
+            candidate = urljoin(current_url, match.group(1))
+            parsed = urlsplit(candidate)
+            valid = (
+                parsed.scheme == "https"
+                and parsed.hostname == urlsplit(_LOCATIONS_URL).hostname
+                and parsed.port in (None, 443)
+                and parsed.path == urlsplit(_LOCATIONS_URL).path
+                and parsed.username is None
+                and parsed.password is None
+                and not parsed.fragment
+            )
+        except ValueError:
+            valid = False
+        if not valid:
+            raise InvalidProviderResponseError(
+                "Belgium DATEX II returned an invalid pagination link"
+            )
+        return str(candidate)
+    if re.search(r'\brel="?next"?', link_header, re.IGNORECASE):
+        raise InvalidProviderResponseError(
+            "Belgium DATEX II returned a malformed pagination link"
+        )
+    return None
 
 
 def _select_static_stations(
@@ -513,14 +632,14 @@ def _select_static_stations(
 def _charging_location(site: dict[str, object]) -> ChargingLocation:
     site_id = _required_datex_string(site.get("idG"), "site id")
     coordinates = _location_coordinates(
-        site.get("locationReference"), "site coordinates"
+        _site_location_reference(site), "site coordinates"
     )
     if coordinates is None:
         raise InvalidProviderResponseError(
             "Belgium DATEX II returned a site without coordinates"
         )
     country_code, address = _site_address(site)
-    operator = _operator_name(site.get("operator"))
+    operator = _operator_name(site.get("operator") or site.get("energyDistributor"))
     return ChargingLocation(
         provider_id=site_id,
         provider=PROVIDER_ECO_MOVEMENT_BE,
@@ -535,10 +654,19 @@ def _charging_location(site: dict[str, object]) -> ChargingLocation:
     )
 
 
+def _site_location_reference(site: dict[str, object]) -> dict[str, object]:
+    reference = site.get("locationReference")
+    if reference is not None:
+        return _datex_object(reference, "site location reference")
+    for entrance in _datex_list(site.get("entrance"), "site entrances", optional=True):
+        reference = _datex_object(entrance, "site entrance")
+        if _location_coordinates(reference, "site entrance") is not None:
+            return reference
+    return {}
+
+
 def _site_address(site: dict[str, object]) -> tuple[str, str | None]:
-    location_reference = _datex_object(
-        site.get("locationReference"), "site location reference"
-    )
+    location_reference = _site_location_reference(site)
     area_value = location_reference.get("locAreaLocation")
     if not isinstance(area_value, dict):
         return COUNTRY_BE, None
@@ -605,9 +733,26 @@ def _operator_name(value: object) -> str | None:
 
 
 def _external_evse_id(evse: dict[str, object]) -> str | None:
+    identifiers = _identifier_values(evse)
+    if identifiers:
+        return identifiers[0]
+    connector_ids = {
+        identifier
+        for connector in _datex_list(evse.get("connector"), "connectors", optional=True)
+        for identifier in _identifier_values(_datex_object(connector, "connector"))
+    }
+    if len(connector_ids) > 1:
+        raise InvalidProviderResponseError(
+            "Belgium DATEX II returned conflicting connector EVSE identifiers"
+        )
+    return next(iter(connector_ids), None)
+
+
+def _identifier_values(record: dict[str, object]) -> list[str]:
     identifiers = _datex_list(
-        evse.get("externalIdentifier"), "EVSE external identifiers", optional=True
+        record.get("externalIdentifier"), "EVSE external identifiers", optional=True
     )
+    values: list[str] = []
     for identifier_value in identifiers:
         identifier = _datex_object(identifier_value, "EVSE external identifier")
         identifier_type_value = identifier.get("typeOfIdentifier")
@@ -619,8 +764,8 @@ def _external_evse_id(evse: dict[str, object]) -> str | None:
         if identifier_type.get("extendedValueG") == "evseId":
             value = identifier.get("identifier")
             if isinstance(value, str) and value:
-                return value
-    return None
+                values.append(value)
+    return values
 
 
 def _connector_groups(
@@ -708,6 +853,7 @@ def _belgium_connector_type_id(
         return None
     return {
         "iec62196t2": ConnectorTypeId.TYPE_2,
+        "iec62196t2combo": ConnectorTypeId.CCS_COMBO_2,
         "chademo": ConnectorTypeId.CHADEMO,
     }.get(connector_type.casefold())
 
@@ -715,18 +861,9 @@ def _belgium_connector_type_id(
 def _evse_status_record(
     document: BelgiumDatexDocument, evse_id: str
 ) -> dict[str, object] | None:
-    message_container = _datex_object(
-        document.get("messageContainer"), "status message container"
-    )
-    payloads = _datex_list(
-        message_container.get("payload"), "status payloads", optional=True
-    )
-    for payload_value in payloads:
-        payload = _datex_object(payload_value, "status payload")
-        publication_value = payload.get("aegiEnergyInfrastructureStatusPublication")
-        if not isinstance(publication_value, dict):
-            continue
-        publication = _datex_object(publication_value, "status publication")
+    for publication in _datex_publications(
+        document, "aegiEnergyInfrastructureStatusPublication"
+    ):
         sites = _datex_list(
             publication.get("energyInfrastructureSiteStatus"),
             "site status records",
@@ -808,6 +945,8 @@ def _ad_hoc_tariff(
                 continue
             if price.get("overallPeriod") is not None:
                 continue
+            if price.get("taxIncluded") is False:
+                continue
             rates.add(
                 (
                     currency.upper(),
@@ -865,6 +1004,8 @@ def _static_ad_hoc_tariff(
                 ).casefold() != "priceperkwh":
                     continue
                 if price.get("overallPeriod") is not None:
+                    continue
+                if price.get("taxIncluded") is False:
                     continue
                 rates.add(
                     (

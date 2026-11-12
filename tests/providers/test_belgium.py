@@ -74,7 +74,9 @@ class FakeSession:
         *,
         headers: dict[str, str],
         timeout: object,
+        allow_redirects: bool = True,
     ) -> FakeResponse:
+        assert not allow_redirects
         self.requests.append((url, headers))
         response = self.responses.pop(0)
         if isinstance(response, Exception):
@@ -141,6 +143,40 @@ def _locations_document_with_evse_count(evse_count: int) -> dict[str, Any]:
     return document
 
 
+def _root_locations_document() -> dict[str, Any]:
+    return json.loads(
+        (
+            Path(__file__).parent.parent
+            / "fixtures"
+            / "belgium_locations_root_example.json"
+        ).read_text(encoding="utf-8")
+    )
+
+
+@pytest.mark.asyncio
+async def test_root_locations_validate_and_map_entrance_and_connector_identity():
+    document = _root_locations_document()
+    session = FakeSession([FakeResponse(document)])
+    provider = BelgiumChargingProvider(
+        BelgiumDatexClient(session, "test-token", NoWaitLimiter())
+    )
+
+    await provider.async_validate_connection(50.85, 4.35, 1000)
+    station = belgium._parse_static_stations(document, 50.85, 4.35)[0]
+
+    assert station.provider_id == "BE-EXAMPLE-1"
+    assert station.evse_id == "BE-EXAMPLE-1"
+    assert station.name == "BE*EXAMPLE*1"
+    assert (station.latitude, station.longitude) == (50.85, 4.35)
+    assert station.address == "Example Street 1, 1000 Example City"
+    assert station.operator == "Example Organisation"
+    assert station.location is not None
+    assert station.location.provider_id == "example-site"
+    assert station.connectors[0].connector_type_id is ConnectorTypeId.CCS_COMBO_2
+    assert station.connectors[0].max_power_kw == 50
+    assert station.tariff is None
+
+
 def _status_document(
     status: str = "available",
     *,
@@ -182,14 +218,17 @@ async def test_locations_are_authorized_cached_and_parsed_in_executor(monkeypatc
         return parse_document(body)
 
     monkeypatch.setattr(belgium, "_parse_datex_document", record_parser_thread)
-    session = FakeSession([FakeResponse({"payload": {"sites": []}})])
+    session = FakeSession([FakeResponse(_locations_document())])
     client = _client(session)
 
     locations = await client.async_get_locations()
     cached = await client.async_get_locations()
 
     assert cached is locations
-    assert locations == {"payload": {"sites": []}}
+    assert (
+        locations["aegiEnergyInfrastructureTablePublication"]
+        == _locations_document()["payload"]["aegiEnergyInfrastructureTablePublication"]
+    )
     assert parser_threads and parser_threads[0] != threading.get_ident()
     assert len(session.requests) == 1
     url, headers = session.requests[0]
@@ -720,8 +759,8 @@ async def test_request_limiter_enforces_ip_location_and_per_evse_limits(monkeypa
 
     await limiter.async_wait("token")
     await limiter.async_wait("token")
-    assert current_time[0] == 170
-    assert waits == [30, 10, 10, 120]
+    assert current_time[0] == 60
+    assert waits == [30, 10, 10, 10]
 
 
 @pytest.mark.asyncio
@@ -824,7 +863,7 @@ async def test_belgium_provider_factory_shares_rate_limits_between_entries(
     for provider in providers:
         await provider.async_validate_connection(50.85, 4.35, 1000)
 
-    assert waits == [120, 10]
+    assert waits == [10, 10]
 
 
 @pytest.mark.asyncio
@@ -1263,3 +1302,368 @@ async def test_belgium_price_and_optional_field_helpers_preserve_unknowns():
 
     with pytest.raises(InvalidProviderResponseError):
         await _client(FakeSession([])).async_get_evse_status("")
+
+
+@pytest.mark.asyncio
+async def test_paginated_root_locations_include_later_nearby_and_favorite_stations():
+    first = _root_locations_document()
+    site = first["aegiEnergyInfrastructureTablePublication"][
+        "energyInfrastructureTable"
+    ][0]["energyInfrastructureSite"][0]
+    site["entrance"][0]["locAreaLocation"]["coordinatesForDisplay"]["latitude"] = 51.0
+    second = _root_locations_document()
+    site = second["aegiEnergyInfrastructureTablePublication"][
+        "energyInfrastructureTable"
+    ][0]["energyInfrastructureSite"][0]
+    site["idG"] = "second-site"
+    site["energyInfrastructureStation"][0]["refillPoint"][0][
+        "aegiElectricChargingPoint"
+    ]["idG"] = "BE-EXAMPLE-2"
+    first["aegiEnergyInfrastructureStatusPublication"] = {"unused": True}
+    statuses = [
+        _status_document(evse_id=evse_id)["messageContainer"]["payload"][0]
+        for evse_id in ("BE-EXAMPLE-2", "BE-EXAMPLE-1")
+    ]
+    session = FakeSession(
+        [
+            FakeResponse(
+                first, headers={"Link": '<?offset=1000&limit=1000>; rel="next"'}
+            ),
+            FakeResponse(second),
+            *(FakeResponse(status) for status in statuses),
+        ]
+    )
+    client = BelgiumDatexClient(session, "test-token", NoWaitLimiter())
+    provider = BelgiumChargingProvider(client)
+
+    await provider.async_validate_connection(50.85, 4.35, 1000)
+    cached = await client.async_get_locations()
+    assert "aegiEnergyInfrastructureStatusPublication" not in cached
+    assert len(session.requests) == 2
+    result = await provider.async_get_stations(
+        50.85,
+        4.35,
+        1000,
+        1,
+        (
+            FavouriteStationReference(
+                provider=PROVIDER_ECO_MOVEMENT_BE,
+                provider_id="BE-EXAMPLE-1",
+                name="Example favourite",
+                latitude=51.0,
+                longitude=4.35,
+            ),
+        ),
+    )
+
+    assert [station.provider_id for station in result.nearby] == ["BE-EXAMPLE-2"]
+    assert [station.provider_id for station in result.favourites] == ["BE-EXAMPLE-1"]
+    assert result.nearby[0].evse_status is EVSEStatus.AVAILABLE
+    assert session.requests[1][0] == f"{belgium._LOCATIONS_URL}?offset=1000&limit=1000"
+    assert session.requests[2][0].endswith("/status/BE-EXAMPLE-2")
+    assert session.requests[3][0].endswith("/status/BE-EXAMPLE-1")
+
+
+@pytest.mark.asyncio
+async def test_empty_locations_page_with_next_link_does_not_end_discovery():
+    empty = {
+        "aegiEnergyInfrastructureTablePublication": {"energyInfrastructureTable": []}
+    }
+    session = FakeSession(
+        [
+            FakeResponse(empty, headers={"Link": "<?offset=1000>; rel=next"}),
+            FakeResponse(_root_locations_document()),
+        ]
+    )
+    client = BelgiumDatexClient(session, "test-token", NoWaitLimiter())
+
+    stations = belgium._parse_static_stations(
+        await client.async_get_locations(), 50.85, 4.35
+    )
+
+    assert len(stations) == 1
+    assert len(session.requests) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "link",
+    [
+        '<https://other.example/locations?offset=1000>; rel="next"',
+        '<http://nap-be.eco-movement.com/datex2/v1/locations>; rel="next"',
+        '<https://nap-be.eco-movement.com:444/datex2/v1/locations>; rel="next"',
+        '<https://nap-be.eco-movement.com:bad/datex2/v1/locations>; rel="next"',
+        '<https://[invalid/datex2/v1/locations>; rel="next"',
+        '<https://user@nap-be.eco-movement.com/datex2/v1/locations>; rel="next"',
+        '<https://nap-be.eco-movement.com/datex2/v1/locations#fragment>; rel="next"',
+        '<https://nap-be.eco-movement.com/another-path>; rel="next"',
+        'not-a-link; rel="next"',
+    ],
+)
+async def test_locations_reject_unsafe_links_before_sending_credentials(link, caplog):
+    session = FakeSession(
+        [FakeResponse(_root_locations_document(), headers={"Link": link})]
+    )
+    client = BelgiumDatexClient(session, "super-secret-token", NoWaitLimiter())
+
+    with pytest.raises(InvalidProviderResponseError, match="pagination link"):
+        await client.async_get_locations()
+
+    assert len(session.requests) == 1
+    assert client._locations is None
+    assert client._locations_cached_at is None
+    assert "super-secret-token" not in caplog.text
+    assert link not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_locations_stop_pagination_loops_and_page_bound(monkeypatch):
+    for next_url, page_bound in (
+        (belgium._LOCATIONS_URL, 100),
+        (f"{belgium._LOCATIONS_URL}?offset=1000", 1),
+    ):
+        monkeypatch.setattr(belgium, "_MAX_LOCATION_PAGES", page_bound)
+        session = FakeSession(
+            [
+                FakeResponse(
+                    _root_locations_document(),
+                    headers={"Link": f'<{next_url}>; rel="next"'},
+                )
+            ]
+        )
+        client = BelgiumDatexClient(session, "test-token", NoWaitLimiter())
+        with pytest.raises(InvalidProviderResponseError):
+            await client.async_get_locations()
+        assert len(session.requests) == 1
+        assert client._locations is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("second", "error"),
+    [
+        (FakeResponse({}, status=503), ProviderConnectionError),
+        (FakeResponse({}, status=302), ProviderConnectionError),
+        (FakeResponse({"payload": {}}), InvalidProviderResponseError),
+        (FakeResponse({"messageContainer": {}}), InvalidProviderResponseError),
+        (
+            FakeResponse({"aegiEnergyInfrastructureTablePublication": []}),
+            InvalidProviderResponseError,
+        ),
+    ],
+)
+async def test_failed_later_page_does_not_replace_a_complete_cache(
+    monkeypatch, second, error
+):
+    session = FakeSession(
+        [
+            FakeResponse(_root_locations_document()),
+            FakeResponse(
+                _root_locations_document(),
+                headers={"Link": '<?offset=1000>; rel="next"'},
+            ),
+            second,
+        ]
+    )
+    client = BelgiumDatexClient(session, "test-token", NoWaitLimiter())
+    previous = await client.async_get_locations()
+    timestamp = client._locations_cached_at
+    monkeypatch.setattr(belgium, "_LOCATION_CACHE_SECONDS", 0)
+
+    with pytest.raises(error):
+        await client.async_get_locations()
+
+    assert client._locations is previous
+    assert client._locations_cached_at == timestamp
+
+
+@pytest.mark.asyncio
+async def test_locations_do_not_follow_redirects():
+    session = FakeSession(
+        [FakeResponse({}, status=302, headers={"Location": "https://other.example"})]
+    )
+    client = BelgiumDatexClient(session, "test-token", NoWaitLimiter())
+
+    with pytest.raises(ProviderConnectionError, match="HTTP 302"):
+        await client.async_get_locations()
+
+    assert len(session.requests) == 1
+    assert client._locations is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("conflicting", [False, True])
+async def test_duplicate_evse_pages_are_deduplicated_or_rejected(conflicting):
+    second = _root_locations_document()
+    if conflicting:
+        second["aegiEnergyInfrastructureTablePublication"]["energyInfrastructureTable"][
+            0
+        ]["energyInfrastructureSite"][0]["energyDistributor"] = {
+            "name": "Different Organisation"
+        }
+    session = FakeSession(
+        [
+            FakeResponse(
+                _root_locations_document(),
+                headers={"Link": '<?offset=1000>; rel="next"'},
+            ),
+            FakeResponse(second, headers={"Link": '<?offset=0>; rel="prev"'}),
+        ]
+    )
+    client = BelgiumDatexClient(session, "test-token", NoWaitLimiter())
+    if conflicting:
+        with pytest.raises(InvalidProviderResponseError, match="duplicate EVSEs"):
+            await client.async_get_locations()
+        assert client._locations is None
+    else:
+        assert (
+            len(
+                belgium._parse_static_stations(
+                    await client.async_get_locations(), 50.85, 4.35
+                )
+            )
+            == 1
+        )
+
+
+def test_root_entrances_and_connector_identity_remain_strict():
+    document = _root_locations_document()
+    site = document["aegiEnergyInfrastructureTablePublication"][
+        "energyInfrastructureTable"
+    ][0]["energyInfrastructureSite"][0]
+    site["entrance"].insert(0, {"locAreaLocation": {}})
+    assert belgium._parse_static_stations(document, 50.85, 4.35)[0].latitude == 50.85
+    evse = site["energyInfrastructureStation"][0]["refillPoint"][0][
+        "aegiElectricChargingPoint"
+    ]
+    other_connector = copy.deepcopy(evse["connector"][0])
+    other_connector["externalIdentifier"][0]["identifier"] = "BE*EXAMPLE*OTHER"
+    evse["connector"].append(other_connector)
+    evse["numberOfConnectors"] = 2
+    with pytest.raises(InvalidProviderResponseError, match="conflicting connector"):
+        belgium._parse_static_stations(document, 50.85, 4.35)
+    site["entrance"] = []
+    with pytest.raises(InvalidProviderResponseError, match="without coordinates"):
+        belgium._parse_static_stations(document, 50.85, 4.35)
+
+
+@pytest.mark.asyncio
+async def test_root_status_rejects_bad_publications_and_preserves_untaxed_unknowns(
+    caplog,
+):
+    malformed = {"aegiEnergyInfrastructureStatusPublication": []}
+    provider = BelgiumChargingProvider(
+        BelgiumDatexClient(
+            FakeSession(
+                [FakeResponse(_root_locations_document()), FakeResponse(malformed)]
+            ),
+            "secret-token",
+            NoWaitLimiter(),
+        )
+    )
+    with pytest.raises(InvalidProviderResponseError):
+        await provider.async_get_stations(50.85, 4.35, 1000, 1)
+    assert "status validation failed" in caplog.text
+    assert "secret-token" not in caplog.text
+
+    status = _status_document()["messageContainer"]["payload"][0]
+    record = belgium._evse_status_record(status, "evse-internal-1")
+    assert record is not None
+    record["energyRateUpdate"][0]["energyPrice"][0]["taxIncluded"] = False
+    assert belgium._ad_hoc_tariff(record, "Example") is None
+
+
+@pytest.mark.asyncio
+async def test_location_quota_is_rolling_per_token_and_retains_ip_spacing(monkeypatch):
+    current_time = [0.0]
+    requested_at: list[float] = []
+
+    async def sleep(delay: float) -> None:
+        current_time[0] += delay
+
+    monkeypatch.setattr(belgium.time, "monotonic", lambda: current_time[0])
+    monkeypatch.setattr(belgium.asyncio, "sleep", sleep)
+    limiter = BelgiumRequestLimiter()
+    for _ in range(30):
+        await limiter.async_wait("first-token")
+        requested_at.append(current_time[0])
+
+    assert requested_at == list(range(0, 300, 10))
+    await limiter.async_wait("second-token")
+    assert current_time[0] == 300
+    await limiter.async_wait("first-token")
+    assert current_time[0] == 3600
+    await limiter.async_wait("first-token")
+    assert current_time[0] == 3610
+
+
+@pytest.mark.asyncio
+async def test_invalid_location_json_logs_a_safe_reason_without_body_or_token(caplog):
+    client = BelgiumDatexClient(
+        FakeSession(
+            [FakeResponse(b"<html>private provider response</html>", raw=True)]
+        ),
+        "secret-token",
+        NoWaitLimiter(),
+    )
+
+    with pytest.raises(InvalidProviderResponseError):
+        await client.async_get_locations()
+
+    assert "locations validation failed" in caplog.text
+    assert "invalid Belgium DATEX II JSON" in caplog.text
+    assert "private provider response" not in caplog.text
+    assert "secret-token" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_exhausted_location_quota_does_not_block_another_token(monkeypatch):
+    current_time = [0.0]
+    quota_waiting = asyncio.Event()
+    resume = asyncio.Event()
+    yield_control = asyncio.sleep
+
+    async def sleep(delay: float) -> None:
+        if delay > 1000:
+            quota_waiting.set()
+            await resume.wait()
+        current_time[0] += delay
+
+    monkeypatch.setattr(belgium.time, "monotonic", lambda: current_time[0])
+    monkeypatch.setattr(belgium.asyncio, "sleep", sleep)
+    limiter = BelgiumRequestLimiter()
+    for _ in range(30):
+        await limiter.async_wait("first-token")
+    waiting = asyncio.create_task(limiter.async_wait("first-token"))
+    await quota_waiting.wait()
+    other = asyncio.create_task(limiter.async_wait("second-token"))
+    await yield_control(0)
+    assert other.done()
+    assert current_time[0] == 300
+    resume.set()
+    await waiting
+    await other
+
+
+def test_static_tax_exclusive_price_is_not_published_as_a_driver_price():
+    evse = {
+        "electricEnergy": [
+            {
+                "energyRate": [
+                    {
+                        "ratePolicy": "adHoc",
+                        "applicableCurrency": ["EUR"],
+                        "energyPrice": [
+                            {
+                                "priceType": "pricePerKWh",
+                                "value": 0.4,
+                                "taxIncluded": False,
+                                "taxRate": 21,
+                            }
+                        ],
+                    }
+                ]
+            }
+        ]
+    }
+    assert belgium._static_ad_hoc_tariff(evse, "Example") is None
