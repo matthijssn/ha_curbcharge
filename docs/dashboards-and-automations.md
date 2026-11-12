@@ -130,6 +130,39 @@ hide_fields:
   - available_connectors
 ```
 
+EV charging estimates are optional and hidden by default. To enable them on a
+single-station Status Summary or recommendation card, select separate sensors
+for battery state of charge and usable capacity. Values must be in `%` and
+`kWh`; sensor states must report those units. An optional attribute name reads
+a numeric attribute instead of the sensor state, interpreted in the same
+documented unit without conversion. Set a target percentage (100 by default).
+For duration, select an EV charging-power sensor in `kW` or, if none is
+available, enter an assumed power. A configured but unavailable/invalid power
+sensor does not fall back to the assumed value.
+
+```yaml
+type: custom:curbcharge-card
+entity: sensor.your_best_nearby_charger
+enable_ev_estimates: true
+ev_soc_entity: sensor.ev_battery_level
+ev_capacity_entity: sensor.ev_usable_battery_capacity
+ev_target_soc: 80
+ev_power_entity: sensor.ev_charging_power
+```
+
+For integrations that expose the values as attributes, use keys such as
+`ev_soc_attribute: battery_level`. To use a manual power assumption instead,
+omit `ev_power_entity` and set `ev_assumed_power_kw: 7.2`.
+
+The card shows estimates only when their required inputs are valid and current.
+Cost requires an available, unambiguous tariff with a per-kWh rate and known
+session-fee status; non-zero per-minute charges and incomplete tariffs suppress
+the cost estimate. Duration is battery energy divided by the selected or
+assumed charging power. Estimates exclude battery charging losses, charging
+curve/power variation, and tariff components not represented by provider data;
+they are not predictions of an actual charging session. Top nearby lists do
+not show per-station EV estimates.
+
 With only `entity` set, all metric groups are shown by default.
 `show_price` controls price; `show_connector_details` controls occupied,
 unavailable, and total counts; `show_station_details` controls address, maximum
