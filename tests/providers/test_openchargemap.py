@@ -20,6 +20,7 @@ from custom_components.curbcharge.models import (
     ProviderTimestampSource,
     TariffStatus,
 )
+from custom_components.curbcharge.providers import create_provider
 from custom_components.curbcharge.providers import openchargemap as ocm
 from custom_components.curbcharge.providers.base import (
     AuthenticationError,
@@ -28,6 +29,16 @@ from custom_components.curbcharge.providers.base import (
     ProviderRateLimitError,
     UnsupportedLocationError,
 )
+
+
+def test_factory_requires_key_and_constructs_global_provider():
+    with pytest.raises(AuthenticationError, match="Open Charge Map"):
+        create_provider(PROVIDER_OPEN_CHARGE_MAP, Session([]))
+    provider = create_provider(
+        PROVIDER_OPEN_CHARGE_MAP, Session([]), token="synthetic-key"
+    )
+    assert provider.provider_id == PROVIDER_OPEN_CHARGE_MAP
+    assert provider.country_code is None
 
 
 def record(station_id: int = 123, latitude: float = 51.0) -> dict[str, Any]:

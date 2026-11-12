@@ -85,6 +85,11 @@ def _sample_payload() -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def test_factory_requires_afdc_api_key():
+    with pytest.raises(AuthenticationError, match="AFDC"):
+        create_provider(PROVIDER_AFDC_US, FakeSession([]))
+
+
 def _sample_record() -> dict[str, Any]:
     return _sample_payload()["fuel_stations"][0]
 
