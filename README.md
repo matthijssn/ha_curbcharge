@@ -5,12 +5,10 @@
 [![License](https://img.shields.io/github/license/matthijssn/ha_curbcharge)](LICENSE)
 [![Tests](https://img.shields.io/github/actions/workflow/status/matthijssn/ha_curbcharge/tests.yml?branch=main&label=tests)](https://github.com/matthijssn/ha_curbcharge/actions/workflows/tests.yml)
 
-Stop guessing which nearby charger is actually free. CurbCharge finds public
-EV charging points near your Home Assistant home, a manually set location, or
-a tracked location entity. See provider-reported availability, connector
-counts, power, distance and unambiguous tariff data, plus a recommendation for
-the best nearby station. Favorites can be monitored with sensors and managed
-with admin-only actions.
+Know which nearby charger is worth the stop. CurbCharge brings public EV
+charging into Home Assistant so you can check reported availability, compare
+known prices and charging power, and find a station that fits your priorities
+before you head out.
 
 <p align="center">
   <img src="docs/images/curbcharge-home-assistant-banner.png" alt="CurbCharge banner showing Home Assistant with a charger map and nearby recommendations" width="720">
@@ -18,50 +16,44 @@ with admin-only actions.
 
 ![CurbCharge dashboard showing nearby charger availability and price](docs/images/curbcharge-dashboard-screenshot.png)
 
-## Installation
+## Find the right charger
 
-### HACS
+- **Check before you go:** See reported availability, connector counts,
+  charging power, distance, and operator for nearby public chargers.
+- **Compare your options:** Find the nearest, cheapest, fastest, or best nearby
+  charger. Prices are shown when tariff data is complete and unambiguous;
+  unknown prices are not treated as free.
+- **Make it personal:** Prefer compatible connectors, power, operators, and
+  price. CurbCharge explains when a recommendation uses a fallback.
+- **Keep favorites in view:** Monitor saved stations and build automations
+  around availability or price changes.
+- **Estimate your charge:** Optionally show estimated cost and time to a target
+  battery level in the bundled card, using your EV battery sensors. Estimates
+  are hidden by default and depend on the vehicle and tariff data you provide.
+- **Choose your dashboard:** Use Home Assistant's built-in cards or the
+  bundled CurbCharge card, with copyable dashboard and automation examples.
+
+## Supported regions
+
+Netherlands, Norway, Sweden, United States, Finland, Luxembourg, and
+Lithuania. Belgium and Switzerland are marked as previews. Coverage and data
+quality vary by provider; see the
+[provider coverage and limitations](docs/usage.md#data-source-and-coverage).
+
+## Get started
+
+Install from the HACS default store:
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=matthijssn&repository=ha_curbcharge&category=integration)
 
-CurbCharge is in the HACS default store: open **HACS → Integrations**,
-search for **CurbCharge**, and install it — or use the badge above to jump
-straight there.
+In Home Assistant, go to **HACS → Integrations**, find **CurbCharge**, and
+install it. Restart Home Assistant, then add CurbCharge from
+**Settings → Devices & services → Add integration**. Use a Home Assistant
+release that meets the minimum listed in [`hacs.json`](hacs.json).
 
-Restart Home Assistant, then add CurbCharge from **Settings → Devices &
-services → Add integration**.
-
-Use a Home Assistant release that meets the minimum listed in
-[`hacs.json`](hacs.json).
-
-### Manual
-
-Copy `custom_components/curbcharge` into the Home Assistant configuration
-directory at `custom_components/curbcharge`, then restart Home Assistant.
-
-## Coverage
-
-Provider availability depends on your installed release. Check the
-[release notes](https://github.com/matthijssn/ha_curbcharge/releases) before
-relying on a provider.
-
-## What it provides
-
-- Public charging coverage for the Netherlands, Belgium (preview), Norway,
-  Sweden, the United States, Finland, Switzerland (preview), Luxembourg
-  (Chargy network), and Lithuania — see
-  [provider coverage and limitations](docs/usage.md#data-source-and-coverage)
-  for data sources and preview status.
-- One device per nearby public charging point, with site summaries when
-  providers report a distinct location ID
-- Provider-reported availability, connector counts, power, distance and operator
-- Tariff information when the provider data is complete and unambiguous
-- Recorder-facing availability and gross-price statistics, plus bounded
-  Operator Insights summaries; see the [entity guide](docs/usage.md#entities)
-- A best-nearby recommendation and favorite monitoring
-- Optional connector, price, and operator personalization with match and
-  fallback explanations
-- A bundled dashboard card, plus copyable dashboard and automation examples
+Prefer a manual install? Copy `custom_components/curbcharge` into your Home
+Assistant configuration directory, restart Home Assistant, and add the
+integration.
 
 ## Versioning and compatibility
 
@@ -73,12 +65,11 @@ documented upgrade steps. See the [1.x compatibility contract](docs/development.
 ## Documentation
 
 - [User guide: coverage, setup, entities, updates, and privacy](docs/usage.md)
-- [Dashboards, cards, and automations](docs/dashboards-and-automations.md)
+- [Dashboards, the card, and automations](docs/dashboards-and-automations.md)
 - [Development and releases](docs/development.md)
 - [Accessibility statement](.github/ACCESSIBILITY.md)
 - [Contributing](.github/CONTRIBUTING.md) | [Code of Conduct](.github/CODE_OF_CONDUCT.md) | [Security policy](.github/SECURITY.md)
 - [Copyable YAML examples](examples/)
-- [Favorite services and automation guide](docs/dashboards-and-automations.md#favorite-services-and-automations)
 
 ## Community
 
