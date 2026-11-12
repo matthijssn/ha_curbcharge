@@ -60,6 +60,28 @@ def _expected_station_id_hash(entry_id: str, provider: str, station_id: str) -> 
     ]
 
 
+async def test_global_provider_diagnostics_redact_key(hass, sample_stations):
+    station = replace(sample_stations[0], provider="open_charge_map", country_code="DE")
+    provider = FakeProvider()
+    provider.provider_id = "open_charge_map"
+    provider.provider_name = "Open Charge Map (global)"
+    provider.country_code = None
+    coordinator = CurbChargeCoordinator(hass, provider, 52.0, 5.0, 500, 10, 5, True)
+    coordinator.async_set_updated_data({station.provider_id: station})
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            CONF_PROVIDER: "open_charge_map",
+            CONF_API_TOKEN: "synthetic-ocm-secret",
+        },
+    )
+    entry.runtime_data = coordinator
+    diagnostics = await async_get_config_entry_diagnostics(hass, entry)
+    assert diagnostics["country_code"] is None
+    assert diagnostics["stations"][0]["country_code"] == "DE"
+    assert "synthetic-ocm-secret" not in json.dumps(diagnostics)
+
+
 @pytest.mark.asyncio
 async def test_diagnostics_redact_coordinates_and_addresses(
     hass, sample_stations, monkeypatch

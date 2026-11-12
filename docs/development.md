@@ -234,6 +234,15 @@ backend by provider ID. `providers/ndw_nl.py` implements NDW, while
 `providers/switzerland.py`, `providers/luxembourg.py`,
 `providers/lithuania.py`, and
 `providers/afdc.py` keep source-specific behavior in their own adapters.
+`providers/openchargemap.py` adds global, public/openly licensed directory
+records with a user-supplied key and a bounded, shared one-hour query cache.
+The provider-level country may be `None` for global coverage; station countries
+come from individual records. Source/license fields and upstream truncation are
+optional normalized metadata, preserving existing provider defaults.
+Keep attribution in both station-summary and selected/recommendation payloads;
+the bundled card displays it independently of detail visibility.
+HACS's optional country restriction is omitted for global discoverability.
+See [Open Charge Map source research](provider-research/openchargemap.md).
 `coordinator.py` owns one provider update cycle, and `sensor.py`/
 `binary_sensor.py` expose normalized data. Follow a provider's published terms
 and limits, add synthetic fixtures and offline tests under `tests/providers/`,

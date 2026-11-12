@@ -76,8 +76,8 @@ class BaseChargingProvider(ABC):
 
     @property
     @abstractmethod
-    def country_code(self) -> str:
-        """Return the provider's ISO 3166-1 alpha-2 country code."""
+    def country_code(self) -> str | None:
+        """Return the provider's ISO country code, or None for global coverage."""
 
     @abstractmethod
     async def async_get_stations(

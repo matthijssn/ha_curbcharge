@@ -154,6 +154,26 @@
         "data_description": {
           "api_token": "La clé est stockée dans cette entrée et masquée des diagnostics."
         }
+      },
+      "openchargemap_credentials": {
+        "title": "Se connecter à Open Charge Map",
+        "description": "Saisissez votre propre clé API obtenue auprès d'[Open Charge Map]({openchargemap_api_url}) (My apps). Seules les données publiques sous licence ouverte sont incluses. La disponibilité en temps réel et les prix sont inconnus. Les requêtes identiques réussies sont mises en cache pendant une heure, même lors d'une actualisation manuelle.",
+        "data": {
+          "api_token": "Clé API Open Charge Map"
+        },
+        "data_description": {
+          "api_token": "La clé est enregistrée dans cette configuration et masquée dans les diagnostics. Ne la partagez pas."
+        }
+      },
+      "openchargemap_reauth_confirm": {
+        "title": "Mettre à jour les identifiants Open Charge Map",
+        "description": "Saisissez votre propre clé API obtenue auprès d'[Open Charge Map]({openchargemap_api_url}) (My apps). Seules les données publiques sous licence ouverte sont incluses. La disponibilité en temps réel et les prix sont inconnus. Les requêtes identiques réussies sont mises en cache pendant une heure, même lors d'une actualisation manuelle.",
+        "data": {
+          "api_token": "Clé API Open Charge Map"
+        },
+        "data_description": {
+          "api_token": "La clé est enregistrée dans cette configuration et masquée dans les diagnostics. Ne la partagez pas."
+        }
       }
     },
     "error": {
@@ -168,7 +188,8 @@
       "invalid_response": "Le fournisseur a renvoyé des données dans un format inattendu.",
       "location_not_configured": "Les coordonnées du domicile ne sont pas configurées dans Home Assistant.",
       "rate_limited": "Le fournisseur limite le nombre de requêtes. Réessayez plus tard.",
-      "unsupported_provider": "Le fournisseur sélectionné n'est pas pris en charge."
+      "unsupported_provider": "Le fournisseur sélectionné n'est pas pris en charge.",
+      "invalid_openchargemap_api_key": "Saisissez une clé API Open Charge Map non vide en caractères ASCII imprimables."
     },
     "abort": {
       "already_configured": "Ce fournisseur et cette zone de recherche sont déjà configurés.",
@@ -176,7 +197,8 @@
       "reconfigure_successful": "La position de recherche a été mise à jour.",
       "reauth_successful": "Les identifiants Eco-Movement ont été mis à jour.",
       "nobil_reauth_successful": "La clé API NOBIL a été mise à jour.",
-      "afdc_reauth_successful": "La clé API NLR a été mise à jour."
+      "afdc_reauth_successful": "La clé API NLR a été mise à jour.",
+      "openchargemap_reauth_successful": "Identifiants Open Charge Map mis à jour."
     }
   },
   "options": {
@@ -371,7 +393,8 @@
         "digitraffic_afir_fi": "Digitraffic AFIR Finlande",
         "ich_tanke_strom_ch": "ich-tanke-strom Suisse",
         "chargy_lu": "Chargy Luxembourg",
-        "via_lietuva_lt": "Via Lietuva Lithuania"
+        "via_lietuva_lt": "Via Lietuva Lithuania",
+        "open_charge_map": "Open Charge Map (mondial)"
       }
     }
   },

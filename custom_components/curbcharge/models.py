@@ -354,6 +354,7 @@ class ProviderTimestampSource(StrEnum):
     BELGIUM_STATIC_FALLBACK = "belgium_static_fallback"
     NOBIL = "nobil"
     AFDC = "afdc"
+    OPEN_CHARGE_MAP = "open_charge_map"
     FINLAND_EVSE_STATUS = "finland_evse_status"
     FINLAND_STATIC_FALLBACK = "finland_static_fallback"
     SWITZERLAND_EVSE_STATUS = "switzerland_evse_status"
@@ -523,7 +524,7 @@ class ChargingLocation:
     provider_id: str
     provider: str
     provider_name: str
-    country_code: str
+    country_code: str | None
     name: str
     latitude: float
     longitude: float
@@ -550,7 +551,7 @@ class ChargingStation:
     availability_reported: bool = True
     is_open: bool | None = None
     is_stale: bool = False
-    country_code: str = "NL"
+    country_code: str | None = "NL"
     location: ChargingLocation | None = None
     provider_name: str = "NDW DOT-NL"
     evse_id: str | None = None
@@ -559,9 +560,23 @@ class ChargingStation:
     tariff_status: TariffStatus | None = None
     last_updated_source: ProviderTimestampSource | None = None
     operator_id: str | None = None
+    source_name: str | None = None
+    source_url: str | None = None
+    source_license: str | None = None
+
+    @property
+    def attribution(self) -> str | None:
+        """Return source attribution only when the provider supplies it."""
+        if self.source_name is None:
+            return None
+        return " | ".join(
+            value
+            for value in (self.provider_name, self.source_name, self.source_license)
+            if value
+        )
 
     def provider_data_age_seconds(self, now: datetime) -> int | None:
-        """Return dynamic provider timestamp age in whole UTC seconds."""
+        """Return the supported provider record timestamp age in UTC seconds."""
         if (
             self.last_updated is None
             or self.last_updated_source
@@ -570,6 +585,7 @@ class ChargingStation:
                 ProviderTimestampSource.BELGIUM_EVSE_STATUS,
                 ProviderTimestampSource.NOBIL,
                 ProviderTimestampSource.AFDC,
+                ProviderTimestampSource.OPEN_CHARGE_MAP,
                 ProviderTimestampSource.FINLAND_EVSE_STATUS,
                 ProviderTimestampSource.SWITZERLAND_EVSE_STATUS,
             )
@@ -785,6 +801,7 @@ class StationDiscoveryResult:
 
     nearby: tuple[ChargingStation, ...]
     favourites: tuple[ChargingStation, ...]
+    results_may_be_truncated: bool = False
 
 
 def parse_favourite_references(

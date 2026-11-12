@@ -54,6 +54,7 @@ from custom_components.curbcharge.const import (
     PROVIDER_NDW_DOT_NL,
     PROVIDER_NOBIL_NO,
     PROVIDER_NOBIL_SE,
+    PROVIDER_OPEN_CHARGE_MAP,
     PROVIDER_VIA_LIETUVA_LT,
 )
 from custom_components.curbcharge.coordinator import CurbChargeCoordinator
@@ -78,6 +79,105 @@ from tests.conftest import FakeProvider
 
 flow_schema = config_flow.vol
 pytestmark = pytest.mark.usefixtures("enable_custom_integrations")
+
+
+@pytest.mark.parametrize(
+    ("key", "validation_error", "error"),
+    [
+        ("synthetic-ocm-key", None, None),
+        ("bad\nkey", None, "invalid_openchargemap_api_key"),
+        ("synthetic-ocm-key", AuthenticationError("Rejected"), "auth"),
+        ("synthetic-ocm-key", ProviderRateLimitError("Limited", 60), "rate_limited"),
+    ],
+)
+async def test_openchargemap_setup(hass, monkeypatch, key, validation_error, error):
+    provider = FakeProvider()
+    provider.validation_error = validation_error
+    calls = []
+
+    def create(*args):
+        calls.append(args)
+        return provider
+
+    monkeypatch.setattr(config_flow, "create_provider", create)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_HOME}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _station_options(PROVIDER_OPEN_CHARGE_MAP)
+    )
+    assert result["step_id"] == "openchargemap_credentials"
+    assert result["description_placeholders"]["openchargemap_api_url"] == (
+        config_flow.OPEN_CHARGE_MAP_API_KEY_URL
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: key}
+    )
+    if error is not None:
+        assert result["step_id"] == "openchargemap_credentials"
+        assert result["errors"] == {"base": error}
+        assert bool(calls) is (error != "invalid_openchargemap_api_key")
+    else:
+        assert result["type"] is FlowResultType.CREATE_ENTRY
+        assert result["data"][CONF_PROVIDER] == PROVIDER_OPEN_CHARGE_MAP
+        assert result["data"][CONF_API_TOKEN] == key
+        assert CONF_API_TOKEN not in result["result"].options
+        assert calls[0][0] == PROVIDER_OPEN_CHARGE_MAP
+        assert calls[0][2:] == (hass, key)
+        assert len(provider.validation_calls) == 1
+
+
+@pytest.mark.parametrize(
+    ("key", "validation_error", "changed_provider", "missing_location", "reason"),
+    [
+        ("replacement", None, False, False, "openchargemap_reauth_successful"),
+        ("bad\nkey", None, False, False, "invalid_openchargemap_api_key"),
+        ("replacement", AuthenticationError("Rejected"), False, False, "auth"),
+        ("replacement", None, True, False, "unsupported_provider"),
+        ("replacement", None, False, True, "location_not_configured"),
+    ],
+)
+async def test_openchargemap_reauth(
+    hass, monkeypatch, key, validation_error, changed_provider, missing_location, reason
+):
+    provider = FakeProvider()
+    provider.validation_error = validation_error
+    monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
+    if missing_location:
+        hass.config.latitude = None
+        hass.config.longitude = None
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="open-charge-map-search",
+        data={
+            CONF_PROVIDER: PROVIDER_OPEN_CHARGE_MAP,
+            CONF_LOCATION_SOURCE: LOCATION_HOME,
+            CONF_API_TOKEN: "old-synthetic-key",
+            CONF_SEARCH_RADIUS: 500,
+        },
+        options={CONF_PROVIDER: PROVIDER_NDW_DOT_NL} if changed_provider else {},
+    )
+    entry.add_to_hass(hass)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "reauth", "entry_id": entry.entry_id}
+    )
+    assert result["step_id"] == "openchargemap_reauth_confirm"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: key}
+    )
+    if reason in ("auth", "invalid_openchargemap_api_key"):
+        assert result["step_id"] == "openchargemap_reauth_confirm"
+        assert result["errors"] == {"base": reason}
+    else:
+        assert result["type"] is FlowResultType.ABORT
+        assert result["reason"] == reason
+    assert entry.unique_id == "open-charge-map-search"
+    assert entry.data[CONF_API_TOKEN] == (
+        key if reason == "openchargemap_reauth_successful" else "old-synthetic-key"
+    )
 
 
 @pytest.fixture(autouse=True)

@@ -264,6 +264,58 @@ connector availability unknown and does not infer a live status from the
 station-level status. AFDC's free-text pricing is not converted into a
 structured tariff.
 
+### Open Charge Map (global)
+
+Choose **Open Charge Map (global)** and enter your own API key. Sign in at
+[Open Charge Map](https://openchargemap.org/profile), open **My apps**, and
+register an application to obtain a key. The key stays in config-entry data,
+is sent through the `X-API-Key` header, and is redacted from diagnostics.
+Authentication failures prompt for a replacement key.
+
+OCM is a worldwide directory, not a live availability feed. Searches cross
+country borders without a country picker. Only public-access, openly licensed
+records are included, including public membership/payment/notice-required
+locations. Private and unknown-access records are excluded. Public access does
+not mean free charging. Coverage and data quality vary by source.
+
+Operational status does not establish a free connector or current opening
+hours. Availability, occupancy, and comparable prices stay unknown; free-text
+pricing is not parsed. Connector quantities are reported only when unambiguous.
+Availability-dependent recommendations and automations cannot promise an
+available OCM charger. Keep **Include stations without availability data**
+enabled to see nearby OCM records; favorites remain additive even when it is off.
+
+Successful identical upstream queries are cached for **one hour**, shared
+across entries using the same key and during connection validation. Manual
+refresh does not bypass this cache. Changed search coordinates issue a new
+query; cached favorite lookups are mapped relative to the current origin.
+OCM prohibits repeated duplicate queries but publishes no numerical quota in
+the reviewed API policy. Server `Retry-After` cooldowns are respected.
+
+Each nearby request retrieves at most 500 records before local distance
+filtering and the configured station limit. Results are not guaranteed to be
+exhaustive or globally nearest-first; a response reaching that bound is marked
+as potentially truncated even when local filtering leaves fewer stations.
+Saved favorites are looked up separately by POI ID outside the search radius.
+
+Station attributes report the record's actual country; the global provider's
+aggregate `country_code` is unknown (`None`) and `global_provider` is true.
+The existing `supported_country_codes` list describes dedicated regional
+coverage, not a restriction on OCM searches. The OCM timestamp source describes
+a directory record update, not a live-status observation; record age must not
+be read as live availability freshness.
+
+OCM combines multiple sources with different licenses. CurbCharge requests
+`opendata=true` and shows OCM plus the original source and its license in Home
+Assistant attribution and the bundled card, including with station details
+hidden. Imported records must not all be described as CC BY 4.0.
+See the [OCM terms](https://openchargemap.org/about/terms) and
+[source research](provider-research/openchargemap.md).
+
+The configured search coordinates and API key are sent to OCM; favorite POI IDs
+are sent for saved-station lookups. Do not post credentials, exact home
+coordinates, or raw provider responses in issue reports.
+
 ## Configuration
 
 Add **CurbCharge** from **Settings → Devices & services → Add integration**.
@@ -286,7 +338,8 @@ Choose a polling interval in minutes (default 5; minimum 1), a search radius
 from 100 to 10,000 metres, and a maximum of 1 to 50 stations (default 10), then
 select NDW DOT-NL, the Belgium preview, NOBIL Norway, NOBIL Sweden, AFDC
 United States, Digitraffic AFIR Finland, the ich-tanke-strom Switzerland
-preview, or Chargy Luxembourg. Belgium setup asks for the
+preview, Chargy Luxembourg, Via Lietuva Lithuania, or Open Charge Map (global).
+Open Charge Map asks for your own OCM API key. Belgium setup asks for the
 Eco-Movement API token, NOBIL asks for a NOBIL API key, and the U.S. AFDC
 source asks for an NLR API key; Finland, Switzerland and Luxembourg require no
 credentials. Each
@@ -420,7 +473,8 @@ examples, not captures of a live Home Assistant session.
 
 CurbCharge's supported coverage includes public charging points in the
 Netherlands published by NDW DOT-NL, Norway and Sweden through NOBIL, and the
-United States through AFDC. AFDC provides station-directory data, not live
+United States through AFDC, plus worldwide public directory coverage through
+Open Charge Map. OCM and AFDC provide station-directory data, not live
 connector availability. Belgium DATEX II is available as a preview for
 authorized users, but is not considered release-ready until access, licensing,
 quotas, and real-payload compatibility are verified. CurbCharge reports

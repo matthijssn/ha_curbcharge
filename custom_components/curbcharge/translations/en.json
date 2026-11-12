@@ -154,6 +154,26 @@
         "data_description": {
           "api_token": "The key is stored in this config entry and redacted from diagnostics."
         }
+      },
+      "openchargemap_credentials": {
+        "title": "Connect to Open Charge Map",
+        "description": "Enter your own API key from [Open Charge Map]({openchargemap_api_url}) (My apps). Only public, openly licensed directory records are included. Live availability and prices are unknown. Identical successful queries are cached for one hour, including manual refreshes.",
+        "data": {
+          "api_token": "Open Charge Map API key"
+        },
+        "data_description": {
+          "api_token": "The key is stored in this config entry and redacted from diagnostics. Do not share it."
+        }
+      },
+      "openchargemap_reauth_confirm": {
+        "title": "Update Open Charge Map credentials",
+        "description": "Enter your own API key from [Open Charge Map]({openchargemap_api_url}) (My apps). Only public, openly licensed directory records are included. Live availability and prices are unknown. Identical successful queries are cached for one hour, including manual refreshes.",
+        "data": {
+          "api_token": "Open Charge Map API key"
+        },
+        "data_description": {
+          "api_token": "The key is stored in this config entry and redacted from diagnostics. Do not share it."
+        }
       }
     },
     "error": {
@@ -168,7 +188,8 @@
       "invalid_response": "The provider returned data in an unexpected format.",
       "location_not_configured": "Home coordinates are not configured in Home Assistant.",
       "rate_limited": "The provider is rate limiting requests. Try again later.",
-      "unsupported_provider": "The selected provider is not supported."
+      "unsupported_provider": "The selected provider is not supported.",
+      "invalid_openchargemap_api_key": "Enter a non-empty printable ASCII Open Charge Map API key."
     },
     "abort": {
       "already_configured": "This provider and search area are already configured.",
@@ -176,7 +197,8 @@
       "reconfigure_successful": "Search location updated.",
       "reauth_successful": "Eco-Movement credentials updated.",
       "nobil_reauth_successful": "NOBIL API key updated.",
-      "afdc_reauth_successful": "NLR API key updated."
+      "afdc_reauth_successful": "NLR API key updated.",
+      "openchargemap_reauth_successful": "Open Charge Map credentials updated."
     }
   },
   "options": {
@@ -371,7 +393,8 @@
         "digitraffic_afir_fi": "Digitraffic AFIR Finland",
         "ich_tanke_strom_ch": "ich-tanke-strom Switzerland",
         "chargy_lu": "Chargy Luxembourg",
-        "via_lietuva_lt": "Via Lietuva Lithuania"
+        "via_lietuva_lt": "Via Lietuva Lithuania",
+        "open_charge_map": "Open Charge Map (global)"
       }
     }
   },

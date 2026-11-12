@@ -11,6 +11,7 @@ from ..const import (
     PROVIDER_ECO_MOVEMENT_BE,
     PROVIDER_ICH_TANKE_STROM_CH,
     PROVIDER_NDW_DOT_NL,
+    PROVIDER_OPEN_CHARGE_MAP,
     PROVIDER_VIA_LIETUVA_LT,
 )
 from .afdc import create_afdc_provider
@@ -21,6 +22,7 @@ from .lithuania import create_lithuania_provider
 from .luxembourg import create_luxembourg_provider
 from .ndw_nl import create_ndw_nl_provider
 from .nobil import create_nobil_provider
+from .openchargemap import create_openchargemap_provider
 from .switzerland import create_switzerland_provider
 
 
@@ -31,6 +33,10 @@ def create_provider(
     token: str | None = None,
 ) -> BaseChargingProvider:
     """Return the requested implemented provider."""
+    if provider_id == PROVIDER_OPEN_CHARGE_MAP:
+        if not token:
+            raise AuthenticationError("An Open Charge Map API key is required")
+        return create_openchargemap_provider(session, token, hass)
     if provider_id == PROVIDER_AFDC_US:
         if not token:
             raise AuthenticationError("An AFDC API key is required")

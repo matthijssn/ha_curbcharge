@@ -473,6 +473,7 @@ class StatusSummarySensor(CurbChargeStationEntity, SensorEntity):
             ),
             "is_open": station.is_open,
             "availability_reported": station.availability_reported,
+            **_source_attributes(station),
             "evse_status": (
                 station.evse_status.value if station.evse_status is not None else None
             ),
@@ -967,7 +968,7 @@ def _nearby_aggregate_attributes(
         }
     if current_stations is None:
         results_may_be_truncated = None
-    elif (
+    elif coordinator.results_may_be_truncated or (
         sum(station.provider_id in normal_station_ids for station in current_stations)
         >= coordinator.max_stations
     ):
@@ -982,6 +983,7 @@ def _nearby_aggregate_attributes(
         "provider_id": coordinator.provider_id,
         "country_code": coordinator.country_code,
         "supported_country_codes": list(SUPPORTED_COUNTRY_CODES),
+        **({"global_provider": True} if coordinator.country_code is None else {}),
         "coverage_scope": "configured_search_area",
         "search_radius_m": coordinator.radius_m,
         "max_stations": coordinator.max_stations,
@@ -1933,6 +1935,18 @@ def _selection_station_data_attributes(station: ChargingStation) -> dict[str, An
         ),
         "tariff_status": tariff_status.value,
         "provider_last_updated": _isoformat(station.last_updated),
+        **_source_attributes(station),
+    }
+
+
+def _source_attributes(station: ChargingStation) -> dict[str, str | None]:
+    if station.source_name is None:
+        return {}
+    return {
+        "attribution": station.attribution,
+        "source_name": station.source_name,
+        "source_url": station.source_url,
+        "source_license": station.source_license,
     }
 
 

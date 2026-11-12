@@ -154,6 +154,26 @@
         "data_description": {
           "api_token": "Nøkkelen lagres i denne konfigurasjonsoppføringen og skjules i diagnostikken."
         }
+      },
+      "openchargemap_credentials": {
+        "title": "Koble til Open Charge Map",
+        "description": "Skriv inn din egen API-nøkkel fra [Open Charge Map]({openchargemap_api_url}) (My apps). Bare offentlige katalogoppføringer med åpen lisens inkluderes. Sanntidstilgjengelighet og priser er ukjente. Identiske vellykkede søk mellomlagres i én time, også ved manuell oppdatering.",
+        "data": {
+          "api_token": "Open Charge Map API-nøkkel"
+        },
+        "data_description": {
+          "api_token": "Nøkkelen lagres i denne konfigurasjonen og skjules i diagnostikk. Ikke del den."
+        }
+      },
+      "openchargemap_reauth_confirm": {
+        "title": "Oppdater Open Charge Map-legitimasjon",
+        "description": "Skriv inn din egen API-nøkkel fra [Open Charge Map]({openchargemap_api_url}) (My apps). Bare offentlige katalogoppføringer med åpen lisens inkluderes. Sanntidstilgjengelighet og priser er ukjente. Identiske vellykkede søk mellomlagres i én time, også ved manuell oppdatering.",
+        "data": {
+          "api_token": "Open Charge Map API-nøkkel"
+        },
+        "data_description": {
+          "api_token": "Nøkkelen lagres i denne konfigurasjonen og skjules i diagnostikk. Ikke del den."
+        }
       }
     },
     "error": {
@@ -168,7 +188,8 @@
       "invalid_response": "Leverandøren returnerte data i et uventet format.",
       "location_not_configured": "Hjemmekoordinatene er ikke konfigurert i Home Assistant.",
       "rate_limited": "Leverandøren begrenser antall forespørsler. Prøv igjen senere.",
-      "unsupported_provider": "Den valgte leverandøren støttes ikke."
+      "unsupported_provider": "Den valgte leverandøren støttes ikke.",
+      "invalid_openchargemap_api_key": "Skriv inn en ikke-tom Open Charge Map API-nøkkel med utskrivbare ASCII-tegn."
     },
     "abort": {
       "already_configured": "Denne leverandøren og dette søkeområdet er allerede konfigurert.",
@@ -176,7 +197,8 @@
       "reconfigure_successful": "Søkeposisjonen er oppdatert.",
       "reauth_successful": "Påloggingsinformasjonen for Eco-Movement er oppdatert.",
       "nobil_reauth_successful": "API-nøkkelen fra NOBIL er oppdatert.",
-      "afdc_reauth_successful": "API-nøkkelen fra NLR er oppdatert."
+      "afdc_reauth_successful": "API-nøkkelen fra NLR er oppdatert.",
+      "openchargemap_reauth_successful": "Open Charge Map-legitimasjon oppdatert."
     }
   },
   "options": {
@@ -371,7 +393,8 @@
         "digitraffic_afir_fi": "Digitraffic AFIR Finland",
         "ich_tanke_strom_ch": "ich-tanke-strom Sveits",
         "chargy_lu": "Chargy Luxembourg",
-        "via_lietuva_lt": "Via Lietuva Lithuania"
+        "via_lietuva_lt": "Via Lietuva Lithuania",
+        "open_charge_map": "Open Charge Map (globalt)"
       }
     }
   },

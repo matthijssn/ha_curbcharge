@@ -100,6 +100,50 @@ function visibleText(element) {
   return [element.textContent, ...element.children.map(visibleText)].join(" ");
 }
 
+test("keeps safe source attribution visible without station details in every locale", () => {
+  const attributes = {
+    provider_station_id: "990001",
+    attribution: "Open Charge Map | <img src=x onerror=alert(1)> | CC BY 4.0",
+    source_url: "https://example.org/license",
+  };
+  for (const language of SUPPORTED_LANGUAGES) {
+    for (const source_url of [
+      attributes.source_url, "javascript:alert(1)", "not a URL",
+      "https://user:secret@example.org", null,
+    ]) {
+      for (const list of [false, true]) {
+        const card = new (elements.get("curbcharge-card"))();
+        card.setConfig({ entity: "sensor.ocm", show_station_details: false });
+        card.hass = {
+          language,
+          states: {
+            "sensor.ocm": {
+              entity_id: "sensor.ocm",
+              state: "unknown",
+              attributes: list
+                ? { result_status: "selected", recommendations: [{ ...attributes, source_url }] }
+                : { ...attributes, source_url },
+            },
+          },
+        };
+        assert.ok(visibleText(card.shadowRoot).includes(attributes.attribution));
+        assert.ok(visibleText(card.shadowRoot).includes(cardModule.TEXT[language].attribution));
+        const find = (element, tag) => [
+          ...(element.tagName === tag ? [element] : []),
+          ...element.children.flatMap((child) => find(child, tag)),
+        ];
+        assert.equal(find(card.shadowRoot, "img").length, 0);
+        const links = find(card.shadowRoot, "a");
+        assert.equal(links.length, source_url === attributes.source_url ? 1 : 0);
+        if (links.length) {
+          assert.equal(links[0].attributes.get("href"), attributes.source_url);
+          assert.equal(links[0].attributes.get("rel"), "noopener noreferrer");
+        }
+      }
+    }
+  }
+});
+
 test("requires complete nonempty dictionaries for all nine languages", () => {
   assert.deepEqual(Object.keys(cardModule.TEXT), SUPPORTED_LANGUAGES);
   const englishKeys = Object.keys(cardModule.TEXT.en).sort();

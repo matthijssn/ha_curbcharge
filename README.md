@@ -39,6 +39,8 @@ Netherlands, Norway, Sweden, United States, Finland, Luxembourg, and
 Lithuania. Belgium and Switzerland are marked as previews. Coverage and data
 quality vary by provider; see the
 [provider coverage and limitations](docs/usage.md#data-source-and-coverage).
+Open Charge Map adds worldwide public station-directory coverage with your own
+API key. It does not provide live connector availability or comparable prices.
 
 ## Get started
 

@@ -154,6 +154,26 @@
         "data_description": {
           "api_token": "Atslēga tiek saglabāta šajā konfigurācijas ierakstā un paslēpta diagnostikas datos."
         }
+      },
+      "openchargemap_credentials": {
+        "title": "Savienot ar Open Charge Map",
+        "description": "Ievadiet savu API atslēgu no [Open Charge Map]({openchargemap_api_url}) (My apps). Tiek iekļauti tikai publiski kataloga dati ar atvērtu licenci. Reāllaika pieejamība un cenas nav zināmas. Vienādi veiksmīgi vaicājumi tiek glabāti kešatmiņā vienu stundu, arī manuāli atjauninot.",
+        "data": {
+          "api_token": "Open Charge Map API atslēga"
+        },
+        "data_description": {
+          "api_token": "Atslēga tiek glabāta šajā konfigurācijā un slēpta diagnostikā. Nekopīgojiet to."
+        }
+      },
+      "openchargemap_reauth_confirm": {
+        "title": "Atjaunināt Open Charge Map piekļuves datus",
+        "description": "Ievadiet savu API atslēgu no [Open Charge Map]({openchargemap_api_url}) (My apps). Tiek iekļauti tikai publiski kataloga dati ar atvērtu licenci. Reāllaika pieejamība un cenas nav zināmas. Vienādi veiksmīgi vaicājumi tiek glabāti kešatmiņā vienu stundu, arī manuāli atjauninot.",
+        "data": {
+          "api_token": "Open Charge Map API atslēga"
+        },
+        "data_description": {
+          "api_token": "Atslēga tiek glabāta šajā konfigurācijā un slēpta diagnostikā. Nekopīgojiet to."
+        }
       }
     },
     "error": {
@@ -168,7 +188,8 @@
       "invalid_response": "Pakalpojumu sniedzējs atgrieza neparedzēta formāta datus.",
       "location_not_configured": "Home Assistant nav konfigurētas mājas koordinātas.",
       "rate_limited": "Pakalpojumu sniedzējs ierobežo pieprasījumu skaitu. Mēģiniet vēlāk.",
-      "unsupported_provider": "Atlasītais pakalpojumu sniedzējs netiek atbalstīts."
+      "unsupported_provider": "Atlasītais pakalpojumu sniedzējs netiek atbalstīts.",
+      "invalid_openchargemap_api_key": "Ievadiet netukšu Open Charge Map API atslēgu ar drukājamām ASCII rakstzīmēm."
     },
     "abort": {
       "already_configured": "Šis pakalpojumu sniedzējs un meklēšanas apgabals jau ir konfigurēts.",
@@ -176,7 +197,8 @@
       "reconfigure_successful": "Meklēšanas atrašanās vieta atjaunināta.",
       "reauth_successful": "Eco-Movement akreditācijas dati atjaunināti.",
       "nobil_reauth_successful": "NOBIL API atslēga atjaunināta.",
-      "afdc_reauth_successful": "NLR API atslēga atjaunināta."
+      "afdc_reauth_successful": "NLR API atslēga atjaunināta.",
+      "openchargemap_reauth_successful": "Open Charge Map piekļuves dati atjaunināti."
     }
   },
   "options": {
@@ -371,7 +393,8 @@
         "digitraffic_afir_fi": "Digitraffic AFIR Somija",
         "ich_tanke_strom_ch": "ich-tanke-strom Šveice",
         "chargy_lu": "Chargy Luksemburga",
-        "via_lietuva_lt": "Via Lietuva (Lietuva)"
+        "via_lietuva_lt": "Via Lietuva (Lietuva)",
+        "open_charge_map": "Open Charge Map (visā pasaulē)"
       }
     }
   },

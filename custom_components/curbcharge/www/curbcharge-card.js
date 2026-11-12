@@ -60,6 +60,7 @@ const FIELD_LABELS = {
 
 const TEXT = {
   en: {
+    attribution: "Source and license",
     available: "Available",
     favorite: "Favorite",
     selected: "Selected",
@@ -145,6 +146,7 @@ const TEXT = {
     invalidConfig: "Use a CurbCharge status or recommendation sensor and supported display options.",
   },
   nl: {
+    attribution: "Bron en licentie",
     available: "Beschikbaar",
     favorite: "Favoriet",
     selected: "Geselecteerd",
@@ -230,6 +232,7 @@ const TEXT = {
     invalidConfig: "Gebruik een CurbCharge-status- of aanbevelingssensor en ondersteunde weergaveopties.",
   },
   fr: {
+    attribution: "Source et licence",
     available: "Disponible",
     favorite: "Favori",
     selected: "Sélectionnée",
@@ -315,6 +318,7 @@ const TEXT = {
     invalidConfig: "Utilisez un capteur de statut ou de recommandation CurbCharge et des options d'affichage prises en charge.",
   },
   de: {
+    attribution: "Quelle und Lizenz",
     available: "Verfügbar",
     favorite: "Favorit",
     selected: "Ausgewählt",
@@ -400,6 +404,7 @@ const TEXT = {
     invalidConfig: "Verwenden Sie einen CurbCharge-Status- oder Empfehlungssensor und unterstützte Anzeigeoptionen.",
   },
   nb: {
+    attribution: "Kilde og lisens",
     available: "Ledig",
     favorite: "Favoritt",
     selected: "Valgt",
@@ -485,6 +490,7 @@ const TEXT = {
     invalidConfig: "Bruk en status- eller anbefalingssensor fra CurbCharge og støttede visningsvalg.",
   },
   sv: {
+    attribution: "Källa och licens",
     available: "Ledig",
     favorite: "Favorit",
     selected: "Vald",
@@ -570,6 +576,7 @@ const TEXT = {
     invalidConfig: "Använd en status- eller rekommendationssensor från CurbCharge och visningsalternativ som stöds.",
   },
   fi: {
+    attribution: "Lähde ja lisenssi",
     available: "Vapaa",
     favorite: "Suosikki",
     selected: "Valittu",
@@ -655,6 +662,7 @@ const TEXT = {
     invalidConfig: "Käytä CurbChargen tila- tai suositussensoria ja tuettuja näyttöasetuksia.",
   },
   it: {
+    attribution: "Fonte e licenza",
     available: "Disponibile",
     favorite: "Preferito",
     selected: "Selezionato",
@@ -740,6 +748,7 @@ const TEXT = {
     invalidConfig: "Usa un sensore di stato o di raccomandazione CurbCharge e opzioni di visualizzazione supportate.",
   },
   lv: {
+    attribution: "Avots un licence",
     available: "Pieejams",
     favorite: "Izlase",
     selected: "Atlasīts",
@@ -942,6 +951,7 @@ function formatRecommendation(item, hass, text, options) {
   }
   const hideFields = options.hide_fields || [];
   const visibleRows = filterHiddenRows(rows, hideFields, text);
+  const attribution = formatAttribution(recommendation, text);
   const personalizationRows = filterHiddenRows(
     formatPersonalizationRows(recommendation.personalization, hass, text),
     hideFields,
@@ -950,6 +960,7 @@ function formatRecommendation(item, hass, text, options) {
   return personalizationRows.length
     ? {
         name,
+        ...(attribution ? { attribution } : {}),
         rows: visibleRows,
         personalizationRows,
         personalizationLabel: text.personalized,
@@ -959,7 +970,45 @@ function formatRecommendation(item, hass, text, options) {
             name,
         ),
       }
-    : { name, rows: visibleRows };
+    : { name, rows: visibleRows, ...(attribution ? { attribution } : {}) };
+}
+
+function formatAttribution(values, text) {
+  if (typeof values.attribution !== "string" || !values.attribution.trim()) {
+    return null;
+  }
+  let url = null;
+  if (typeof values.source_url === "string") {
+    try {
+      const parsed = new URL(values.source_url);
+      if (
+        ["https:", "http:"].includes(parsed.protocol) &&
+        !parsed.username &&
+        !parsed.password
+      ) {
+        url = parsed.href;
+      }
+    } catch {
+      // Invalid upstream links remain visible as attribution text, never links.
+    }
+  }
+  return { label: text.attribution, text: values.attribution, url };
+}
+
+function createAttribution(attribution) {
+  const paragraph = document.createElement("p");
+  paragraph.className = "attribution";
+  const label = document.createElement("span");
+  label.textContent = `${attribution.label}: `;
+  const source = document.createElement(attribution.url ? "a" : "span");
+  source.textContent = attribution.text;
+  if (attribution.url) {
+    source.setAttribute("href", attribution.url);
+    source.setAttribute("target", "_blank");
+    source.setAttribute("rel", "noopener noreferrer");
+  }
+  paragraph.append(label, source);
+  return paragraph;
 }
 
 function formatPersonalizationRows(personalization, hass, text) {
@@ -1443,6 +1492,7 @@ export function buildCardData(entity, hass, config = DEFAULT_CONFIG) {
     evEstimateRows: estimates,
     primaryRows: filterHiddenRows(primaryRows, hideFields, text),
     detailsRows: filterHiddenRows(detailsRows, hideFields, text),
+    attribution: formatAttribution(attributes, text),
     ...(hasRecommendationList
       ? { recommendations, recommendationsLabel: text.recommendations }
       : {}),
@@ -1774,6 +1824,9 @@ class CurbChargeCard extends HTMLElement {
           grid.append(createMetric(row));
         }
         item.append(name, grid);
+        if (recommendation.attribution) {
+          item.append(createAttribution(recommendation.attribution));
+        }
         if (recommendation.personalizationRows?.length) {
           const personalizationDetails = document.createElement("details");
           personalizationDetails.className = "personalization-details";
@@ -1797,6 +1850,10 @@ class CurbChargeCard extends HTMLElement {
       }
       section.append(heading, list);
       card.append(section);
+    }
+
+    if (data.attribution) {
+      card.append(createAttribution(data.attribution));
     }
 
     if (data.detailsRows.length > 0) {
