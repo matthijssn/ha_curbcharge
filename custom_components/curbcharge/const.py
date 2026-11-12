@@ -7,6 +7,7 @@ from homeassistant.const import Platform
 DOMAIN = "curbcharge"
 CONFIG_ENTRY_VERSION = 2
 PLATFORMS = (Platform.BINARY_SENSOR, Platform.SENSOR)
+OPTIONAL_PLATFORMS = (Platform.DEVICE_TRACKER,)
 
 CONF_LOCATION_SOURCE = "location_source"
 CONF_LOCATION_ENTITY = "location_entity"
@@ -17,6 +18,7 @@ CONF_SEARCH_RADIUS = "search_radius"
 CONF_MAX_STATIONS = "max_stations"
 CONF_SCAN_INTERVAL = "scan_interval"
 CONF_INCLUDE_UNKNOWN = "include_unknown"
+CONF_DEVICE_TRACKERS = "device_trackers"
 CONF_CONNECTOR_TYPES = "connector_types"
 CONF_MIN_POWER_KW = "min_power_kw"
 CONF_REQUIRE_AVAILABLE = "require_available"
@@ -116,6 +118,7 @@ DEFAULT_MAX_STATIONS = 10
 MIN_MAX_STATIONS = 1
 MAX_MAX_STATIONS = 50
 DEFAULT_INCLUDE_UNKNOWN = True
+DEFAULT_DEVICE_TRACKERS = True
 DEFAULT_CONNECTOR_TYPES: tuple[str, ...] = ()
 DEFAULT_MIN_POWER_KW: float | None = None
 DEFAULT_REQUIRE_AVAILABLE = False

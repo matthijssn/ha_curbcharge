@@ -18,6 +18,7 @@ from homeassistant.helpers.update_coordinator import (
 )
 
 from .const import (
+    DEFAULT_DEVICE_TRACKERS,
     DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
     DOMAIN,
     MISSING_STATION_REFRESHES,
@@ -128,6 +129,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         location_movement_threshold_m: int = DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
         discovery_filters: DiscoveryFilterSettings | None = None,
         personalization_profile: PersonalizationProfile | None = None,
+        device_trackers_enabled: bool = DEFAULT_DEVICE_TRACKERS,
     ) -> None:
         """Initialize the shared coordinator."""
         self.provider = provider
@@ -150,6 +152,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
             if personalization_profile is not None
             else PersonalizationProfile()
         )
+        self.device_trackers_enabled = device_trackers_enabled
         self.favourite_ids = {favourite.provider_id for favourite in favourites}
         self.nearby_station_ids: set[str] | None = None
         self.results_may_be_truncated = False

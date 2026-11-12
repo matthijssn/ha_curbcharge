@@ -24,6 +24,7 @@ from .const import (
     CONF_API_TOKEN,
     CONF_CONNECTOR_TYPE_IDS,
     CONF_CONNECTOR_TYPES,
+    CONF_DEVICE_TRACKERS,
     CONF_EXCLUDED_OPERATORS,
     CONF_FAVOURITES,
     CONF_INCLUDE_UNKNOWN,
@@ -46,6 +47,7 @@ from .const import (
     CONF_SEARCH_RADIUS,
     CONF_UNKNOWN_DATA_POLICY,
     CONFIG_ENTRY_VERSION,
+    DEFAULT_DEVICE_TRACKERS,
     DEFAULT_INCLUDE_UNKNOWN,
     DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
     DEFAULT_MAX_STATIONS,
@@ -378,6 +380,10 @@ def options_schema(
         vol.Required(
             CONF_INCLUDE_UNKNOWN,
             default=defaults.get(CONF_INCLUDE_UNKNOWN, DEFAULT_INCLUDE_UNKNOWN),
+        ): selector.BooleanSelector(),
+        vol.Required(
+            CONF_DEVICE_TRACKERS,
+            default=defaults.get(CONF_DEVICE_TRACKERS, DEFAULT_DEVICE_TRACKERS),
         ): selector.BooleanSelector(),
         vol.Required(
             CONF_FAVOURITES,
@@ -1466,6 +1472,9 @@ class CurbChargeOptionsFlow(config_entries.OptionsFlow):
                 CONF_MAX_STATIONS: int(user_input[CONF_MAX_STATIONS]),
                 CONF_PROVIDER: user_input[CONF_PROVIDER],
                 CONF_INCLUDE_UNKNOWN: user_input[CONF_INCLUDE_UNKNOWN],
+                CONF_DEVICE_TRACKERS: user_input.get(
+                    CONF_DEVICE_TRACKERS, DEFAULT_DEVICE_TRACKERS
+                ),
                 CONF_FAVOURITES: [favourite.as_config() for favourite in favourites],
             }
             if CONF_PERSONALIZATION in self.config_entry.options:

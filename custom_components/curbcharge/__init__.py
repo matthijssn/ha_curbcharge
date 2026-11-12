@@ -21,6 +21,7 @@ else:
 
 from .const import (
     CONF_API_TOKEN,
+    CONF_DEVICE_TRACKERS,
     CONF_FAVOURITES,
     CONF_INCLUDE_UNKNOWN,
     CONF_LOCATION_MOVEMENT_THRESHOLD,
@@ -31,6 +32,7 @@ from .const import (
     CONF_SCAN_INTERVAL,
     CONF_SEARCH_RADIUS,
     CONFIG_ENTRY_VERSION,
+    DEFAULT_DEVICE_TRACKERS,
     DEFAULT_INCLUDE_UNKNOWN,
     DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
     DEFAULT_MAX_STATIONS,
@@ -42,6 +44,7 @@ from .const import (
     MIN_MAX_STATIONS,
     MIN_SCAN_INTERVAL_MINUTES,
     MIN_SEARCH_RADIUS_M,
+    OPTIONAL_PLATFORMS,
     PLATFORMS,
     PROVIDER_NDW_DOT_NL,
     PROVIDERS_REQUIRING_API_TOKEN,
@@ -137,6 +140,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
     max_stations = options.get(CONF_MAX_STATIONS, DEFAULT_MAX_STATIONS)
     scan_interval = options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES)
     include_unknown = options.get(CONF_INCLUDE_UNKNOWN, DEFAULT_INCLUDE_UNKNOWN)
+    device_trackers = options.get(CONF_DEVICE_TRACKERS, DEFAULT_DEVICE_TRACKERS)
     location_movement_threshold_m = _location_movement_threshold(
         options, entry.data.get(CONF_LOCATION_SOURCE)
     )
@@ -181,6 +185,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
         or not isinstance(scan_interval, int)
         or scan_interval < MIN_SCAN_INTERVAL_MINUTES
         or not isinstance(include_unknown, bool)
+        or not isinstance(device_trackers, bool)
         or location_movement_threshold_m is None
     ):
         raise ConfigEntryNotReady(
@@ -226,6 +231,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
         location_movement_threshold_m=location_movement_threshold_m,
         discovery_filters=discovery_filters,
         personalization_profile=personalization_profile,
+        device_trackers_enabled=device_trackers,
     )
     entry.runtime_data = coordinator
     try:
@@ -240,14 +246,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
                 translation_key="rate_limited",
             ) from err
         raise
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    platforms = PLATFORMS + OPTIONAL_PLATFORMS if device_trackers else PLATFORMS
+    await hass.config_entries.async_forward_entry_setups(entry, platforms)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -> bool:
     """Unload CurbCharge platforms."""
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    return await hass.config_entries.async_unload_platforms(
+        entry, PLATFORMS + OPTIONAL_PLATFORMS
+    )
 
 
 async def _async_options_updated(
@@ -268,6 +277,13 @@ async def _async_options_updated(
     max_stations = options.get(CONF_MAX_STATIONS, DEFAULT_MAX_STATIONS)
     scan_interval = options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES)
     include_unknown = options.get(CONF_INCLUDE_UNKNOWN, DEFAULT_INCLUDE_UNKNOWN)
+    device_trackers = options.get(CONF_DEVICE_TRACKERS, DEFAULT_DEVICE_TRACKERS)
+    if (
+        not isinstance(device_trackers, bool)
+        or device_trackers != coordinator.device_trackers_enabled
+    ):
+        await hass.config_entries.async_reload(entry.entry_id)
+        return
     location_movement_threshold_m = _location_movement_threshold(
         options, entry.data.get(CONF_LOCATION_SOURCE)
     )
