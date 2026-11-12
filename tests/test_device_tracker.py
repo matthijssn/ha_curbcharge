@@ -1,5 +1,7 @@
 """Tests for CurbCharge station device trackers."""
 
+import builtins
+import importlib
 from dataclasses import replace
 
 import pytest
@@ -8,6 +10,7 @@ from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components import curbcharge
+from custom_components.curbcharge import device_tracker
 from custom_components.curbcharge.const import (
     CONF_DEVICE_TRACKERS,
     CONF_LOCATION_SOURCE,
@@ -146,3 +149,19 @@ async def test_tracker_option_change_reloads_entry(hass, monkeypatch):
     await curbcharge._async_options_updated(hass, entry)
 
     assert reloaded == [entry.entry_id]
+
+
+def test_tracker_import_falls_back_to_legacy_module(monkeypatch):
+    original_import = builtins.__import__
+
+    def import_without_tracker_entity(name, *args, **kwargs):
+        if name == "homeassistant.components.device_tracker.entity":
+            raise ImportError
+        return original_import(name, *args, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(builtins, "__import__", import_without_tracker_entity)
+        importlib.reload(device_tracker)
+
+    importlib.reload(device_tracker)
+    assert issubclass(device_tracker.StationDeviceTracker, device_tracker.TrackerEntity)
