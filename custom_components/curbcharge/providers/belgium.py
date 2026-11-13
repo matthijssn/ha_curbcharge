@@ -64,6 +64,10 @@ _REQUEST_LIMITER_DATA_KEY = "belgium_request_limiter"
 _LOGGER = logging.getLogger(__name__)
 
 
+class _BelgiumEVSENotFound(Exception):
+    """The provider does not have status data for this EVSE."""
+
+
 def is_valid_belgium_api_token(token: object) -> bool:
     """Return whether a token can safely be sent as an HTTP header value."""
     return (
@@ -228,14 +232,17 @@ class BelgiumDatexClient:
         self._locations_cached_at = time.monotonic()
         return locations
 
-    async def async_get_evse_status(self, evse_id: str) -> BelgiumDatexDocument:
+    async def async_get_evse_status(self, evse_id: str) -> BelgiumDatexDocument | None:
         """Fetch current status and ad-hoc price for one EVSE."""
         if not evse_id:
             raise InvalidProviderResponseError("Belgium returned an empty EVSE id")
-        document, _ = await self._async_request_json(
-            f"{_API_BASE_URL}/status/{quote(evse_id, safe='')}",
-            evse_id=evse_id,
-        )
+        try:
+            document, _ = await self._async_request_json(
+                f"{_API_BASE_URL}/status/{quote(evse_id, safe='')}",
+                evse_id=evse_id,
+            )
+        except _BelgiumEVSENotFound:
+            return None
         return document
 
     async def _async_request_json(
@@ -254,6 +261,8 @@ class BelgiumDatexClient:
                     raise AuthenticationError(
                         "Eco-Movement rejected the Belgium API credentials"
                     )
+                if response.status == 404 and evse_id is not None:
+                    raise _BelgiumEVSENotFound
                 if response.status == 429:
                     retry_after = retry_after_seconds(
                         response.headers.get("Retry-After")
@@ -360,6 +369,9 @@ class BelgiumChargingProvider(BaseChargingProvider):
                     updated.append(station)
                     continue
                 document = await self._client.async_get_evse_status(station.evse_id)
+                if document is None:
+                    updated.append(station)
+                    continue
                 try:
                     status_record = _evse_status_record(document, station.provider_id)
                 except InvalidProviderResponseError as err:

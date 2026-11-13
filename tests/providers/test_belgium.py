@@ -345,6 +345,30 @@ async def test_belgium_provider_maps_location_evse_connectors_and_status(monkeyp
 
 
 @pytest.mark.asyncio
+async def test_belgium_unknown_evse_status_does_not_fail_other_stations():
+    session = FakeSession(
+        [
+            FakeResponse(_locations_document_with_evse_count(2)),
+            FakeResponse({}, status=404),
+            FakeResponse(_status_document(evse_id="evse-internal-1")),
+        ]
+    )
+    provider = BelgiumChargingProvider(
+        BelgiumDatexClient(session, "token", NoWaitLimiter())
+    )
+
+    stations = (await provider.async_get_stations(50.85, 4.35, 1000, 10)).nearby
+
+    assert [station.provider_id for station in stations] == [
+        "evse-internal-0",
+        "evse-internal-1",
+    ]
+    assert not stations[0].availability_reported
+    assert stations[1].has_available_connectors is True
+    assert len(session.requests) == 3
+
+
+@pytest.mark.asyncio
 async def test_belgium_missing_dynamic_timestamp_uses_static_provenance():
     status_document = _status_document()
     status_record = status_document["messageContainer"]["payload"][0][

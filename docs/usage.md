@@ -86,8 +86,9 @@ New `energyProduct` tariffs, VAT calculations, and ambiguous multi-rate prices
 remain unsupported; missing or explicitly tax-exclusive dynamic prices remain
 unknown rather than being presented as a final driver price.
 Missing status remains unknown; failed updates make coordinator entities
-unavailable instead of inferring charger state. See the
-[Transportdata.be dataset][belgium-dataset].
+unavailable instead of inferring charger state. A per-EVSE `404` is treated as
+missing status for that station and does not fail the other station updates.
+See the [Transportdata.be dataset][belgium-dataset].
 
 ### NOBIL (Norway and Sweden)
 
