@@ -1,0 +1,90 @@
+{
+  "modelBaseVersionG": "3",
+  "profileNameG": "AFIR Energy Infrastructure",
+  "profileVersionG": "01-00-00",
+  "aegiEnergyInfrastructureTablePublication": {
+    "energyInfrastructureTable": [
+      {
+        "energyInfrastructureSite": [
+          {
+            "idG": "example-site",
+            "entrance": [
+              {
+                "locAreaLocation": {
+                  "coordinatesForDisplay": {
+                    "latitude": 50.85,
+                    "longitude": 4.35
+                  },
+                  "locLocationExtensionG": {
+                    "FacilityLocation": {
+                      "address": {
+                        "countryCode": "BE",
+                        "postcode": "1000",
+                        "city": {"value": "Example City"},
+                        "addressLine": [
+                          {"order": 0, "text": {"value": "Example Street 1"}}
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            ],
+            "energyDistributor": {
+              "afacAnOrganisation": {"name": {"value": "Example Organisation"}}
+            },
+            "energyInfrastructureStation": [
+              {
+                "idG": "example-station",
+                "refillPoint": [
+                  {
+                    "aegiElectricChargingPoint": {
+                      "idG": "BE-EXAMPLE-1",
+                      "currentType": {"value": "dc"},
+                      "numberOfConnectors": 1,
+                      "connector": [
+                        {
+                          "externalIdentifier": [
+                            {
+                              "identifier": "BE*EXAMPLE*1",
+                              "typeOfIdentifier": {
+                                "value": "extendedG",
+                                "extendedValueG": "evseId"
+                              }
+                            }
+                          ],
+                          "connectorType": {"value": "iec62196T2COMBO"},
+                          "maxPowerAtSocket": 50000
+                        }
+                      ],
+                      "energyProduct": [
+                        {
+                          "aegiElectricEnergy": {
+                            "energyRate": [
+                              {
+                                "ratePolicy": {"value": "adHoc"},
+                                "applicableCurrency": ["EUR"],
+                                "energyPrice": [
+                                  {
+                                    "priceType": {"value": "pricePerKWh"},
+                                    "value": 0.4,
+                                    "taxIncluded": false,
+                                    "taxRate": 21
+                                  }
+                                ]
+                              }
+                            ]
+                          }
+                        }
+                      ]
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

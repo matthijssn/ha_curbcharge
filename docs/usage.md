@@ -57,24 +57,38 @@ only if you are authorized to access the API and have reviewed the applicable
 terms. Eco-Movement issues these tokens; request access by emailing
 [Eco-Movement support](mailto:support@eco-movement.com).
 
-The `/locations` snapshot refreshes every 24 hours. Eco-Movement documents
-status updates on change and within one minute, but CurbCharge reads them on
-its scheduled polls; the default interval is five minutes and quotas may add
-further delay. The limits are one request per 10 seconds per source IP, 30
-location requests per hour per token, and two status requests per minute per
-EVSE per token. The provider uses a shared Home Assistant request limiter; a
-refresh can therefore take several minutes when many EVSEs need status updates.
+The `/locations` endpoint is paginated, with 1,000 sites per page. CurbCharge
+follows every next-page link before selecting nearby stations or favourites;
+only a complete validated static snapshot is cached, for 23 hours. Initial setup
+and an uncached refresh can take several minutes. Each page counts toward the
+shared limit of 30 location requests per rolling hour per token; pages are not
+artificially spaced two minutes apart. The other limits remain one request per
+10 seconds per source IP and two status requests per minute per EVSE per token.
+A token whose quota is exhausted must wait for earlier requests to leave the
+rolling window.
+
+Eco-Movement's responses have a 60-second cache and the locations feed also
+contains dynamic data. CurbCharge currently caches only static infrastructure
+and requests status per selected EVSE on its scheduled polls; the default
+interval is five minutes and quotas may add further delay. Bulk-status refresh
+is not implemented. A refresh can therefore take several minutes when many
+EVSEs need status updates.
 A `Retry-After` response pauses requests from all Belgium entries sharing that
 limiter. If a token expires or is revoked, the integration prompts for a
 replacement token and validates it before updating the entry.
 
-Eco-Movement access approval, applicable terms/licensing, and live Belgian
-payload compatibility have not been verified. Treat them as release blockers.
-Tests use sanitized synthetic examples based on the published DATEX profile;
-no recorded production response is committed.
+The official documentation describes free token access and a CC BY 4.0 licence;
+review those terms before use. Static parsing is covered by synthetic examples
+matching the response structure reported in issue #380, including root
+publications and entrance coordinates. Complete live endpoint compatibility
+has not been verified. No recorded production response is committed.
+New `energyProduct` tariffs, VAT calculations, and ambiguous multi-rate prices
+remain unsupported; missing or explicitly tax-exclusive dynamic prices remain
+unknown rather than being presented as a final driver price.
 Missing status remains unknown; failed updates make coordinator entities
-unavailable instead of inferring charger state. See the
-[Transportdata.be dataset][belgium-dataset].
+unavailable instead of inferring charger state. A per-EVSE `404` is treated as
+missing status for that station and does not fail the other station updates.
+See the [Transportdata.be dataset][belgium-dataset].
 
 ### NOBIL (Norway and Sweden)
 
@@ -456,7 +470,8 @@ provider.
    an entity with valid coordinates, then set the search radius and maximum
    station count.
 3. Select **Eco-Movement Belgium**. On the next step, paste the token into the
-   password field; CurbCharge validates it before creating the config entry.
+   password field without an authentication prefix; CurbCharge adds `Bearer`
+   and validates the paginated locations before creating the config entry.
 4. Keep the token private. It is stored in the config entry and redacted from
    diagnostics; never include it in screenshots, logs, or issue reports. If
    the token expires or is revoked, Home Assistant starts reauthentication so
@@ -888,6 +903,10 @@ chosen by the user. See the
 - **Belgium requests are rate limited:** Wait for the provider's `Retry-After`
   interval. All Belgium entries on the same Home Assistant host share the
   per-IP limiter; see the documented per-token limits above.
+- **Belgium setup reports an unexpected format:** Check the Home Assistant logs
+  for `Belgium DATEX II locations validation failed`. The warning identifies a
+  parsing stage or field without printing your token or response body. Include
+  that warning in a support request, not the Authorization header or dataset.
 - **Belgium availability is unknown:** Static location data refreshes daily and
   dynamic status is requested per EVSE. A location can exist without a current
   status report; CurbCharge leaves that availability unknown.
@@ -958,7 +977,7 @@ and restart Home Assistant.
 [dotnl]: https://english.ndw.nu/dataportals/dot-nl
 [geojson-api]: https://docs.ndw.nu/data-uitwisseling/interface-beschrijvingen/dafne-api/dafne_api_consumer_pull/
 [tariffs]: https://opendata.ndw.nu/charging_point_tariffs_ocpi.json.gz
-[belgium-datex-api]: https://developers.eco-movement.com/docs/belgium-datex-ii-api
+[belgium-datex-api]: https://developers.eco-movement.com/v5/docs/belgium-datex-ii
 [belgium-dataset]: https://transportdata.be/en/dataset/public-charging-infrastructure-static-dataset-selected-cpos-datex-ii
 [nobil]: https://nobil.no
 [nobil-api]: https://info.nobil.no/api
