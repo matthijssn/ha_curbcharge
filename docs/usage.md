@@ -83,13 +83,14 @@ limiter. If a token expires or is revoked, the integration prompts for a
 replacement token and validates it before updating the entry.
 
 The official documentation describes free token access and a CC BY 4.0 licence;
-review those terms before use. Static parsing is covered by synthetic examples
-matching the response structure reported in issue #380, including root
-publications and entrance coordinates. Complete live endpoint compatibility
-has not been verified. No recorded production response is committed.
-New `energyProduct` tariffs, VAT calculations, and ambiguous multi-rate prices
-remain unsupported; missing or explicitly tax-exclusive dynamic prices remain
-unknown rather than being presented as a final driver price.
+review those terms before use. Parsing has been checked against the live
+endpoint; no recorded production response is committed. The feed publishes
+ad-hoc prices excluding VAT together with their tax rate, so CurbCharge applies
+that rate to present a gross price per kWh, per minute, and per session. Status
+price updates omit their currency and use the static rate's currency instead.
+Time-limited prices, prices without a usable tax rate, and EVSEs with several
+energy prices (price groups) remain unknown rather than guessed. Many operators
+publish no price at all for their EVSEs.
 Missing status remains unknown; failed updates make coordinator entities
 unavailable instead of inferring charger state. A per-EVSE `404` is treated as
 missing status for that station and does not fail the other station updates.

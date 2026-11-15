@@ -175,7 +175,11 @@ async def test_root_locations_validate_and_map_entrance_and_connector_identity()
     assert station.location.provider_id == "example-site"
     assert station.connectors[0].connector_type_id is ConnectorTypeId.CCS_COMBO_2
     assert station.connectors[0].max_power_kw == 50
-    assert station.tariff is None
+    assert station.tariff is not None
+    # The live feed publishes 0.40 EUR/kWh excluding 21% VAT.
+    assert station.tariff.currency == "EUR"
+    assert station.tariff.price_per_kwh == Decimal("0.484")
+    assert station.tariff.vat_percentage == Decimal("21")
 
 
 def _status_document(
@@ -1742,28 +1746,160 @@ async def test_exhausted_location_quota_does_not_block_another_token(monkeypatch
     await other
 
 
-def test_static_tax_exclusive_price_is_not_published_as_a_driver_price():
-    evse = {
-        "electricEnergy": [
+def _live_rate(*prices: dict[str, Any], currency: bool = True) -> dict[str, Any]:
+    rate: dict[str, Any] = {
+        "idG": "RATE-1",
+        "ratePolicy": {"value": "adHoc"},
+        "energyPrice": list(prices),
+    }
+    if currency:
+        rate["applicableCurrency"] = ["EUR"]
+    return rate
+
+
+def _live_price(
+    price_type: str, value: float, *, tax_rate: object = 21, **extra: Any
+) -> dict[str, Any]:
+    return {
+        "priceGroupIndex": 0,
+        "priceType": {"value": price_type},
+        "value": value,
+        "taxIncluded": False,
+        "taxRate": tax_rate,
+        **extra,
+    }
+
+
+def _live_evse(*rates: dict[str, Any]) -> dict[str, Any]:
+    return {"energyProduct": [{"aegiElectricEnergy": {"energyRate": list(rates)}}]}
+
+
+def test_static_tax_exclusive_prices_are_published_including_vat():
+    tariff = belgium._static_ad_hoc_tariff(
+        _live_evse(
+            _live_rate(
+                _live_price("pricePerKWh", 0.3722),
+                _live_price("pricePerMinute", 0.05),
+                _live_price("flatRate", 1),
+            )
+        ),
+        "Example",
+    )
+
+    assert tariff is not None
+    assert tariff.currency == "EUR"
+    assert tariff.price_per_kwh == Decimal("0.450362")
+    assert tariff.price_per_minute == Decimal("0.0605")
+    assert tariff.session_fee == Decimal("1.21")
+    assert tariff.vat_percentage == Decimal("21")
+
+
+def test_static_price_accepts_fractional_tax_rate_and_included_tax():
+    fractional = belgium._static_ad_hoc_tariff(
+        _live_evse(_live_rate(_live_price("pricePerKWh", 0.4, tax_rate=0.21))),
+        "Example",
+    )
+    assert fractional is not None
+    assert fractional.price_per_kwh == Decimal("0.484")
+    assert str(fractional.vat_percentage) == "21"
+
+    included = belgium._static_ad_hoc_tariff(
+        _live_evse(
+            _live_rate(_live_price("pricePerKWh", 0.5, taxIncluded=True, taxRate=None))
+        ),
+        "Example",
+    )
+    assert included is not None
+    assert included.price_per_kwh == Decimal("0.5")
+    assert included.vat_percentage is None
+
+    zero_rated = belgium._static_ad_hoc_tariff(
+        _live_evse(_live_rate(_live_price("pricePerKWh", 0.4, tax_rate=0))),
+        "Example",
+    )
+    assert zero_rated is not None
+    assert zero_rated.price_per_kwh == Decimal("0.4")
+    assert str(zero_rated.vat_percentage) == "0"
+
+
+@pytest.mark.parametrize(
+    "prices",
+    [
+        # Without a usable tax rate the gross price is unknown.
+        [_live_price("pricePerKWh", 0.4, tax_rate=None)],
+        [_live_price("pricePerKWh", 0.4, tax_rate="unknown")],
+        [_live_price("pricePerKWh", 0.4, tax_rate=True)],
+        [_live_price("pricePerKWh", 0.4, tax_rate=150)],
+        # Time-limited prices are not the current ad-hoc price.
+        [_live_price("pricePerKWh", 0.4, timeBasedApplicability={})],
+        # Several price groups make the energy price ambiguous.
+        [
+            _live_price("pricePerKWh", 0.3725),
+            _live_price("pricePerKWh", 0.3722, priceGroupIndex=1),
+        ],
+        # A tariff without an energy price is not published.
+        [_live_price("pricePerMinute", 0.05)],
+    ],
+)
+def test_static_price_is_omitted_when_not_unambiguous(prices):
+    assert (
+        belgium._static_ad_hoc_tariff(_live_evse(_live_rate(*prices)), "Example")
+        is None
+    )
+
+
+def test_static_price_ignores_empty_live_energy_products():
+    assert belgium._static_ad_hoc_tariff(_live_evse(), "Example") is None
+    assert (
+        belgium._static_ad_hoc_tariff(
+            {"energyProduct": [{"aegiElectricEnergy": {}}, {}]}, "Example"
+        )
+        is None
+    )
+
+
+def test_status_price_without_currency_uses_static_tariff_currency():
+    """Live status updates only reference the static rate, without currency."""
+    status = {
+        "energyRateUpdate": [
             {
-                "energyRate": [
-                    {
-                        "ratePolicy": "adHoc",
-                        "applicableCurrency": ["EUR"],
-                        "energyPrice": [
-                            {
-                                "priceType": "pricePerKWh",
-                                "value": 0.4,
-                                "taxIncluded": False,
-                                "taxRate": 21,
-                            }
-                        ],
-                    }
-                ]
+                "energyRateReference": {"targetClass": "EnergyRate", "idG": "RATE-1"},
+                "energyPrice": [_live_price("pricePerKWh", 0.5)],
             }
         ]
     }
-    assert belgium._static_ad_hoc_tariff(evse, "Example") is None
+
+    assert belgium._ad_hoc_tariff(status, "Example") is None
+    tariff = belgium._ad_hoc_tariff(status, "Example", "EUR")
+    assert tariff is not None
+    assert tariff.currency == "EUR"
+    assert tariff.price_per_kwh == Decimal("0.605")
+
+
+@pytest.mark.asyncio
+async def test_belgium_live_status_price_replaces_static_price():
+    locations = _root_locations_document()
+    status = _status_document(evse_id="BE-EXAMPLE-1")
+    record = belgium._evse_status_record(
+        status["messageContainer"]["payload"][0], "BE-EXAMPLE-1"
+    )
+    assert record is not None
+    record["energyRateUpdate"] = [
+        {
+            "energyRateReference": {"targetClass": "EnergyRate", "idG": "RATE-1"},
+            "energyPrice": [_live_price("pricePerKWh", 0.5)],
+        }
+    ]
+    session = FakeSession([FakeResponse(locations), FakeResponse(status)])
+    provider = BelgiumChargingProvider(
+        BelgiumDatexClient(session, "token", NoWaitLimiter())
+    )
+
+    station = (await provider.async_get_stations(50.85, 4.35, 1000, 10)).nearby[0]
+
+    assert station.tariff is not None
+    assert station.tariff.currency == "EUR"
+    assert station.tariff.price_per_kwh == Decimal("0.605")
 
 
 def test_root_evse_status_uses_external_id_and_falls_back_to_internal_id():
