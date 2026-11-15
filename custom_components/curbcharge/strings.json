@@ -207,7 +207,8 @@
         "title": "CurbCharge options",
         "menu_options": {
           "general": "General settings",
-          "personalization": "Personalization"
+          "personalization": "Personalization",
+          "ev_estimates": "EV charge estimates"
         }
       },
       "general": {
@@ -237,6 +238,29 @@
           "require_available": "Only include stations when a matching connector group reports available connectors.",
           "favourites": "Select charging points by name. Favourites remain available outside the search radius and are added beyond the nearby station limit.",
           "location_movement_threshold": "Minimum distance the selected entity must move before the search location is updated. Set to 0 to disable the threshold."
+        }
+      },
+      "ev_estimates": {
+        "title": "EV charge estimates",
+        "data": {
+          "soc_entity": "Battery state-of-charge sensor",
+          "soc_attribute": "State-of-charge attribute (optional)",
+          "capacity_entity": "Usable battery capacity sensor",
+          "capacity_attribute": "Battery capacity attribute (optional)",
+          "power_entity": "Vehicle charging-power sensor (optional)",
+          "power_attribute": "Charging-power attribute (optional)",
+          "target_soc": "Target charge (%)",
+          "assumed_power_kw": "Assumed vehicle charging power (kW)"
+        },
+        "data_description": {
+          "soc_entity": "Required together with usable capacity. The sensor state must report %; a selected attribute is interpreted as a percentage.",
+          "soc_attribute": "Read a numeric attribute instead of the sensor state; its value is interpreted in % without conversion.",
+          "capacity_entity": "Required together with state of charge. The sensor state must report kWh; a selected attribute is interpreted as kWh.",
+          "capacity_attribute": "Read a numeric attribute instead of the sensor state; its value is interpreted in kWh without conversion.",
+          "power_entity": "Optional and used only for duration. The sensor state must report kW; a selected attribute is interpreted as kW. Invalid or unavailable values do not fall back.",
+          "power_attribute": "Read a numeric attribute instead of the sensor state; its value is interpreted in kW without conversion.",
+          "target_soc": "Choose a target from 0 to 100%. Defaults to 100%. A target below current charge means zero energy is needed.",
+          "assumed_power_kw": "Optional alternative to a power sensor for duration. Enter a finite positive kW value; do not set both power sources."
         }
       },
       "personalization": {
@@ -271,7 +295,9 @@
       "invalid_discovery_filters": "Enter valid discovery filters. Minimum power must be a finite positive number.",
       "invalid_favourites": "One or more selected favourites are no longer available. Refresh the options and try again.",
       "invalid_personalization_profile": "Enter a valid profile. Power and price must be finite and nonnegative, a maximum price needs a three-letter currency, operator references need a supported provider prefix, and an operator cannot be both preferred and excluded.",
-      "invalid_saved_personalization_profile": "The saved personalization profile is malformed or uses an unsupported schema version. Review the fields and save a valid profile to replace it."
+      "invalid_saved_personalization_profile": "The saved personalization profile is malformed or uses an unsupported schema version. Review the fields and save a valid profile to replace it.",
+      "invalid_ev_estimate_settings": "Use state-of-charge and capacity sensors together, choose a power sensor or a positive assumed power (not both), and set a target from 0 to 100%.",
+      "invalid_saved_ev_estimate_settings": "Saved EV estimate settings are invalid. Review the sensors, attributes, and target, then save them again."
     }
   },
   "services": {
@@ -478,6 +504,12 @@
       },
       "fastest_available_charger": {
         "name": "Fastest available charger"
+      },
+      "estimated_charging_cost": {
+        "name": "Estimated charging cost"
+      },
+      "estimated_charging_duration": {
+        "name": "Estimated charging duration"
       },
       "top_nearby_chargers": {
         "name": "Top nearby chargers"

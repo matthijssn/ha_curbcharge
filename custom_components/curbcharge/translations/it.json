@@ -207,7 +207,8 @@
         "title": "Opzioni CurbCharge",
         "menu_options": {
           "general": "Impostazioni generali",
-          "personalization": "Personalizzazione"
+          "personalization": "Personalizzazione",
+          "ev_estimates": "Stime di ricarica EV"
         }
       },
       "general": {
@@ -239,6 +240,29 @@
           "location_movement_threshold": "Distanza minima che l'entità selezionata deve percorrere prima che la posizione di ricerca venga aggiornata. Imposta 0 per disattivare la soglia."
         }
       },
+      "ev_estimates": {
+        "title": "Stime di ricarica EV",
+        "data": {
+          "soc_entity": "Sensore del livello di carica della batteria",
+          "soc_attribute": "Attributo del livello di carica (facoltativo)",
+          "capacity_entity": "Sensore della capacità utilizzabile della batteria",
+          "capacity_attribute": "Attributo della capacità della batteria (facoltativo)",
+          "power_entity": "Sensore della potenza di ricarica del veicolo (facoltativo)",
+          "power_attribute": "Attributo della potenza di ricarica (facoltativo)",
+          "target_soc": "Livello di carica obiettivo (%)",
+          "assumed_power_kw": "Potenza di ricarica ipotizzata del veicolo (kW)"
+        },
+        "data_description": {
+          "soc_entity": "Richiesto insieme alla capacità utilizzabile. Lo stato del sensore deve essere in %; un attributo selezionato viene interpretato come percentuale.",
+          "soc_attribute": "Legge un attributo numerico invece dello stato del sensore; il valore viene interpretato in % senza conversione.",
+          "capacity_entity": "Richiesto insieme al livello di carica. Lo stato del sensore deve essere in kWh; un attributo selezionato viene interpretato in kWh.",
+          "capacity_attribute": "Legge un attributo numerico invece dello stato del sensore; il valore viene interpretato in kWh senza conversione.",
+          "power_entity": "Facoltativo e usato solo per la durata. Lo stato del sensore deve essere in kW; un attributo selezionato viene interpretato in kW. I valori non validi o non disponibili non usano un ripiego.",
+          "power_attribute": "Legge un attributo numerico invece dello stato del sensore; il valore viene interpretato in kW senza conversione.",
+          "target_soc": "Scegli un obiettivo da 0 a 100%. Il valore predefinito è 100%. Un obiettivo inferiore al livello attuale significa che non serve energia.",
+          "assumed_power_kw": "Alternativa facoltativa al sensore di potenza per la durata. Inserisci un valore finito e positivo in kW; non impostare entrambe le fonti."
+        }
+      },
       "personalization": {
         "title": "Personalizzazione",
         "data": {
@@ -268,6 +292,8 @@
       }
     },
     "error": {
+      "invalid_ev_estimate_settings": "Imposta insieme i sensori del livello di carica e della capacità, scegli un sensore di potenza oppure una potenza ipotizzata positiva (non entrambi) e definisci un obiettivo da 0 a 100%.",
+      "invalid_saved_ev_estimate_settings": "Le impostazioni EV salvate non sono valide. Controlla sensori, attributi e obiettivo, quindi salvale di nuovo.",
       "invalid_discovery_filters": "Inserisci filtri di ricerca validi. La potenza minima deve essere un numero positivo finito.",
       "invalid_favourites": "Uno o più preferiti selezionati non sono più disponibili. Aggiorna le opzioni e riprova.",
       "invalid_personalization_profile": "Inserisci un profilo valido. Potenza e prezzo devono essere finiti e non negativi, un prezzo massimo richiede una valuta di tre lettere, i riferimenti agli operatori richiedono un prefisso di fornitore supportato e un operatore non può essere sia preferito sia escluso.",
@@ -478,6 +504,12 @@
       },
       "fastest_available_charger": {
         "name": "Colonnina disponibile più veloce"
+      },
+      "estimated_charging_cost": {
+        "name": "Costo di ricarica stimato"
+      },
+      "estimated_charging_duration": {
+        "name": "Durata di ricarica stimata"
       },
       "top_nearby_chargers": {
         "name": "Migliori colonnine nelle vicinanze"

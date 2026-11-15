@@ -25,6 +25,15 @@ from .const import (
     CONF_CONNECTOR_TYPE_IDS,
     CONF_CONNECTOR_TYPES,
     CONF_DEVICE_TRACKERS,
+    CONF_EV_ASSUMED_POWER_KW,
+    CONF_EV_CAPACITY_ATTRIBUTE,
+    CONF_EV_CAPACITY_ENTITY,
+    CONF_EV_ESTIMATES,
+    CONF_EV_POWER_ATTRIBUTE,
+    CONF_EV_POWER_ENTITY,
+    CONF_EV_SOC_ATTRIBUTE,
+    CONF_EV_SOC_ENTITY,
+    CONF_EV_TARGET_SOC,
     CONF_EXCLUDED_OPERATORS,
     CONF_FAVOURITES,
     CONF_INCLUDE_UNKNOWN,
@@ -48,6 +57,7 @@ from .const import (
     CONF_UNKNOWN_DATA_POLICY,
     CONFIG_ENTRY_VERSION,
     DEFAULT_DEVICE_TRACKERS,
+    DEFAULT_EV_TARGET_SOC,
     DEFAULT_INCLUDE_UNKNOWN,
     DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
     DEFAULT_MAX_STATIONS,
@@ -85,6 +95,7 @@ from .models import (
     ChargingStation,
     ConnectorTypeId,
     DiscoveryFilterSettings,
+    EVEstimateSettings,
     FavouriteStationReference,
     PersonalizationProfile,
     PersonalizationRankingPreset,
@@ -500,6 +511,79 @@ def personalization_schema(profile: PersonalizationProfile) -> FlowSchema:
                     translation_key="personalization_unknown_data_policy",
                 )
             ),
+        }
+    )
+
+
+def ev_estimates_schema(settings: EVEstimateSettings) -> FlowSchema:
+    """Return the editable vehicle inputs for native charge estimates."""
+    return vol.Schema(
+        {
+            vol.Optional(CONF_EV_SOC_ENTITY, default=settings.soc_entity): vol.Any(
+                None,
+                selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            ),
+            vol.Optional(
+                CONF_EV_SOC_ATTRIBUTE, default=settings.soc_attribute
+            ): vol.Any(None, selector.TextSelector()),
+            vol.Optional(
+                CONF_EV_CAPACITY_ENTITY, default=settings.capacity_entity
+            ): vol.Any(
+                None,
+                selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            ),
+            vol.Optional(
+                CONF_EV_CAPACITY_ATTRIBUTE, default=settings.capacity_attribute
+            ): vol.Any(None, selector.TextSelector()),
+            vol.Optional(CONF_EV_POWER_ENTITY, default=settings.power_entity): vol.Any(
+                None,
+                selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            ),
+            vol.Optional(
+                CONF_EV_POWER_ATTRIBUTE, default=settings.power_attribute
+            ): vol.Any(None, selector.TextSelector()),
+            vol.Required(
+                CONF_EV_TARGET_SOC, default=settings.target_soc
+            ): selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=0,
+                    max=100,
+                    step=1,
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            ),
+            vol.Optional(
+                CONF_EV_ASSUMED_POWER_KW, default=settings.assumed_power_kw
+            ): vol.Any(
+                None,
+                selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=0,
+                        step="any",
+                        mode=selector.NumberSelectorMode.BOX,
+                    )
+                ),
+            ),
+        }
+    )
+
+
+def _ev_estimate_settings_from_input(
+    user_input: Mapping[str, Any],
+) -> EVEstimateSettings:
+    """Validate form input and return normalized vehicle estimate settings."""
+    return EVEstimateSettings.from_config(
+        {
+            CONF_EV_SOC_ENTITY: user_input.get(CONF_EV_SOC_ENTITY),
+            CONF_EV_SOC_ATTRIBUTE: user_input.get(CONF_EV_SOC_ATTRIBUTE),
+            CONF_EV_CAPACITY_ENTITY: user_input.get(CONF_EV_CAPACITY_ENTITY),
+            CONF_EV_CAPACITY_ATTRIBUTE: user_input.get(CONF_EV_CAPACITY_ATTRIBUTE),
+            CONF_EV_POWER_ENTITY: user_input.get(CONF_EV_POWER_ENTITY),
+            CONF_EV_POWER_ATTRIBUTE: user_input.get(CONF_EV_POWER_ATTRIBUTE),
+            CONF_EV_TARGET_SOC: user_input.get(
+                CONF_EV_TARGET_SOC, DEFAULT_EV_TARGET_SOC
+            ),
+            CONF_EV_ASSUMED_POWER_KW: user_input.get(CONF_EV_ASSUMED_POWER_KW),
         }
     )
 
@@ -1399,23 +1483,33 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 class CurbChargeOptionsFlow(config_entries.OptionsFlow):
-    """Edit general settings and optional personalization."""
+    """Edit general, personalization, and EV estimate settings."""
 
     async def async_step_init(
         self, _user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Show the general and personalization options menu."""
+        """Show the options menu or surface malformed saved settings."""
         try:
             self._saved_personalization_profile()
         except ValueError:
             return await self.async_step_personalization()
+        try:
+            self._saved_ev_estimate_settings()
+        except ValueError:
+            return await self.async_step_ev_estimates()
         return self.async_show_menu(
-            step_id="init", menu_options=["general", "personalization"]
+            step_id="init",
+            menu_options=["general", "personalization", "ev_estimates"],
         )
 
     def _saved_personalization_profile(self) -> PersonalizationProfile:
         return PersonalizationProfile.from_config(
             self.config_entry.options.get(CONF_PERSONALIZATION)
+        )
+
+    def _saved_ev_estimate_settings(self) -> EVEstimateSettings:
+        return EVEstimateSettings.from_config(
+            self.config_entry.options.get(CONF_EV_ESTIMATES)
         )
 
     async def async_step_general(
@@ -1427,6 +1521,7 @@ class CurbChargeOptionsFlow(config_entries.OptionsFlow):
         if provider_id not in SUPPORTED_PROVIDER_IDS:
             provider_id = PROVIDER_NDW_DOT_NL
         saved_profile = self._saved_personalization_profile()
+        saved_ev_estimates = self._saved_ev_estimate_settings()
         saved_favourites = parse_favourite_references(
             defaults.get(CONF_FAVOURITES, []), provider_id
         )
@@ -1479,6 +1574,8 @@ class CurbChargeOptionsFlow(config_entries.OptionsFlow):
             }
             if CONF_PERSONALIZATION in self.config_entry.options:
                 data[CONF_PERSONALIZATION] = saved_profile.as_config()
+            if CONF_EV_ESTIMATES in self.config_entry.options:
+                data[CONF_EV_ESTIMATES] = saved_ev_estimates.as_config()
             if discovery_filters is not None:
                 data.update(discovery_filters.as_config())
             if defaults.get(CONF_LOCATION_SOURCE) == LOCATION_ENTITY:
@@ -1497,6 +1594,42 @@ class CurbChargeOptionsFlow(config_entries.OptionsFlow):
             self,
             step_id="general",
             data_schema=options_schema(defaults, favourite_options=favourite_options),
+        )
+
+    async def async_step_ev_estimates(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Validate and save optional vehicle inputs for charge estimates."""
+        try:
+            settings = self._saved_ev_estimate_settings()
+            saved_settings_invalid = False
+        except ValueError:
+            settings = EVEstimateSettings()
+            saved_settings_invalid = True
+
+        if user_input is not None:
+            try:
+                settings = _ev_estimate_settings_from_input(user_input)
+            except ValueError:
+                return _show_form(
+                    self,
+                    step_id="ev_estimates",
+                    data_schema=ev_estimates_schema(settings),
+                    errors={"base": "invalid_ev_estimate_settings"},
+                )
+            options = dict(self.config_entry.options)
+            options[CONF_EV_ESTIMATES] = settings.as_config()
+            return self.async_create_entry(title="", data=options)
+
+        return _show_form(
+            self,
+            step_id="ev_estimates",
+            data_schema=ev_estimates_schema(settings),
+            errors=(
+                {"base": "invalid_saved_ev_estimate_settings"}
+                if saved_settings_invalid
+                else None
+            ),
         )
 
     async def async_step_personalization(

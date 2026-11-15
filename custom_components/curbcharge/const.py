@@ -24,6 +24,15 @@ CONF_MIN_POWER_KW = "min_power_kw"
 CONF_REQUIRE_AVAILABLE = "require_available"
 CONF_FAVOURITES = "favourites"
 CONF_PERSONALIZATION = "personalization"
+CONF_EV_ESTIMATES = "ev_estimates"
+CONF_EV_SOC_ENTITY = "soc_entity"
+CONF_EV_SOC_ATTRIBUTE = "soc_attribute"
+CONF_EV_CAPACITY_ENTITY = "capacity_entity"
+CONF_EV_CAPACITY_ATTRIBUTE = "capacity_attribute"
+CONF_EV_POWER_ENTITY = "power_entity"
+CONF_EV_POWER_ATTRIBUTE = "power_attribute"
+CONF_EV_TARGET_SOC = "target_soc"
+CONF_EV_ASSUMED_POWER_KW = "assumed_power_kw"
 PERSONALIZATION_PROFILE_VERSION = 1
 CONF_PERSONALIZATION_VERSION = "schema_version"
 CONF_PERSONALIZATION_ENABLED = "enabled"
@@ -122,6 +131,7 @@ DEFAULT_DEVICE_TRACKERS = True
 DEFAULT_CONNECTOR_TYPES: tuple[str, ...] = ()
 DEFAULT_MIN_POWER_KW: float | None = None
 DEFAULT_REQUIRE_AVAILABLE = False
+DEFAULT_EV_TARGET_SOC = 100
 NDW_CONNECTOR_TYPE_SELECTOR_OPTIONS = (
     ("type-2", "IEC_62196_T2"),
     ("ccs-combo-2", "IEC_62196_T2_COMBO"),

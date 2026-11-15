@@ -207,7 +207,8 @@
         "title": "CurbCharge-opties",
         "menu_options": {
           "general": "Algemene instellingen",
-          "personalization": "Personalisatie"
+          "personalization": "Personalisatie",
+          "ev_estimates": "EV-laadschattingen"
         }
       },
       "general": {
@@ -239,6 +240,29 @@
           "location_movement_threshold": "Minimale afstand die de geselecteerde entiteit moet afleggen voordat de zoeklocatie wordt bijgewerkt. Stel in op 0 om de drempel uit te schakelen."
         }
       },
+      "ev_estimates": {
+        "title": "EV-laadschattingen",
+        "data": {
+          "soc_entity": "Sensor voor acculaadniveau (%)",
+          "soc_attribute": "Attribuut voor acculaadniveau (optioneel)",
+          "capacity_entity": "Sensor voor bruikbare accucapaciteit (kWh)",
+          "capacity_attribute": "Attribuut voor accucapaciteit (optioneel)",
+          "power_entity": "Sensor voor laadvermogen van het voertuig (kW)",
+          "power_attribute": "Attribuut voor laadvermogen (optioneel)",
+          "target_soc": "Doellaadniveau (%)",
+          "assumed_power_kw": "Aangenomen laadvermogen van het voertuig (kW)"
+        },
+        "data_description": {
+          "soc_entity": "Vereist samen met bruikbare accucapaciteit. De sensorstatus moet % rapporteren; een gekozen attribuut wordt als percentage geïnterpreteerd.",
+          "soc_attribute": "Lees een numeriek attribuut in plaats van de sensorstatus; de waarde wordt zonder conversie als % geïnterpreteerd.",
+          "capacity_entity": "Vereist samen met het acculaadniveau. De sensorstatus moet kWh rapporteren; een gekozen attribuut wordt als kWh geïnterpreteerd.",
+          "capacity_attribute": "Lees een numeriek attribuut in plaats van de sensorstatus; de waarde wordt zonder conversie als kWh geïnterpreteerd.",
+          "power_entity": "Optioneel en alleen gebruikt voor de duur. De sensorstatus moet kW rapporteren; een gekozen attribuut wordt als kW geïnterpreteerd. Ongeldige of niet-beschikbare waarden vallen niet terug.",
+          "power_attribute": "Lees een numeriek attribuut in plaats van de sensorstatus; de waarde wordt zonder conversie als kW geïnterpreteerd.",
+          "target_soc": "Kies een doel tussen 0 en 100%. Standaard 100%. Een doel onder het huidige laadniveau betekent dat geen energie nodig is.",
+          "assumed_power_kw": "Optioneel alternatief voor een vermogenssensor voor de duur. Voer een eindige, positieve waarde in kW in; stel niet beide bronnen in."
+        }
+      },
       "personalization": {
         "title": "Personalisatie",
         "data": {
@@ -268,6 +292,8 @@
       }
     },
     "error": {
+      "invalid_ev_estimate_settings": "Gebruik de sensoren voor acculaadniveau en capaciteit samen, kies een vermogenssensor of een positieve aangenomen waarde (niet beide) en stel een doel tussen 0 en 100% in.",
+      "invalid_saved_ev_estimate_settings": "De opgeslagen EV-schattingen zijn ongeldig. Controleer de sensoren, attributen en het doel en sla ze opnieuw op.",
       "invalid_discovery_filters": "Voer geldige filters in. Het minimumvermogen moet een eindig positief getal zijn.",
       "invalid_favourites": "Een of meer geselecteerde favorieten zijn niet meer beschikbaar. Vernieuw de opties en probeer het opnieuw.",
       "invalid_personalization_profile": "Voer een geldig profiel in. Vermogen en prijs moeten eindig en niet-negatief zijn, een maximumprijs vereist een valutacode van drie letters, operatorreferenties vereisen een ondersteund providerprefix en een beheerder kan niet tegelijk voorkeur en uitsluiting zijn.",
@@ -478,6 +504,12 @@
       },
       "fastest_available_charger": {
         "name": "Snelste beschikbare laadpunt"
+      },
+      "estimated_charging_cost": {
+        "name": "Geschatte laadkosten"
+      },
+      "estimated_charging_duration": {
+        "name": "Geschatte laadtijd"
       },
       "top_nearby_chargers": {
         "name": "Top laadpunten in de buurt"

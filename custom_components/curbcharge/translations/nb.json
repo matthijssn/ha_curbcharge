@@ -207,7 +207,8 @@
         "title": "Innstillinger for CurbCharge",
         "menu_options": {
           "general": "Generelle innstillinger",
-          "personalization": "Personlige tilpasninger"
+          "personalization": "Personlige tilpasninger",
+          "ev_estimates": "Estimater for elbillading"
         }
       },
       "general": {
@@ -239,6 +240,29 @@
           "location_movement_threshold": "Minste avstand den valgte entiteten må flytte seg før søkeposisjonen oppdateres. Sett til 0 for å deaktivere terskelen."
         }
       },
+      "ev_estimates": {
+        "title": "Estimater for elbillading",
+        "data": {
+          "soc_entity": "Sensor for batteriets ladenivå",
+          "soc_attribute": "Attributt for ladenivå (valgfritt)",
+          "capacity_entity": "Sensor for brukbar batterikapasitet",
+          "capacity_attribute": "Attributt for batterikapasitet (valgfritt)",
+          "power_entity": "Sensor for kjøretøyets ladeeffekt (valgfritt)",
+          "power_attribute": "Attributt for ladeeffekt (valgfritt)",
+          "target_soc": "Ønsket ladenivå (%)",
+          "assumed_power_kw": "Antatt ladeeffekt for kjøretøyet (kW)"
+        },
+        "data_description": {
+          "soc_entity": "Påkrevd sammen med brukbar batterikapasitet. Sensorverdien må være i %; et valgt attributt tolkes som prosent.",
+          "soc_attribute": "Les et numerisk attributt i stedet for sensorverdien; verdien tolkes i % uten konvertering.",
+          "capacity_entity": "Påkrevd sammen med ladenivå. Sensorverdien må være i kWh; et valgt attributt tolkes som kWh.",
+          "capacity_attribute": "Les et numerisk attributt i stedet for sensorverdien; verdien tolkes i kWh uten konvertering.",
+          "power_entity": "Valgfritt og bare brukt for varighet. Sensorverdien må være i kW; et valgt attributt tolkes som kW. Ugyldige eller utilgjengelige verdier gir ikke reserveverdi.",
+          "power_attribute": "Les et numerisk attributt i stedet for sensorverdien; verdien tolkes i kW uten konvertering.",
+          "target_soc": "Velg et mål fra 0 til 100 %. Standard er 100 %. Et mål under gjeldende ladenivå betyr at ingen energi trengs.",
+          "assumed_power_kw": "Valgfritt alternativ til effektsensor for varighet. Oppgi en endelig, positiv verdi i kW; ikke angi begge effektkildene."
+        }
+      },
       "personalization": {
         "title": "Personlige tilpasninger",
         "data": {
@@ -268,6 +292,8 @@
       }
     },
     "error": {
+      "invalid_ev_estimate_settings": "Angi ladenivå- og kapasitetsensor sammen, velg en effektsensor eller positiv antatt effekt (ikke begge), og sett et mål fra 0 til 100 %.",
+      "invalid_saved_ev_estimate_settings": "De lagrede EV-estimatinnstillingene er ugyldige. Kontroller sensorer, attributter og mål, og lagre på nytt.",
       "invalid_discovery_filters": "Skriv inn gyldige filtre. Minste effekt må være et endelig, positivt tall.",
       "invalid_favourites": "Én eller flere valgte favoritter er ikke lenger tilgjengelige. Oppdater innstillingene og prøv igjen.",
       "invalid_personalization_profile": "Skriv inn en gyldig profil. Effekt og pris må være endelige og ikke-negative. En høyeste pris krever en valutakode med tre bokstaver, operatørreferanser krever et støttet leverandørprefiks, og en operatør kan ikke være både foretrukket og utelukket.",
@@ -478,6 +504,12 @@
       },
       "fastest_available_charger": {
         "name": "Raskeste ledige lader"
+      },
+      "estimated_charging_cost": {
+        "name": "Estimert ladekostnad"
+      },
+      "estimated_charging_duration": {
+        "name": "Estimert ladetid"
       },
       "top_nearby_chargers": {
         "name": "Topprangerte ladere i nærheten"

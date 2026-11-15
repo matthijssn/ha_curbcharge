@@ -18,6 +18,15 @@ from custom_components.curbcharge.const import (
     CONF_CONNECTOR_TYPE_IDS,
     CONF_CONNECTOR_TYPES,
     CONF_DEVICE_TRACKERS,
+    CONF_EV_ASSUMED_POWER_KW,
+    CONF_EV_CAPACITY_ATTRIBUTE,
+    CONF_EV_CAPACITY_ENTITY,
+    CONF_EV_ESTIMATES,
+    CONF_EV_POWER_ATTRIBUTE,
+    CONF_EV_POWER_ENTITY,
+    CONF_EV_SOC_ATTRIBUTE,
+    CONF_EV_SOC_ENTITY,
+    CONF_EV_TARGET_SOC,
     CONF_EXCLUDED_OPERATORS,
     CONF_FAVOURITES,
     CONF_INCLUDE_UNKNOWN,
@@ -62,6 +71,7 @@ from custom_components.curbcharge.coordinator import CurbChargeCoordinator
 from custom_components.curbcharge.models import (
     ConnectorTypeId,
     DiscoveryFilterSettings,
+    EVEstimateSettings,
     FavouriteStationReference,
     PersonalizationProfile,
     PersonalizationRankingPreset,
@@ -240,6 +250,28 @@ def test_discovery_filter_schema_serializes_with_probatio():
     assert fields
 
 
+def test_ev_estimates_schema_serializes_with_probatio():
+    to_field_list = getattr(config_flow.vol, "to_field_list", None)
+    if to_field_list is None:
+        pytest.skip("Probatio field-list serialization is unavailable")
+
+    fields = to_field_list(
+        config_flow.ev_estimates_schema(EVEstimateSettings()),
+        custom_serializer=cv.custom_serializer,
+    )
+
+    assert fields
+
+
+def test_ev_estimates_schema_defaults_to_unconfigured():
+    values = config_flow.ev_estimates_schema(EVEstimateSettings())({})
+
+    assert values[CONF_EV_TARGET_SOC] == 100
+    assert values[CONF_EV_SOC_ENTITY] is None
+    assert values[CONF_EV_CAPACITY_ENTITY] is None
+    assert values[CONF_EV_POWER_ENTITY] is None
+
+
 def test_probatio_filter_schema_uses_serializable_range(monkeypatch):
     voluptuous = import_module("voluptuous")
     probatio = SimpleNamespace(
@@ -322,7 +354,11 @@ def _discovery_filters(
 async def _open_options_step(hass, entry, step_id: str):
     result = await hass.config_entries.options.async_init(entry.entry_id)
     assert result["type"] is FlowResultType.MENU
-    assert set(result["menu_options"]) == {"general", "personalization"}
+    assert set(result["menu_options"]) == {
+        "general",
+        "personalization",
+        "ev_estimates",
+    }
     return await hass.config_entries.options.async_configure(
         result["flow_id"], {"next_step_id": step_id}
     )
@@ -1850,7 +1886,11 @@ async def test_options_flow_menu_keeps_general_options_separate(hass):
     result = await hass.config_entries.options.async_init(entry.entry_id)
 
     assert result["type"] is FlowResultType.MENU
-    assert set(result["menu_options"]) == {"general", "personalization"}
+    assert set(result["menu_options"]) == {
+        "general",
+        "personalization",
+        "ev_estimates",
+    }
     general = await hass.config_entries.options.async_configure(
         result["flow_id"], {"next_step_id": "general"}
     )
@@ -1921,6 +1961,65 @@ async def test_options_flow_saves_versioned_personalization_profile(hass):
     )
 
 
+@pytest.mark.asyncio
+async def test_options_flow_saves_ev_estimate_settings(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="ev-estimates",
+        data=_station_options(),
+        options={CONF_SCAN_INTERVAL: 5},
+    )
+    entry.add_to_hass(hass)
+    result = await _open_options_step(hass, entry, "ev_estimates")
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "ev_estimates"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_EV_SOC_ENTITY: "sensor.ev_soc",
+            CONF_EV_SOC_ATTRIBUTE: "battery_percent",
+            CONF_EV_CAPACITY_ENTITY: "sensor.ev_capacity",
+            CONF_EV_CAPACITY_ATTRIBUTE: "usable_kwh",
+            CONF_EV_POWER_ENTITY: None,
+            CONF_EV_POWER_ATTRIBUTE: None,
+            CONF_EV_TARGET_SOC: 80,
+            CONF_EV_ASSUMED_POWER_KW: 7.2,
+        },
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options[CONF_SCAN_INTERVAL] == 5
+    settings = EVEstimateSettings.from_config(entry.options[CONF_EV_ESTIMATES])
+    assert settings.soc_entity == "sensor.ev_soc"
+    assert settings.capacity_entity == "sensor.ev_capacity"
+    assert settings.target_soc == 80
+    assert settings.assumed_power_kw == 7.2
+
+
+@pytest.mark.asyncio
+async def test_options_flow_rejects_incomplete_ev_estimate_inputs(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="incomplete-ev-estimates",
+        data=_station_options(),
+    )
+    entry.add_to_hass(hass)
+    result = await _open_options_step(hass, entry, "ev_estimates")
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_EV_SOC_ENTITY: "sensor.ev_soc",
+            CONF_EV_TARGET_SOC: 80,
+        },
+    )
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "ev_estimates"
+    assert result["errors"] == {"base": "invalid_ev_estimate_settings"}
+
+
 def test_personalization_form_conversion_defaults_and_rejects_bad_inputs():
     profile = config_flow._personalization_profile_from_input({})
     assert not profile.enabled
@@ -1946,6 +2045,10 @@ async def test_general_options_preserve_a_saved_personalization_profile(hass):
         enabled=True,
         connector_type_ids=(ConnectorTypeId.TYPE_2,),
     ).as_config()
+    ev_estimates = EVEstimateSettings(
+        soc_entity="sensor.ev_soc",
+        capacity_entity="sensor.ev_capacity",
+    ).as_config()
     original_options = {
         CONF_SCAN_INTERVAL: 5,
         CONF_SEARCH_RADIUS: 500,
@@ -1954,6 +2057,7 @@ async def test_general_options_preserve_a_saved_personalization_profile(hass):
         CONF_INCLUDE_UNKNOWN: True,
         CONF_FAVOURITES: [],
         CONF_PERSONALIZATION: profile,
+        CONF_EV_ESTIMATES: ev_estimates,
     }
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -1979,6 +2083,7 @@ async def test_general_options_preserve_a_saved_personalization_profile(hass):
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert entry.options[CONF_PERSONALIZATION] == profile
+    assert entry.options[CONF_EV_ESTIMATES] == ev_estimates
 
 
 @pytest.mark.asyncio
@@ -1998,6 +2103,23 @@ async def test_options_flow_surfaces_malformed_saved_personalization(hass):
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "personalization"
     assert result["errors"] == {"base": "invalid_saved_personalization_profile"}
+
+
+@pytest.mark.asyncio
+async def test_options_flow_surfaces_malformed_saved_ev_estimates(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="malformed-ev-estimates",
+        data=_station_options(),
+        options={CONF_EV_ESTIMATES: {"unknown": True}},
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "ev_estimates"
+    assert result["errors"] == {"base": "invalid_saved_ev_estimate_settings"}
 
 
 @pytest.mark.asyncio

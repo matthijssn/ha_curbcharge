@@ -175,7 +175,9 @@ the cost estimate. Duration is battery energy divided by the selected or
 assumed charging power. Estimates exclude battery charging losses, charging
 curve/power variation, and tariff components not represented by provider data;
 they are not predictions of an actual charging session. Top nearby lists do
-not show per-station EV estimates.
+not show per-station EV estimates. These remain per-card estimates; configure
+vehicle inputs in CurbCharge Options to use native estimate entities in
+automations.
 
 With only `entity` set, all metric groups are shown by default.
 `show_price` controls price; `show_connector_details` controls occupied,
@@ -394,6 +396,56 @@ mode: single
 
 The values are recalculated with the regular coordinator refresh, so an
 automation responds to poll updates rather than every provider or GPS event.
+
+### Native EV charge estimate entities
+
+Configure vehicle inputs under **Options → EV estimates**. State of charge and
+usable battery capacity are required together; choose a measured vehicle power
+sensor or an assumed kW value for duration. Optional attributes are interpreted
+in the corresponding documented unit without conversion. A selected but
+invalid or unavailable power sensor does not fall back to assumed power.
+
+The entry-level **Estimated charging cost** and **Estimated charging duration**
+entities estimate the current **Best nearby** charger only. Cost is in the
+station's currency and remains unknown for incomplete or ambiguous tariffs;
+duration is in hours and uses vehicle power, never charger maximum power.
+Missing or invalid battery inputs or no current recommendation leave the
+estimates unknown; a failed provider refresh makes the entities unavailable.
+These estimates exclude charging losses and charging-curve variation.
+
+Use the entity picker to find the config-entry-specific entity IDs:
+
+```yaml
+type: entities
+title: Best nearby charge estimate
+entities:
+  - entity: sensor.your_estimated_charging_cost
+  - entity: sensor.your_estimated_charging_duration
+```
+
+For example, notify when the estimated cost is below 10 in the station's
+reported currency. The condition skips unknown and unavailable states; CurbCharge
+does not convert currencies.
+
+```yaml
+alias: Notify when Best nearby charging is below budget
+trigger:
+  - platform: state
+    entity_id: sensor.your_estimated_charging_cost
+condition:
+  - condition: template
+    value_template: >
+      {{ states('sensor.your_estimated_charging_cost') not in ['unknown', 'unavailable']
+         and states('sensor.your_estimated_charging_cost') | float(999999) < 10 }}
+action:
+  - service: notify.notify
+    data:
+      message: >
+        Best nearby estimate: {{ states('sensor.your_estimated_charging_cost') }}
+        {{ state_attr('sensor.your_estimated_charging_cost', 'unit_of_measurement') }}.
+        Estimated duration: {{ states('sensor.your_estimated_charging_duration') }} h.
+mode: single
+```
 
 ### Personalization templates and triggers
 

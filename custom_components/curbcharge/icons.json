@@ -47,6 +47,12 @@
       },
       "nearby_comparable_price_station_count": {
         "default": "mdi:counter"
+      },
+      "estimated_charging_cost": {
+        "default": "mdi:cash"
+      },
+      "estimated_charging_duration": {
+        "default": "mdi:clock-outline"
       }
     }
   }

@@ -10,10 +10,21 @@ from decimal import Decimal, InvalidOperation
 from enum import StrEnum
 from typing import cast
 
+from homeassistant.helpers import config_validation as cv
+from voluptuous import Invalid
+
 from .const import (
     CONF_ALLOW_FALLBACK,
     CONF_CONNECTOR_TYPE_IDS,
     CONF_CONNECTOR_TYPES,
+    CONF_EV_ASSUMED_POWER_KW,
+    CONF_EV_CAPACITY_ATTRIBUTE,
+    CONF_EV_CAPACITY_ENTITY,
+    CONF_EV_POWER_ATTRIBUTE,
+    CONF_EV_POWER_ENTITY,
+    CONF_EV_SOC_ATTRIBUTE,
+    CONF_EV_SOC_ENTITY,
+    CONF_EV_TARGET_SOC,
     CONF_EXCLUDED_OPERATORS,
     CONF_MAXIMUM_PRICE,
     CONF_MAXIMUM_PRICE_CURRENCY,
@@ -26,6 +37,7 @@ from .const import (
     CONF_REQUIRE_AVAILABLE,
     CONF_UNKNOWN_DATA_POLICY,
     DEFAULT_CONNECTOR_TYPES,
+    DEFAULT_EV_TARGET_SOC,
     DEFAULT_MIN_POWER_KW,
     DEFAULT_REQUIRE_AVAILABLE,
     NDW_CONNECTOR_TYPE_CODES,
@@ -80,6 +92,135 @@ class PersonalizationUnknownDataPolicy(StrEnum):
 
     EXCLUDE = "exclude"
     ALLOW_FALLBACK = "allow_fallback"
+
+
+@dataclass(frozen=True, slots=True)
+class EVEstimateSettings:
+    """Validated vehicle inputs for estimating a Best nearby charge."""
+
+    soc_entity: str | None = None
+    soc_attribute: str | None = None
+    capacity_entity: str | None = None
+    capacity_attribute: str | None = None
+    power_entity: str | None = None
+    power_attribute: str | None = None
+    target_soc: float = DEFAULT_EV_TARGET_SOC
+    assumed_power_kw: float | None = None
+
+    @classmethod
+    def from_config(cls, value: object | None) -> EVEstimateSettings:
+        """Validate saved vehicle inputs; a missing setting means unconfigured."""
+        if value is None:
+            return cls()
+        if not isinstance(value, Mapping):
+            raise ValueError("EV estimate settings must be a mapping")
+
+        data = cast(Mapping[str, object], value)
+        expected_keys = {
+            CONF_EV_SOC_ENTITY,
+            CONF_EV_SOC_ATTRIBUTE,
+            CONF_EV_CAPACITY_ENTITY,
+            CONF_EV_CAPACITY_ATTRIBUTE,
+            CONF_EV_POWER_ENTITY,
+            CONF_EV_POWER_ATTRIBUTE,
+            CONF_EV_TARGET_SOC,
+            CONF_EV_ASSUMED_POWER_KW,
+        }
+        if set(data) != expected_keys:
+            raise ValueError("EV estimate settings have invalid fields")
+
+        def sensor_entity(field: str) -> str | None:
+            raw_entity = data[field]
+            if raw_entity is None:
+                return None
+            if not isinstance(raw_entity, str):
+                raise ValueError(f"{field} must be a sensor entity ID")
+            try:
+                entity_id = cv.entity_id(raw_entity)
+            except Invalid as err:
+                raise ValueError(f"{field} must be a sensor entity ID") from err
+            if not entity_id.startswith("sensor."):
+                raise ValueError(f"{field} must be a sensor entity ID")
+            return entity_id
+
+        def attribute(field: str, entity_id: str | None) -> str | None:
+            raw_attribute = data[field]
+            if raw_attribute is None:
+                return None
+            if not isinstance(raw_attribute, str):
+                raise ValueError(f"{field} must be a string")
+            normalized = raw_attribute.strip() or None
+            if normalized is not None and entity_id is None:
+                raise ValueError(f"{field} requires its sensor entity")
+            return normalized
+
+        soc_entity = sensor_entity(CONF_EV_SOC_ENTITY)
+        capacity_entity = sensor_entity(CONF_EV_CAPACITY_ENTITY)
+        power_entity = sensor_entity(CONF_EV_POWER_ENTITY)
+        soc_attribute = attribute(CONF_EV_SOC_ATTRIBUTE, soc_entity)
+        capacity_attribute = attribute(CONF_EV_CAPACITY_ATTRIBUTE, capacity_entity)
+        power_attribute = attribute(CONF_EV_POWER_ATTRIBUTE, power_entity)
+        if (soc_entity is None) != (capacity_entity is None):
+            raise ValueError(
+                "State-of-charge and capacity sensors must be set together"
+            )
+
+        raw_target_soc = data[CONF_EV_TARGET_SOC]
+        if isinstance(raw_target_soc, bool) or not isinstance(
+            raw_target_soc, (int, float)
+        ):
+            raise ValueError("Target state of charge must be between 0 and 100")
+        try:
+            target_soc = float(raw_target_soc)
+        except (OverflowError, ValueError) as err:
+            raise ValueError(
+                "Target state of charge must be between 0 and 100"
+            ) from err
+        if not math.isfinite(target_soc) or not 0 <= target_soc <= 100:
+            raise ValueError("Target state of charge must be between 0 and 100")
+
+        raw_assumed_power = data[CONF_EV_ASSUMED_POWER_KW]
+        if raw_assumed_power is None:
+            assumed_power_kw = None
+        else:
+            if isinstance(raw_assumed_power, bool) or not isinstance(
+                raw_assumed_power, (int, float)
+            ):
+                raise ValueError("Assumed charging power must be finite and positive")
+            try:
+                assumed_power_kw = float(raw_assumed_power)
+            except (OverflowError, ValueError) as err:
+                raise ValueError(
+                    "Assumed charging power must be finite and positive"
+                ) from err
+            if not math.isfinite(assumed_power_kw) or assumed_power_kw <= 0:
+                raise ValueError("Assumed charging power must be finite and positive")
+        if power_entity is not None and assumed_power_kw is not None:
+            raise ValueError("Choose a power sensor or assumed power, not both")
+
+        return cls(
+            soc_entity=soc_entity,
+            soc_attribute=soc_attribute,
+            capacity_entity=capacity_entity,
+            capacity_attribute=capacity_attribute,
+            power_entity=power_entity,
+            power_attribute=power_attribute,
+            target_soc=float(target_soc),
+            assumed_power_kw=assumed_power_kw,
+        )
+
+    def as_config(self) -> dict[str, object]:
+        """Return the stable JSON-safe config-entry representation."""
+        return {
+            CONF_EV_SOC_ENTITY: self.soc_entity,
+            CONF_EV_SOC_ATTRIBUTE: self.soc_attribute,
+            CONF_EV_CAPACITY_ENTITY: self.capacity_entity,
+            CONF_EV_CAPACITY_ATTRIBUTE: self.capacity_attribute,
+            CONF_EV_POWER_ENTITY: self.power_entity,
+            CONF_EV_POWER_ATTRIBUTE: self.power_attribute,
+            CONF_EV_TARGET_SOC: self.target_soc,
+            CONF_EV_ASSUMED_POWER_KW: self.assumed_power_kw,
+        }
 
 
 @dataclass(frozen=True, slots=True)

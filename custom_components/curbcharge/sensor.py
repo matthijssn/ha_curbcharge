@@ -4,6 +4,7 @@ import asyncio
 from collections.abc import Callable, Sequence
 from datetime import datetime
 from decimal import Decimal
+from math import isfinite
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -12,8 +13,14 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfLength, UnitOfPower
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.const import (
+    PERCENTAGE,
+    EntityCategory,
+    UnitOfLength,
+    UnitOfPower,
+    UnitOfTime,
+)
+from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -23,6 +30,7 @@ from homeassistant.helpers.entity_platform import (
     EntityPlatform,
     async_get_current_platform,
 )
+from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
@@ -40,7 +48,13 @@ from .entity import (
     migrate_entity_unique_id,
     setup_dynamic_station_entities,
 )
-from .models import ChargingConnector, ChargingStation, ChargingTariff, TariffStatus
+from .models import (
+    ChargingConnector,
+    ChargingStation,
+    ChargingTariff,
+    EVEstimateSettings,
+    TariffStatus,
+)
 from .statistics import (
     SiteAvailabilityStatistics,
     availability_statistics,
@@ -91,6 +105,8 @@ async def async_setup_entry(
         NearbyComparablePriceStationCountSensor(coordinator, entry),
         FavoriteSummarySensor(coordinator, entry),
         OperatorInsightsSensor(coordinator, entry),
+        EstimatedChargingCostSensor(coordinator, entry),
+        EstimatedChargingDurationSensor(coordinator, entry),
     ]
     _migrate_aggregate_entity_ids(hass, entry, aggregate_entities)
     async_add_entities(aggregate_entities)
@@ -1748,6 +1764,206 @@ class FastestAvailableChargerSensor(_SelectedChargerSensor):
 
     def __init__(self, coordinator: CurbChargeCoordinator, entry: ConfigEntry[Any]):
         super().__init__(coordinator, entry, lambda results: results.fastest_available)
+
+
+class _EVEstimateSensor(CoordinatorEntity[CurbChargeCoordinator], SensorEntity):
+    """Base for estimates using the current Best nearby station and vehicle inputs."""
+
+    _attr_has_entity_name = True
+    _unique_id_suffix: str
+
+    def __init__(
+        self, coordinator: CurbChargeCoordinator, entry: ConfigEntry[Any]
+    ) -> None:
+        super().__init__(coordinator)
+        self._settings = coordinator.ev_estimate_settings
+        self._attr_unique_id = f"{entry.entry_id}_{self._unique_id_suffix}"
+
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        entity_ids = tuple(
+            dict.fromkeys(
+                entity_id
+                for entity_id in (
+                    self._settings.soc_entity,
+                    self._settings.capacity_entity,
+                    self._settings.power_entity,
+                )
+                if entity_id is not None
+            )
+        )
+        if entity_ids:
+            self.async_on_remove(
+                async_track_state_change_event(
+                    self.hass, entity_ids, self._handle_vehicle_sensor_change
+                )
+            )
+
+    @callback
+    def _handle_vehicle_sensor_change(
+        self, _event: Event[EventStateChangedData]
+    ) -> None:
+        self.async_write_ha_state()
+
+    @property
+    def _estimate_inputs(self) -> tuple[float, ChargingStation] | None:
+        station = _best_nearby_station(self.coordinator)
+        if station is None:
+            return None
+        energy_needed = _ev_energy_needed(self.coordinator.hass, self._settings)
+        if energy_needed is None:
+            return None
+        return energy_needed, station
+
+
+class EstimatedChargingCostSensor(_EVEstimateSensor):
+    """Estimate the cost to the configured target at the Best nearby charger."""
+
+    _attr_translation_key = "estimated_charging_cost"
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _unique_id_suffix = "estimated_charging_cost"
+
+    @property
+    def native_value(self) -> float | None:
+        estimate_inputs = self._estimate_inputs
+        if estimate_inputs is None:
+            return None
+        return _ev_cost_estimate(*estimate_inputs)[0]
+
+    @property
+    def native_unit_of_measurement(self) -> str | None:
+        station = _best_nearby_station(self.coordinator)
+        if station is None:
+            return None
+        return _ev_cost_estimate(0, station)[1]
+
+
+class EstimatedChargingDurationSensor(_EVEstimateSensor):
+    """Estimate charging duration from vehicle power, never charger max power."""
+
+    _attr_translation_key = "estimated_charging_duration"
+    _attr_device_class = SensorDeviceClass.DURATION
+    _attr_native_unit_of_measurement = UnitOfTime.HOURS
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _unique_id_suffix = "estimated_charging_duration"
+
+    @property
+    def native_value(self) -> float | None:
+        estimate_inputs = self._estimate_inputs
+        if estimate_inputs is None:
+            return None
+        energy_needed, _station = estimate_inputs
+        settings = self._settings
+        power_kw = settings.assumed_power_kw
+        if settings.power_entity is not None:
+            power_kw = _ev_sensor_value(
+                self.coordinator.hass,
+                settings.power_entity,
+                settings.power_attribute,
+                "kW",
+            )
+        if power_kw is None or power_kw <= 0:
+            return None
+        duration_hours = energy_needed / power_kw
+        return duration_hours if isfinite(duration_hours) else None
+
+
+def _ev_energy_needed(
+    hass: HomeAssistant, settings: EVEstimateSettings
+) -> float | None:
+    if settings.soc_entity is None or settings.capacity_entity is None:
+        return None
+    state_of_charge = _ev_sensor_value(
+        hass, settings.soc_entity, settings.soc_attribute, "%"
+    )
+    capacity_kwh = _ev_sensor_value(
+        hass, settings.capacity_entity, settings.capacity_attribute, "kWh"
+    )
+    if (
+        state_of_charge is None
+        or not 0 <= state_of_charge <= 100
+        or capacity_kwh is None
+        or capacity_kwh <= 0
+    ):
+        return None
+    energy_needed_kwh = capacity_kwh * (
+        max(0.0, settings.target_soc - state_of_charge) / 100
+    )
+    return energy_needed_kwh if isfinite(energy_needed_kwh) else None
+
+
+def _best_nearby_station(
+    coordinator: CurbChargeCoordinator,
+) -> ChargingStation | None:
+    if not coordinator.last_update_success:
+        return None
+    station = coordinator.best_station
+    return station if station is not None and not station.is_stale else None
+
+
+def _ev_sensor_value(
+    hass: HomeAssistant,
+    entity_id: str,
+    attribute: str | None,
+    expected_unit: str,
+) -> float | None:
+    state = hass.states.get(entity_id)
+    if (
+        state is None
+        or state.state in ("unknown", "unavailable")
+        or state.attributes.get("restored") is True
+        or state.attributes.get("is_stale") is True
+        or (
+            attribute is None
+            and state.attributes.get("unit_of_measurement") != expected_unit
+        )
+    ):
+        return None
+    raw_value = state.state if attribute is None else state.attributes.get(attribute)
+    if isinstance(raw_value, bool) or not isinstance(
+        raw_value, (str, int, float, Decimal)
+    ):
+        return None
+    try:
+        value = float(raw_value)
+    except (OverflowError, ValueError):
+        return None
+    return value if isfinite(value) else None
+
+
+def _ev_cost_estimate(
+    energy_needed_kwh: float, station: ChargingStation
+) -> tuple[float | None, str | None]:
+    tariff = station.tariff
+    comparable_price = station.comparable_price_per_kwh
+    if tariff is None or comparable_price is None:
+        return None, None
+    currency, price_per_kwh = comparable_price
+    session_fee = tariff.session_fee
+    price_per_minute = tariff.price_per_minute
+    if (
+        len(currency) != 3
+        or not currency.isascii()
+        or not currency.isalpha()
+        or not currency.isupper()
+        or price_per_kwh < 0
+        or (
+            session_fee is not None and (not session_fee.is_finite() or session_fee < 0)
+        )
+        or (price_per_minute is not None and price_per_minute != 0)
+    ):
+        return None, None
+    cost = Decimal(0)
+    if energy_needed_kwh > 0:
+        cost = Decimal(str(energy_needed_kwh)) * price_per_kwh
+        if session_fee is not None:
+            cost += session_fee
+    try:
+        estimate = float(cost)
+    except OverflowError:
+        return None, None
+    return (estimate, currency) if isfinite(estimate) else (None, None)
 
 
 def _station_selection_attributes(

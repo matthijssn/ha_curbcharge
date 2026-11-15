@@ -207,7 +207,8 @@
         "title": "CurbCharge-asetukset",
         "menu_options": {
           "general": "Yleiset asetukset",
-          "personalization": "Personointi"
+          "personalization": "Personointi",
+          "ev_estimates": "Sähköauton latausarviot"
         }
       },
       "general": {
@@ -239,6 +240,29 @@
           "location_movement_threshold": "Vähimmäisetäisyys, jonka valitun entiteetin on liikuttava, ennen kuin hakusijainti päivitetään. Aseta arvoksi 0 poistaaksesi kynnyksen käytöstä."
         }
       },
+      "ev_estimates": {
+        "title": "Sähköauton latausarviot",
+        "data": {
+          "soc_entity": "Akun varaustason anturi",
+          "soc_attribute": "Varaustason attribuutti (valinnainen)",
+          "capacity_entity": "Käytettävissä olevan akkukapasiteetin anturi",
+          "capacity_attribute": "Akkukapasiteetin attribuutti (valinnainen)",
+          "power_entity": "Ajoneuvon lataustehon anturi (valinnainen)",
+          "power_attribute": "Lataustehon attribuutti (valinnainen)",
+          "target_soc": "Tavoitevaraustaso (%)",
+          "assumed_power_kw": "Oletettu ajoneuvon latausteho (kW)"
+        },
+        "data_description": {
+          "soc_entity": "Vaaditaan yhdessä akkukapasiteetin kanssa. Anturin tilan yksikön on oltava %; valittu attribuutti tulkitaan prosentiksi.",
+          "soc_attribute": "Lue numeerinen attribuutti anturin tilan sijasta; arvo tulkitaan prosentteina ilman muunnosta.",
+          "capacity_entity": "Vaaditaan yhdessä varaustason kanssa. Anturin tilan yksikön on oltava kWh; valittu attribuutti tulkitaan kWh-arvoksi.",
+          "capacity_attribute": "Lue numeerinen attribuutti anturin tilan sijasta; arvo tulkitaan kWh-arvoksi ilman muunnosta.",
+          "power_entity": "Valinnainen, käytetään vain keston laskentaan. Anturin tilan yksikön on oltava kW; valittu attribuutti tulkitaan kW-arvoksi. Virheellinen tai puuttuva arvo ei käytä varaarvoa.",
+          "power_attribute": "Lue numeerinen attribuutti anturin tilan sijasta; arvo tulkitaan kW-arvoksi ilman muunnosta.",
+          "target_soc": "Valitse tavoite väliltä 0–100 %. Oletus on 100 %. Nykyistä varaustasoa pienempi tavoite tarkoittaa, ettei energiaa tarvita.",
+          "assumed_power_kw": "Valinnainen vaihtoehto tehoanturille kestoa varten. Anna äärellinen positiivinen kW-arvo; älä määritä molempia teholähteitä."
+        }
+      },
       "personalization": {
         "title": "Personointi",
         "data": {
@@ -268,6 +292,8 @@
       }
     },
     "error": {
+      "invalid_ev_estimate_settings": "Määritä varaustaso- ja kapasiteettianturit yhdessä, valitse tehoanturi tai positiivinen oletusteho (ei molempia) ja aseta tavoite välille 0–100 %.",
+      "invalid_saved_ev_estimate_settings": "Tallennetut EV-arvioasetukset ovat virheelliset. Tarkista anturit, attribuutit ja tavoite ja tallenna asetukset uudelleen.",
       "invalid_discovery_filters": "Anna kelvolliset hakusuodattimet. Vähimmäistehon on oltava äärellinen positiivinen luku.",
       "invalid_favourites": "Yksi tai useampi valittu suosikki ei ole enää käytettävissä. Päivitä asetukset ja yritä uudelleen.",
       "invalid_personalization_profile": "Anna kelvollinen profiili. Tehon ja hinnan on oltava äärellisiä ja ei-negatiivisia, enimmäishinta vaatii kolmikirjaimisen valuutan, operaattoriviitteet vaativat tuetun palveluntarjoajan etuliitteen, eikä operaattori voi olla sekä suositeltu että poissuljettu.",
@@ -478,6 +504,12 @@
       },
       "fastest_available_charger": {
         "name": "Nopein vapaa laturi"
+      },
+      "estimated_charging_cost": {
+        "name": "Arvioidut latauskustannukset"
+      },
+      "estimated_charging_duration": {
+        "name": "Arvioitu latausaika"
       },
       "top_nearby_chargers": {
         "name": "Parhaat lähellä olevat laturit"
