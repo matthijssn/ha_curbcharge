@@ -224,10 +224,18 @@ class BelgiumDatexClient:
                     "energyInfrastructureTable": tables
                 }
             )
-            await loop.run_in_executor(None, _parse_static_stations, locations, 0, 0)
+            _, conflicting = await loop.run_in_executor(
+                None, _parse_static_snapshot, locations, 0, 0
+            )
         except InvalidProviderResponseError as err:
             _LOGGER.warning("Belgium DATEX II locations validation failed: %s", err)
             raise
+        if conflicting:
+            _LOGGER.warning(
+                "Belgium DATEX II omitted %d EVSEs that the provider published "
+                "with conflicting duplicate records",
+                conflicting,
+            )
         self._locations = locations
         self._locations_cached_at = time.monotonic()
         return locations
@@ -458,6 +466,13 @@ def create_belgium_provider(
 def _parse_static_stations(
     document: BelgiumDatexDocument, latitude: float, longitude: float
 ) -> list[ChargingStation]:
+    return _parse_static_snapshot(document, latitude, longitude)[0]
+
+
+def _parse_static_snapshot(
+    document: BelgiumDatexDocument, latitude: float, longitude: float
+) -> tuple[list[ChargingStation], int]:
+    """Parse static EVSEs and count ids omitted for conflicting duplicates."""
     stations: list[ChargingStation] = []
     for table_value in _static_tables(document):
         table = _datex_object(table_value, "energy-infrastructure table")
@@ -526,14 +541,19 @@ def _parse_static_stations(
                         )
                     )
     unique_stations: dict[str, ChargingStation] = {}
+    conflicting_ids: set[str] = set()
     for parsed_station in stations:
         previous = unique_stations.get(parsed_station.provider_id)
-        if previous is not None and previous != parsed_station:
-            raise InvalidProviderResponseError(
-                "Belgium DATEX II returned conflicting duplicate EVSEs"
-            )
-        unique_stations[parsed_station.provider_id] = parsed_station
-    return list(unique_stations.values())
+        if previous is None:
+            unique_stations[parsed_station.provider_id] = parsed_station
+        elif previous != parsed_station:
+            conflicting_ids.add(parsed_station.provider_id)
+    # The live feed publishes some EVSE ids under several sites with different
+    # coordinates and addresses. Neither copy can be trusted, so omit them
+    # instead of rejecting the whole national snapshot.
+    for conflicting_id in conflicting_ids:
+        del unique_stations[conflicting_id]
+    return list(unique_stations.values()), len(conflicting_ids)
 
 
 def _datex_publications(

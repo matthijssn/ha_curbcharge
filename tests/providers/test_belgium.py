@@ -1517,7 +1517,7 @@ async def test_locations_do_not_follow_redirects():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("conflicting", [False, True])
-async def test_duplicate_evse_pages_are_deduplicated_or_rejected(conflicting):
+async def test_duplicate_evse_pages_are_deduplicated_or_omitted(conflicting, caplog):
     second = _root_locations_document()
     if conflicting:
         second["aegiEnergyInfrastructureTablePublication"]["energyInfrastructureTable"][
@@ -1525,6 +1525,18 @@ async def test_duplicate_evse_pages_are_deduplicated_or_rejected(conflicting):
         ]["energyInfrastructureSite"][0]["energyDistributor"] = {
             "name": "Different Organisation"
         }
+    other_site = copy.deepcopy(
+        _root_locations_document()["aegiEnergyInfrastructureTablePublication"][
+            "energyInfrastructureTable"
+        ][0]["energyInfrastructureSite"][0]
+    )
+    other_site["idG"] = "unique-site"
+    other_site["energyInfrastructureStation"][0]["refillPoint"][0][
+        "aegiElectricChargingPoint"
+    ]["idG"] = "BE-UNIQUE-1"
+    second["aegiEnergyInfrastructureTablePublication"]["energyInfrastructureTable"][0][
+        "energyInfrastructureSite"
+    ].append(other_site)
     session = FakeSession(
         [
             FakeResponse(
@@ -1535,19 +1547,21 @@ async def test_duplicate_evse_pages_are_deduplicated_or_rejected(conflicting):
         ]
     )
     client = BelgiumDatexClient(session, "test-token", NoWaitLimiter())
+    stations = belgium._parse_static_stations(
+        await client.async_get_locations(), 50.85, 4.35
+    )
+
     if conflicting:
-        with pytest.raises(InvalidProviderResponseError, match="duplicate EVSEs"):
-            await client.async_get_locations()
-        assert client._locations is None
+        # The ambiguous EVSE is omitted, but the rest of the snapshot is usable.
+        assert [station.provider_id for station in stations] == ["BE-UNIQUE-1"]
+        assert "omitted 1 EVSEs" in caplog.text
     else:
-        assert (
-            len(
-                belgium._parse_static_stations(
-                    await client.async_get_locations(), 50.85, 4.35
-                )
-            )
-            == 1
-        )
+        assert sorted(station.provider_id for station in stations) == [
+            "BE-EXAMPLE-1",
+            "BE-UNIQUE-1",
+        ]
+        assert "omitted" not in caplog.text
+    assert "test-token" not in caplog.text
 
 
 def test_root_entrances_and_connector_identity_remain_strict():

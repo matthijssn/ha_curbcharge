@@ -59,13 +59,16 @@ terms. Eco-Movement issues these tokens; request access by emailing
 
 The `/locations` endpoint is paginated, with 1,000 sites per page. CurbCharge
 follows every next-page link before selecting nearby stations or favourites;
-only a complete validated static snapshot is cached, for 23 hours. Initial setup
-and an uncached refresh can take several minutes. Each page counts toward the
-shared limit of 30 location requests per rolling hour per token; pages are not
-artificially spaced two minutes apart. The other limits remain one request per
-10 seconds per source IP and two status requests per minute per EVSE per token.
-A token whose quota is exhausted must wait for earlier requests to leave the
-rolling window.
+only a complete validated static snapshot is cached, for 23 hours. Initial
+setup and an uncached refresh can take several minutes. The feed occasionally
+publishes the same EVSE under several sites with different coordinates or
+addresses; because neither record can be trusted, CurbCharge omits those EVSEs
+and logs a warning with their count instead of rejecting the whole feed. Each
+page counts toward the shared limit of 30 location requests per rolling hour per
+token; pages are not artificially spaced two minutes apart. The other limits
+remain one request per 10 seconds per source IP and two status requests per
+minute per EVSE per token. A token whose quota is exhausted must wait for
+earlier requests to leave the rolling window.
 
 Eco-Movement's responses have a 60-second cache and the locations feed also
 contains dynamic data. CurbCharge currently caches only static infrastructure
