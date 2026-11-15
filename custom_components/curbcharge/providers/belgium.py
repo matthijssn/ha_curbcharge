@@ -61,6 +61,7 @@ _LOCATION_REQUEST_LIMIT = 30
 _MAX_LOCATION_PAGES = 100
 _EVSE_STATUS_INTERVAL = 30
 _REQUEST_LIMITER_DATA_KEY = "belgium_request_limiter"
+_LOCATION_CACHE_DATA_KEY = "belgium_location_cache"
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -117,7 +118,7 @@ class BelgiumRequestLimiter:
 
     async def async_wait(self, token: str, evse_id: str | None = None) -> None:
         """Wait until this token, EVSE, and IP may safely make another request."""
-        token_key = hashlib.sha256(token.encode("ascii")).digest()
+        token_key = _token_key(token)
         while True:
             async with self._lock:
                 now = time.monotonic()
@@ -159,6 +160,48 @@ class BelgiumRequestLimiter:
             )
 
 
+class BelgiumLocationCache:
+    """Share validated static snapshots per token across clients.
+
+    A complete snapshot takes roughly 18 paginated location requests, so a
+    config flow followed by entry setup would otherwise exhaust the rolling
+    location quota and stall setup for up to an hour.
+    """
+
+    def __init__(self) -> None:
+        """Initialize empty snapshot state."""
+        self._snapshots: dict[bytes, tuple[BelgiumDatexDocument, float]] = {}
+        self._locks: dict[bytes, asyncio.Lock] = {}
+
+    def lock(self, token: str) -> asyncio.Lock:
+        """Return the lock that coalesces snapshot downloads for one token."""
+        return self._locks.setdefault(_token_key(token), asyncio.Lock())
+
+    def get(self, token: str) -> tuple[BelgiumDatexDocument, float] | None:
+        """Return the cached snapshot and its monotonic timestamp, if any."""
+        return self._snapshots.get(_token_key(token))
+
+    def store(self, token: str, document: BelgiumDatexDocument) -> None:
+        """Replace the snapshot for one token after it fully validated."""
+        self._snapshots[_token_key(token)] = (document, time.monotonic())
+
+
+def _token_key(token: str) -> bytes:
+    return hashlib.sha256(token.encode("ascii")).digest()
+
+
+def _shared_location_cache(hass: HomeAssistant) -> BelgiumLocationCache:
+    """Return the snapshot cache shared by Belgium clients in this HA instance."""
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    cache = domain_data.get(_LOCATION_CACHE_DATA_KEY)
+    if cache is None:
+        cache = BelgiumLocationCache()
+        domain_data[_LOCATION_CACHE_DATA_KEY] = cache
+    if not isinstance(cache, BelgiumLocationCache):
+        raise RuntimeError("CurbCharge Belgium location cache has an invalid type")
+    return cache
+
+
 def _shared_request_limiter(hass: HomeAssistant) -> BelgiumRequestLimiter:
     """Return the one request limiter shared by Belgium clients in this HA instance."""
     domain_data = hass.data.setdefault(DOMAIN, {})
@@ -179,6 +222,7 @@ class BelgiumDatexClient:
         session: aiohttp.ClientSession,
         token: str,
         request_limiter: BelgiumRequestLimiter,
+        location_cache: BelgiumLocationCache | None = None,
     ) -> None:
         """Initialize using Home Assistant's session and shared request limiter."""
         if not is_valid_belgium_api_token(token):
@@ -186,19 +230,35 @@ class BelgiumDatexClient:
         self._session = session
         self._token = token
         self._request_limiter = request_limiter
-        self._locations: BelgiumDatexDocument | None = None
-        self._locations_cached_at: float | None = None
+        self._location_cache = (
+            location_cache if location_cache is not None else BelgiumLocationCache()
+        )
+
+    @property
+    def _locations(self) -> BelgiumDatexDocument | None:
+        cached = self._location_cache.get(self._token)
+        return cached[0] if cached is not None else None
+
+    @property
+    def _locations_cached_at(self) -> float | None:
+        cached = self._location_cache.get(self._token)
+        return cached[1] if cached is not None else None
 
     async def async_get_locations(self) -> BelgiumDatexDocument:
         """Return the shared, read-only static snapshot, cached for less than a day."""
-        now = time.monotonic()
-        if (
-            self._locations is not None
-            and self._locations_cached_at is not None
-            and now - self._locations_cached_at < _LOCATION_CACHE_SECONDS
-        ):
-            return self._locations
+        async with self._location_cache.lock(self._token):
+            cached = self._location_cache.get(self._token)
+            if (
+                cached is not None
+                and time.monotonic() - cached[1] < _LOCATION_CACHE_SECONDS
+            ):
+                return cached[0]
+            locations = await self._async_fetch_locations()
+            self._location_cache.store(self._token, locations)
+            return locations
 
+    async def _async_fetch_locations(self) -> BelgiumDatexDocument:
+        """Download and validate every locations page."""
         tables: list[dict[str, object]] = []
         seen_urls: set[str] = set()
         url: str | None = _LOCATIONS_URL
@@ -236,8 +296,6 @@ class BelgiumDatexClient:
                 "with conflicting duplicate records",
                 conflicting,
             )
-        self._locations = locations
-        self._locations_cached_at = time.monotonic()
         return locations
 
     async def async_get_evse_status(self, evse_id: str) -> BelgiumDatexDocument | None:
@@ -459,7 +517,12 @@ def create_belgium_provider(
     token: str,
 ) -> BelgiumChargingProvider:
     """Create a provider using the limiter shared by this Home Assistant instance."""
-    client = BelgiumDatexClient(session, token, _shared_request_limiter(hass))
+    client = BelgiumDatexClient(
+        session,
+        token,
+        _shared_request_limiter(hass),
+        _shared_location_cache(hass),
+    )
     return BelgiumChargingProvider(client)
 
 

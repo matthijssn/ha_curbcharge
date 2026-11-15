@@ -59,7 +59,9 @@ terms. Eco-Movement issues these tokens; request access by emailing
 
 The `/locations` endpoint is paginated, with 1,000 sites per page. CurbCharge
 follows every next-page link before selecting nearby stations or favourites;
-only a complete validated static snapshot is cached, for 23 hours. Initial
+only a complete validated static snapshot is cached, for 23 hours. The snapshot
+is shared by every CurbCharge entry and configuration flow that uses the same
+token, so finishing setup does not download all pages a second time. Initial
 setup and an uncached refresh can take several minutes. The feed occasionally
 publishes the same EVSE under several sites with different coordinates or
 addresses; because neither record can be trusted, CurbCharge omits those EVSEs

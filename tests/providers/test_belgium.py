@@ -9,6 +9,7 @@ import threading
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -887,7 +888,63 @@ async def test_belgium_provider_factory_shares_rate_limits_between_entries(
     for provider in providers:
         await provider.async_validate_connection(50.85, 4.35, 1000)
 
-    assert waits == [10, 10]
+    # The second provider reuses the shared snapshot, so only the other token
+    # makes another request and waits for the shared per-IP spacing.
+    assert waits == [10]
+    assert [len(provider._client._session.requests) for provider in providers] == [
+        1,
+        0,
+        1,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_belgium_provider_factory_shares_location_snapshot_between_flows(
+    hass,
+):
+    """A config flow followed by entry setup must not refetch every page."""
+    flow_session = FakeSession(
+        [
+            FakeResponse(
+                _root_locations_document(),
+                headers={"Link": '<?offset=1000>; rel="next"'},
+            ),
+            FakeResponse(_root_locations_document()),
+        ]
+    )
+    setup_session = FakeSession([])
+    flow_provider = belgium.create_belgium_provider(hass, flow_session, "token")
+    setup_provider = belgium.create_belgium_provider(hass, setup_session, "token")
+
+    with patch.object(belgium.BelgiumRequestLimiter, "async_wait", AsyncMock()):
+        await flow_provider.async_validate_connection(50.85, 4.35, 1000)
+        await setup_provider.async_validate_connection(50.85, 4.35, 1000)
+
+    assert len(flow_session.requests) == 2
+    assert setup_session.requests == []
+
+
+@pytest.mark.asyncio
+async def test_concurrent_location_requests_share_one_download():
+    session = FakeSession([FakeResponse(_root_locations_document())])
+    cache = belgium.BelgiumLocationCache()
+    clients = [
+        BelgiumDatexClient(session, "token", NoWaitLimiter(), cache) for _ in range(3)
+    ]
+
+    documents = await asyncio.gather(
+        *(client.async_get_locations() for client in clients)
+    )
+
+    assert len(session.requests) == 1
+    assert all(document is documents[0] for document in documents)
+
+
+def test_shared_belgium_location_cache_rejects_invalid_hass_data(hass):
+    hass.data.setdefault(belgium.DOMAIN, {})["belgium_location_cache"] = object()
+
+    with pytest.raises(RuntimeError, match="invalid type"):
+        belgium._shared_location_cache(hass)
 
 
 @pytest.mark.asyncio
