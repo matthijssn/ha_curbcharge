@@ -79,6 +79,15 @@ class BaseChargingProvider(ABC):
     def country_code(self) -> str | None:
         """Return the provider's ISO country code, or None for global coverage."""
 
+    @property
+    def defers_initial_refresh(self) -> bool:
+        """Return whether entry setup must not wait for the first refresh.
+
+        Providers whose first refresh can exceed Home Assistant's startup setup
+        timeout load their data in the background instead.
+        """
+        return False
+
     @abstractmethod
     async def async_get_stations(
         self,

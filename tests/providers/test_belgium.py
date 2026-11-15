@@ -9,6 +9,7 @@ import threading
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -165,7 +166,7 @@ async def test_root_locations_validate_and_map_entrance_and_connector_identity()
     station = belgium._parse_static_stations(document, 50.85, 4.35)[0]
 
     assert station.provider_id == "BE-EXAMPLE-1"
-    assert station.evse_id == "BE-EXAMPLE-1"
+    assert station.evse_id == "BE*EXAMPLE*1"
     assert station.name == "BE*EXAMPLE*1"
     assert (station.latitude, station.longitude) == (50.85, 4.35)
     assert station.address == "Example Street 1, 1000 Example City"
@@ -174,7 +175,11 @@ async def test_root_locations_validate_and_map_entrance_and_connector_identity()
     assert station.location.provider_id == "example-site"
     assert station.connectors[0].connector_type_id is ConnectorTypeId.CCS_COMBO_2
     assert station.connectors[0].max_power_kw == 50
-    assert station.tariff is None
+    assert station.tariff is not None
+    # The live feed publishes 0.40 EUR/kWh excluding 21% VAT.
+    assert station.tariff.currency == "EUR"
+    assert station.tariff.price_per_kwh == Decimal("0.484")
+    assert station.tariff.vat_percentage == Decimal("21")
 
 
 def _status_document(
@@ -887,7 +892,63 @@ async def test_belgium_provider_factory_shares_rate_limits_between_entries(
     for provider in providers:
         await provider.async_validate_connection(50.85, 4.35, 1000)
 
-    assert waits == [10, 10]
+    # The second provider reuses the shared snapshot, so only the other token
+    # makes another request and waits for the shared per-IP spacing.
+    assert waits == [10]
+    assert [len(provider._client._session.requests) for provider in providers] == [
+        1,
+        0,
+        1,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_belgium_provider_factory_shares_location_snapshot_between_flows(
+    hass,
+):
+    """A config flow followed by entry setup must not refetch every page."""
+    flow_session = FakeSession(
+        [
+            FakeResponse(
+                _root_locations_document(),
+                headers={"Link": '<?offset=1000>; rel="next"'},
+            ),
+            FakeResponse(_root_locations_document()),
+        ]
+    )
+    setup_session = FakeSession([])
+    flow_provider = belgium.create_belgium_provider(hass, flow_session, "token")
+    setup_provider = belgium.create_belgium_provider(hass, setup_session, "token")
+
+    with patch.object(belgium.BelgiumRequestLimiter, "async_wait", AsyncMock()):
+        await flow_provider.async_validate_connection(50.85, 4.35, 1000)
+        await setup_provider.async_validate_connection(50.85, 4.35, 1000)
+
+    assert len(flow_session.requests) == 2
+    assert setup_session.requests == []
+
+
+@pytest.mark.asyncio
+async def test_concurrent_location_requests_share_one_download():
+    session = FakeSession([FakeResponse(_root_locations_document())])
+    cache = belgium.BelgiumLocationCache()
+    clients = [
+        BelgiumDatexClient(session, "token", NoWaitLimiter(), cache) for _ in range(3)
+    ]
+
+    documents = await asyncio.gather(
+        *(client.async_get_locations() for client in clients)
+    )
+
+    assert len(session.requests) == 1
+    assert all(document is documents[0] for document in documents)
+
+
+def test_shared_belgium_location_cache_rejects_invalid_hass_data(hass):
+    hass.data.setdefault(belgium.DOMAIN, {})["belgium_location_cache"] = object()
+
+    with pytest.raises(RuntimeError, match="invalid type"):
+        belgium._shared_location_cache(hass)
 
 
 @pytest.mark.asyncio
@@ -1340,9 +1401,11 @@ async def test_paginated_root_locations_include_later_nearby_and_favorite_statio
         "energyInfrastructureTable"
     ][0]["energyInfrastructureSite"][0]
     site["idG"] = "second-site"
-    site["energyInfrastructureStation"][0]["refillPoint"][0][
+    evse = site["energyInfrastructureStation"][0]["refillPoint"][0][
         "aegiElectricChargingPoint"
-    ]["idG"] = "BE-EXAMPLE-2"
+    ]
+    evse["idG"] = "BE-EXAMPLE-2"
+    evse["connector"][0]["externalIdentifier"][0]["identifier"] = "BE*EXAMPLE*2"
     first["aegiEnergyInfrastructureStatusPublication"] = {"unused": True}
     statuses = [
         _status_document(evse_id=evse_id)["messageContainer"]["payload"][0]
@@ -1384,8 +1447,8 @@ async def test_paginated_root_locations_include_later_nearby_and_favorite_statio
     assert [station.provider_id for station in result.favourites] == ["BE-EXAMPLE-1"]
     assert result.nearby[0].evse_status is EVSEStatus.AVAILABLE
     assert session.requests[1][0] == f"{belgium._LOCATIONS_URL}?offset=1000&limit=1000"
-    assert session.requests[2][0].endswith("/status/BE-EXAMPLE-2")
-    assert session.requests[3][0].endswith("/status/BE-EXAMPLE-1")
+    assert session.requests[2][0].endswith("/status/BE%2AEXAMPLE%2A2")
+    assert session.requests[3][0].endswith("/status/BE%2AEXAMPLE%2A1")
 
 
 @pytest.mark.asyncio
@@ -1517,7 +1580,7 @@ async def test_locations_do_not_follow_redirects():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("conflicting", [False, True])
-async def test_duplicate_evse_pages_are_deduplicated_or_rejected(conflicting):
+async def test_duplicate_evse_pages_are_deduplicated_or_omitted(conflicting, caplog):
     second = _root_locations_document()
     if conflicting:
         second["aegiEnergyInfrastructureTablePublication"]["energyInfrastructureTable"][
@@ -1525,6 +1588,18 @@ async def test_duplicate_evse_pages_are_deduplicated_or_rejected(conflicting):
         ]["energyInfrastructureSite"][0]["energyDistributor"] = {
             "name": "Different Organisation"
         }
+    other_site = copy.deepcopy(
+        _root_locations_document()["aegiEnergyInfrastructureTablePublication"][
+            "energyInfrastructureTable"
+        ][0]["energyInfrastructureSite"][0]
+    )
+    other_site["idG"] = "unique-site"
+    other_site["energyInfrastructureStation"][0]["refillPoint"][0][
+        "aegiElectricChargingPoint"
+    ]["idG"] = "BE-UNIQUE-1"
+    second["aegiEnergyInfrastructureTablePublication"]["energyInfrastructureTable"][0][
+        "energyInfrastructureSite"
+    ].append(other_site)
     session = FakeSession(
         [
             FakeResponse(
@@ -1535,19 +1610,21 @@ async def test_duplicate_evse_pages_are_deduplicated_or_rejected(conflicting):
         ]
     )
     client = BelgiumDatexClient(session, "test-token", NoWaitLimiter())
+    stations = belgium._parse_static_stations(
+        await client.async_get_locations(), 50.85, 4.35
+    )
+
     if conflicting:
-        with pytest.raises(InvalidProviderResponseError, match="duplicate EVSEs"):
-            await client.async_get_locations()
-        assert client._locations is None
+        # The ambiguous EVSE is omitted, but the rest of the snapshot is usable.
+        assert [station.provider_id for station in stations] == ["BE-UNIQUE-1"]
+        assert "omitted 1 EVSEs" in caplog.text
     else:
-        assert (
-            len(
-                belgium._parse_static_stations(
-                    await client.async_get_locations(), 50.85, 4.35
-                )
-            )
-            == 1
-        )
+        assert sorted(station.provider_id for station in stations) == [
+            "BE-EXAMPLE-1",
+            "BE-UNIQUE-1",
+        ]
+        assert "omitted" not in caplog.text
+    assert "test-token" not in caplog.text
 
 
 def test_root_entrances_and_connector_identity_remain_strict():
@@ -1669,25 +1746,232 @@ async def test_exhausted_location_quota_does_not_block_another_token(monkeypatch
     await other
 
 
-def test_static_tax_exclusive_price_is_not_published_as_a_driver_price():
-    evse = {
-        "electricEnergy": [
+def _live_rate(*prices: dict[str, Any], currency: bool = True) -> dict[str, Any]:
+    rate: dict[str, Any] = {
+        "idG": "RATE-1",
+        "ratePolicy": {"value": "adHoc"},
+        "energyPrice": list(prices),
+    }
+    if currency:
+        rate["applicableCurrency"] = ["EUR"]
+    return rate
+
+
+def _live_price(
+    price_type: str, value: float, *, tax_rate: object = 21, **extra: Any
+) -> dict[str, Any]:
+    return {
+        "priceGroupIndex": 0,
+        "priceType": {"value": price_type},
+        "value": value,
+        "taxIncluded": False,
+        "taxRate": tax_rate,
+        **extra,
+    }
+
+
+def _live_evse(*rates: dict[str, Any]) -> dict[str, Any]:
+    return {"energyProduct": [{"aegiElectricEnergy": {"energyRate": list(rates)}}]}
+
+
+def test_static_tax_exclusive_prices_are_published_including_vat():
+    tariff = belgium._static_ad_hoc_tariff(
+        _live_evse(
+            _live_rate(
+                _live_price("pricePerKWh", 0.3722),
+                _live_price("pricePerMinute", 0.05),
+                _live_price("flatRate", 1),
+            )
+        ),
+        "Example",
+    )
+
+    assert tariff is not None
+    assert tariff.currency == "EUR"
+    assert tariff.price_per_kwh == Decimal("0.450362")
+    assert tariff.price_per_minute == Decimal("0.0605")
+    assert tariff.session_fee == Decimal("1.21")
+    assert tariff.vat_percentage == Decimal("21")
+
+
+def test_static_price_accepts_fractional_tax_rate_and_included_tax():
+    fractional = belgium._static_ad_hoc_tariff(
+        _live_evse(_live_rate(_live_price("pricePerKWh", 0.4, tax_rate=0.21))),
+        "Example",
+    )
+    assert fractional is not None
+    assert fractional.price_per_kwh == Decimal("0.484")
+    assert str(fractional.vat_percentage) == "21"
+
+    included = belgium._static_ad_hoc_tariff(
+        _live_evse(
+            _live_rate(_live_price("pricePerKWh", 0.5, taxIncluded=True, taxRate=None))
+        ),
+        "Example",
+    )
+    assert included is not None
+    assert included.price_per_kwh == Decimal("0.5")
+    assert included.vat_percentage is None
+
+    zero_rated = belgium._static_ad_hoc_tariff(
+        _live_evse(_live_rate(_live_price("pricePerKWh", 0.4, tax_rate=0))),
+        "Example",
+    )
+    assert zero_rated is not None
+    assert zero_rated.price_per_kwh == Decimal("0.4")
+    assert str(zero_rated.vat_percentage) == "0"
+
+
+@pytest.mark.parametrize(
+    "prices",
+    [
+        # Without a usable tax rate the gross price is unknown.
+        [_live_price("pricePerKWh", 0.4, tax_rate=None)],
+        [_live_price("pricePerKWh", 0.4, tax_rate="unknown")],
+        [_live_price("pricePerKWh", 0.4, tax_rate=True)],
+        [_live_price("pricePerKWh", 0.4, tax_rate=150)],
+        # Time-limited prices are not the current ad-hoc price.
+        [_live_price("pricePerKWh", 0.4, timeBasedApplicability={})],
+        # Several price groups make the energy price ambiguous.
+        [
+            _live_price("pricePerKWh", 0.3725),
+            _live_price("pricePerKWh", 0.3722, priceGroupIndex=1),
+        ],
+        # A tariff without an energy price is not published.
+        [_live_price("pricePerMinute", 0.05)],
+    ],
+)
+def test_static_price_is_omitted_when_not_unambiguous(prices):
+    assert (
+        belgium._static_ad_hoc_tariff(_live_evse(_live_rate(*prices)), "Example")
+        is None
+    )
+
+
+def test_static_price_ignores_empty_live_energy_products():
+    assert belgium._static_ad_hoc_tariff(_live_evse(), "Example") is None
+    assert (
+        belgium._static_ad_hoc_tariff(
+            {"energyProduct": [{"aegiElectricEnergy": {}}, {}]}, "Example"
+        )
+        is None
+    )
+
+
+def test_status_price_without_currency_uses_static_tariff_currency():
+    """Live status updates only reference the static rate, without currency."""
+    status = {
+        "energyRateUpdate": [
             {
-                "energyRate": [
-                    {
-                        "ratePolicy": "adHoc",
-                        "applicableCurrency": ["EUR"],
-                        "energyPrice": [
-                            {
-                                "priceType": "pricePerKWh",
-                                "value": 0.4,
-                                "taxIncluded": False,
-                                "taxRate": 21,
-                            }
-                        ],
-                    }
-                ]
+                "energyRateReference": {"targetClass": "EnergyRate", "idG": "RATE-1"},
+                "energyPrice": [_live_price("pricePerKWh", 0.5)],
             }
         ]
     }
-    assert belgium._static_ad_hoc_tariff(evse, "Example") is None
+
+    assert belgium._ad_hoc_tariff(status, "Example") is None
+    tariff = belgium._ad_hoc_tariff(status, "Example", "EUR")
+    assert tariff is not None
+    assert tariff.currency == "EUR"
+    assert tariff.price_per_kwh == Decimal("0.605")
+
+
+@pytest.mark.asyncio
+async def test_belgium_live_status_price_replaces_static_price():
+    locations = _root_locations_document()
+    status = _status_document(evse_id="BE-EXAMPLE-1")
+    record = belgium._evse_status_record(
+        status["messageContainer"]["payload"][0], "BE-EXAMPLE-1"
+    )
+    assert record is not None
+    record["energyRateUpdate"] = [
+        {
+            "energyRateReference": {"targetClass": "EnergyRate", "idG": "RATE-1"},
+            "energyPrice": [_live_price("pricePerKWh", 0.5)],
+        }
+    ]
+    session = FakeSession([FakeResponse(locations), FakeResponse(status)])
+    provider = BelgiumChargingProvider(
+        BelgiumDatexClient(session, "token", NoWaitLimiter())
+    )
+
+    station = (await provider.async_get_stations(50.85, 4.35, 1000, 10)).nearby[0]
+
+    assert station.tariff is not None
+    assert station.tariff.currency == "EUR"
+    assert station.tariff.price_per_kwh == Decimal("0.605")
+
+
+def test_root_evse_status_uses_external_id_and_falls_back_to_internal_id():
+    """The live status endpoint returns 404 for internal ids that differ."""
+    document = _root_locations_document()
+    evse = document["aegiEnergyInfrastructureTablePublication"][
+        "energyInfrastructureTable"
+    ][0]["energyInfrastructureSite"][0]["energyInfrastructureStation"][0][
+        "refillPoint"
+    ][0]["aegiElectricChargingPoint"]
+    evse["idG"] = "BE-ENE-EENECO_G44971-1"
+    evse["connector"][0]["externalIdentifier"][0]["identifier"] = (
+        "BE*ENE*EENECO*G44971*1"
+    )
+
+    station = belgium._parse_static_stations(document, 50.85, 4.35)[0]
+    assert station.provider_id == "BE-ENE-EENECO_G44971-1"
+    assert station.evse_id == "BE*ENE*EENECO*G44971*1"
+
+    evse["connector"][0].pop("externalIdentifier")
+    station = belgium._parse_static_stations(document, 50.85, 4.35)[0]
+    assert station.evse_id == "BE-ENE-EENECO_G44971-1"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("latitude", "nearby_ids", "favourite_ids"),
+    [
+        # The favourite is nearby, so it is not repeated as a favourite.
+        (50.85, ["BE-EXAMPLE-1"], []),
+        # The favourite is outside the search radius.
+        (51.5, [], ["BE-EXAMPLE-1"]),
+    ],
+)
+async def test_factory_provider_publishes_static_stations_before_status(
+    hass, latitude, nearby_ids, favourite_ids
+):
+    """Entities appear once the snapshot loads; statuses follow on the next poll."""
+    session = FakeSession(
+        [
+            FakeResponse(_root_locations_document()),
+            FakeResponse(_status_document(evse_id="BE-EXAMPLE-1")),
+        ]
+    )
+    provider = belgium.create_belgium_provider(hass, session, "token")
+    favourite = FavouriteStationReference(
+        provider=provider.provider_id,
+        provider_id="BE-EXAMPLE-1",
+        name="BE*EXAMPLE*1",
+        latitude=50.85,
+        longitude=4.35,
+    )
+    assert provider.defers_initial_refresh
+
+    with patch.object(belgium.BelgiumRequestLimiter, "async_wait", AsyncMock()):
+        first = await provider.async_get_stations(
+            latitude, 4.35, 1000, 10, (favourite,)
+        )
+        assert [station.provider_id for station in first.nearby] == nearby_ids
+        assert [station.provider_id for station in first.favourites] == favourite_ids
+        assert not any(
+            station.availability_reported
+            for station in (*first.nearby, *first.favourites)
+        )
+        assert len(session.requests) == 1
+
+        second = await provider.async_get_stations(
+            latitude, 4.35, 1000, 10, (favourite,)
+        )
+
+    assert all(
+        station.availability_reported
+        for station in (*second.nearby, *second.favourites)
+    )
+    assert session.requests[1][0].endswith("/status/BE%2AEXAMPLE%2A1")

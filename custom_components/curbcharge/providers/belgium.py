@@ -61,6 +61,7 @@ _LOCATION_REQUEST_LIMIT = 30
 _MAX_LOCATION_PAGES = 100
 _EVSE_STATUS_INTERVAL = 30
 _REQUEST_LIMITER_DATA_KEY = "belgium_request_limiter"
+_LOCATION_CACHE_DATA_KEY = "belgium_location_cache"
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -117,7 +118,7 @@ class BelgiumRequestLimiter:
 
     async def async_wait(self, token: str, evse_id: str | None = None) -> None:
         """Wait until this token, EVSE, and IP may safely make another request."""
-        token_key = hashlib.sha256(token.encode("ascii")).digest()
+        token_key = _token_key(token)
         while True:
             async with self._lock:
                 now = time.monotonic()
@@ -159,6 +160,48 @@ class BelgiumRequestLimiter:
             )
 
 
+class BelgiumLocationCache:
+    """Share validated static snapshots per token across clients.
+
+    A complete snapshot takes roughly 18 paginated location requests, so a
+    config flow followed by entry setup would otherwise exhaust the rolling
+    location quota and stall setup for up to an hour.
+    """
+
+    def __init__(self) -> None:
+        """Initialize empty snapshot state."""
+        self._snapshots: dict[bytes, tuple[BelgiumDatexDocument, float]] = {}
+        self._locks: dict[bytes, asyncio.Lock] = {}
+
+    def lock(self, token: str) -> asyncio.Lock:
+        """Return the lock that coalesces snapshot downloads for one token."""
+        return self._locks.setdefault(_token_key(token), asyncio.Lock())
+
+    def get(self, token: str) -> tuple[BelgiumDatexDocument, float] | None:
+        """Return the cached snapshot and its monotonic timestamp, if any."""
+        return self._snapshots.get(_token_key(token))
+
+    def store(self, token: str, document: BelgiumDatexDocument) -> None:
+        """Replace the snapshot for one token after it fully validated."""
+        self._snapshots[_token_key(token)] = (document, time.monotonic())
+
+
+def _token_key(token: str) -> bytes:
+    return hashlib.sha256(token.encode("ascii")).digest()
+
+
+def _shared_location_cache(hass: HomeAssistant) -> BelgiumLocationCache:
+    """Return the snapshot cache shared by Belgium clients in this HA instance."""
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    cache = domain_data.get(_LOCATION_CACHE_DATA_KEY)
+    if cache is None:
+        cache = BelgiumLocationCache()
+        domain_data[_LOCATION_CACHE_DATA_KEY] = cache
+    if not isinstance(cache, BelgiumLocationCache):
+        raise RuntimeError("CurbCharge Belgium location cache has an invalid type")
+    return cache
+
+
 def _shared_request_limiter(hass: HomeAssistant) -> BelgiumRequestLimiter:
     """Return the one request limiter shared by Belgium clients in this HA instance."""
     domain_data = hass.data.setdefault(DOMAIN, {})
@@ -179,6 +222,7 @@ class BelgiumDatexClient:
         session: aiohttp.ClientSession,
         token: str,
         request_limiter: BelgiumRequestLimiter,
+        location_cache: BelgiumLocationCache | None = None,
     ) -> None:
         """Initialize using Home Assistant's session and shared request limiter."""
         if not is_valid_belgium_api_token(token):
@@ -186,19 +230,35 @@ class BelgiumDatexClient:
         self._session = session
         self._token = token
         self._request_limiter = request_limiter
-        self._locations: BelgiumDatexDocument | None = None
-        self._locations_cached_at: float | None = None
+        self._location_cache = (
+            location_cache if location_cache is not None else BelgiumLocationCache()
+        )
+
+    @property
+    def _locations(self) -> BelgiumDatexDocument | None:
+        cached = self._location_cache.get(self._token)
+        return cached[0] if cached is not None else None
+
+    @property
+    def _locations_cached_at(self) -> float | None:
+        cached = self._location_cache.get(self._token)
+        return cached[1] if cached is not None else None
 
     async def async_get_locations(self) -> BelgiumDatexDocument:
         """Return the shared, read-only static snapshot, cached for less than a day."""
-        now = time.monotonic()
-        if (
-            self._locations is not None
-            and self._locations_cached_at is not None
-            and now - self._locations_cached_at < _LOCATION_CACHE_SECONDS
-        ):
-            return self._locations
+        async with self._location_cache.lock(self._token):
+            cached = self._location_cache.get(self._token)
+            if (
+                cached is not None
+                and time.monotonic() - cached[1] < _LOCATION_CACHE_SECONDS
+            ):
+                return cached[0]
+            locations = await self._async_fetch_locations()
+            self._location_cache.store(self._token, locations)
+            return locations
 
+    async def _async_fetch_locations(self) -> BelgiumDatexDocument:
+        """Download and validate every locations page."""
         tables: list[dict[str, object]] = []
         seen_urls: set[str] = set()
         url: str | None = _LOCATIONS_URL
@@ -224,12 +284,18 @@ class BelgiumDatexClient:
                     "energyInfrastructureTable": tables
                 }
             )
-            await loop.run_in_executor(None, _parse_static_stations, locations, 0, 0)
+            _, conflicting = await loop.run_in_executor(
+                None, _parse_static_snapshot, locations, 0, 0
+            )
         except InvalidProviderResponseError as err:
             _LOGGER.warning("Belgium DATEX II locations validation failed: %s", err)
             raise
-        self._locations = locations
-        self._locations_cached_at = time.monotonic()
+        if conflicting:
+            _LOGGER.warning(
+                "Belgium DATEX II omitted %d EVSEs that the provider published "
+                "with conflicting duplicate records",
+                conflicting,
+            )
         return locations
 
     async def async_get_evse_status(self, evse_id: str) -> BelgiumDatexDocument | None:
@@ -302,9 +368,17 @@ class BelgiumDatexClient:
 class BelgiumChargingProvider(BaseChargingProvider):
     """Map Belgium DATEX II locations and status into shared station models."""
 
-    def __init__(self, client: BelgiumDatexClient) -> None:
-        """Initialize with a DATEX client using Home Assistant's session."""
+    def __init__(
+        self, client: BelgiumDatexClient, *, static_first: bool = False
+    ) -> None:
+        """Initialize with a DATEX client using Home Assistant's session.
+
+        With ``static_first``, the first discovery returns static stations
+        without per-EVSE status requests, so entities appear as soon as the
+        snapshot is available.
+        """
         self._client = client
+        self._initial_discovery = static_first
 
     @property
     def provider_name(self) -> str:
@@ -320,6 +394,11 @@ class BelgiumChargingProvider(BaseChargingProvider):
     def country_code(self) -> str:
         """Return the country served by this provider."""
         return COUNTRY_BE
+
+    @property
+    def defers_initial_refresh(self) -> bool:
+        """Load in the background: a cold snapshot alone takes about 3 minutes."""
+        return True
 
     async def async_validate_connection(
         self, latitude: float, longitude: float, radius_m: int
@@ -360,6 +439,21 @@ class BelgiumChargingProvider(BaseChargingProvider):
             self.provider_id,
         )
 
+        if self._initial_discovery:
+            # Publish the static stations as soon as the snapshot is available.
+            # Rate-limited per-EVSE status requests follow on the next poll.
+            self._initial_discovery = False
+            initial_nearby = tuple(nearby_candidates[:max_stations])
+            initial_ids = {station.provider_id for station in initial_nearby}
+            return StationDiscoveryResult(
+                nearby=initial_nearby,
+                favourites=tuple(
+                    station
+                    for station_id, station in favourite_stations.items()
+                    if station_id not in initial_ids
+                ),
+            )
+
         async def update_status(
             stations: list[ChargingStation],
         ) -> tuple[ChargingStation, ...]:
@@ -390,7 +484,11 @@ class BelgiumChargingProvider(BaseChargingProvider):
                 )
                 raw_energy_rate_updates = status_record.get("energyRateUpdate")
                 tariff = (
-                    _ad_hoc_tariff(status_record, self.provider_name)
+                    _ad_hoc_tariff(
+                        status_record,
+                        self.provider_name,
+                        station.tariff.currency if station.tariff is not None else None,
+                    )
                     if raw_energy_rate_updates
                     else station.tariff
                 )
@@ -451,13 +549,25 @@ def create_belgium_provider(
     token: str,
 ) -> BelgiumChargingProvider:
     """Create a provider using the limiter shared by this Home Assistant instance."""
-    client = BelgiumDatexClient(session, token, _shared_request_limiter(hass))
-    return BelgiumChargingProvider(client)
+    client = BelgiumDatexClient(
+        session,
+        token,
+        _shared_request_limiter(hass),
+        _shared_location_cache(hass),
+    )
+    return BelgiumChargingProvider(client, static_first=True)
 
 
 def _parse_static_stations(
     document: BelgiumDatexDocument, latitude: float, longitude: float
 ) -> list[ChargingStation]:
+    return _parse_static_snapshot(document, latitude, longitude)[0]
+
+
+def _parse_static_snapshot(
+    document: BelgiumDatexDocument, latitude: float, longitude: float
+) -> tuple[list[ChargingStation], int]:
+    """Parse static EVSEs and count ids omitted for conflicting duplicates."""
     stations: list[ChargingStation] = []
     for table_value in _static_tables(document):
         table = _datex_object(table_value, "energy-infrastructure table")
@@ -519,21 +629,28 @@ def _parse_static_stations(
                             country_code=location.country_code,
                             location=location,
                             provider_name=PROVIDER_ECO_MOVEMENT_BE_NAME,
-                            evse_id=(
-                                evse_id if "entrance" in site else external_evse_id
-                            ),
+                            # The status endpoint only resolves the external
+                            # EVSE id; the internal idG returns 404 when the
+                            # two differ, as they do for most live EVSEs.
+                            evse_id=external_evse_id
+                            or (evse_id if "entrance" in site else None),
                             connector_count_reported=connector_count_reported,
                         )
                     )
     unique_stations: dict[str, ChargingStation] = {}
+    conflicting_ids: set[str] = set()
     for parsed_station in stations:
         previous = unique_stations.get(parsed_station.provider_id)
-        if previous is not None and previous != parsed_station:
-            raise InvalidProviderResponseError(
-                "Belgium DATEX II returned conflicting duplicate EVSEs"
-            )
-        unique_stations[parsed_station.provider_id] = parsed_station
-    return list(unique_stations.values())
+        if previous is None:
+            unique_stations[parsed_station.provider_id] = parsed_station
+        elif previous != parsed_station:
+            conflicting_ids.add(parsed_station.provider_id)
+    # The live feed publishes some EVSE ids under several sites with different
+    # coordinates and addresses. Neither copy can be trusted, so omit them
+    # instead of rejecting the whole national snapshot.
+    for conflicting_id in conflicting_ids:
+        del unique_stations[conflicting_id]
+    return list(unique_stations.values()), len(conflicting_ids)
 
 
 def _datex_publications(
@@ -928,114 +1045,163 @@ def _evse_status(value: object) -> EVSEStatus:
 
 
 def _ad_hoc_tariff(
-    status: dict[str, object], provider_name: str
+    status: dict[str, object],
+    provider_name: str,
+    fallback_currency: str | None = None,
 ) -> ChargingTariff | None:
+    """Parse the ad-hoc price in a status record.
+
+    Live status price updates omit ``applicableCurrency`` and only reference the
+    static energy rate, so the currency of the static tariff is the fallback.
+    """
     raw_updates = status.get("energyRateUpdate")
     if raw_updates is None:
         return None
-    updates = _datex_list(raw_updates, "EVSE energy-rate updates")
-    rates: set[tuple[str, Decimal]] = set()
-    for update_value in updates:
-        update = _datex_object(update_value, "EVSE energy-rate update")
-        raw_currencies = update.get("applicableCurrency")
-        currencies = (
-            _datex_list(raw_currencies, "applicable currencies")
-            if raw_currencies is not None
-            else []
-        )
-        if len(currencies) != 1 or not isinstance(currencies[0], str):
-            continue
-        currency = currencies[0]
-        if len(currency) != 3 or not currency.isalpha():
-            continue
-        raw_prices = update.get("energyPrice")
-        if raw_prices is None:
-            continue
-        for price_value in _datex_list(raw_prices, "energy prices"):
-            price = _datex_object(price_value, "energy price")
-            if (_datex_code(price.get("priceType")) or "").casefold() != "priceperkwh":
-                continue
-            if price.get("overallPeriod") is not None:
-                continue
-            if price.get("taxIncluded") is False:
-                continue
-            rates.add(
-                (
-                    currency.upper(),
-                    _datex_decimal(price.get("value"), "energy price"),
-                )
-            )
-    if len(rates) != 1:
-        return None
-    currency, price_per_kwh = next(iter(rates))
-    return ChargingTariff(
-        currency=currency,
-        price_per_kwh=price_per_kwh,
-        session_fee=None,
-        price_per_minute=None,
-        description=None,
-        source=provider_name,
+    return _tariff_from_rates(
+        _datex_list(raw_updates, "EVSE energy-rate updates"),
+        provider_name,
+        require_ad_hoc=False,
+        fallback_currency=fallback_currency,
     )
 
 
 def _static_ad_hoc_tariff(
     evse: dict[str, object], provider_name: str
 ) -> ChargingTariff | None:
+    """Parse the ad-hoc price published with the static EVSE record."""
+    rates: list[object] = []
     raw_energy = evse.get("electricEnergy")
-    if raw_energy is None:
-        return None
-    energy_items = _datex_list(raw_energy, "EVSE energy information")
-    rates: set[tuple[str, Decimal]] = set()
-    for energy_value in energy_items:
-        energy = _datex_object(energy_value, "EVSE energy information")
-        raw_rates = energy.get("energyRate")
-        if raw_rates is None:
-            continue
-        for rate_value in _datex_list(raw_rates, "energy rates"):
-            rate = _datex_object(rate_value, "energy rate")
-            if (_datex_code(rate.get("ratePolicy")) or "").casefold() != "adhoc":
-                continue
-            raw_currencies = rate.get("applicableCurrency")
-            currencies = (
-                _datex_list(raw_currencies, "applicable currencies")
-                if raw_currencies is not None
-                else []
+    if raw_energy is not None:
+        for energy_value in _datex_list(raw_energy, "EVSE energy information"):
+            energy = _datex_object(energy_value, "EVSE energy information")
+            rates.extend(
+                _datex_list(energy.get("energyRate"), "energy rates", optional=True)
             )
-            if len(currencies) != 1 or not isinstance(currencies[0], str):
+    raw_products = evse.get("energyProduct")
+    if raw_products is not None:
+        for product_value in _datex_list(raw_products, "EVSE energy products"):
+            product = _datex_object(product_value, "EVSE energy product")
+            energy_value = product.get("aegiElectricEnergy")
+            if energy_value is None:
                 continue
-            currency = currencies[0]
-            if len(currency) != 3 or not currency.isalpha():
+            energy = _datex_object(energy_value, "EVSE electric energy")
+            rates.extend(
+                _datex_list(energy.get("energyRate"), "energy rates", optional=True)
+            )
+    return _tariff_from_rates(rates, provider_name, require_ad_hoc=True)
+
+
+_PRICE_COMPONENTS = {
+    "priceperkwh": "kwh",
+    "priceperminute": "minute",
+    "flatrate": "flat",
+}
+
+
+def _tariff_from_rates(
+    rates: list[object],
+    provider_name: str,
+    *,
+    require_ad_hoc: bool,
+    fallback_currency: str | None = None,
+) -> ChargingTariff | None:
+    """Return a driver-facing tariff when its energy price is unambiguous."""
+    prices: dict[str, set[tuple[str, Decimal]]] = {
+        component: set() for component in _PRICE_COMPONENTS.values()
+    }
+    vat_percentages: set[Decimal] = set()
+    for rate_value in rates:
+        rate = _datex_object(rate_value, "energy rate")
+        if (
+            require_ad_hoc
+            and (_datex_code(rate.get("ratePolicy")) or "").casefold() != "adhoc"
+        ):
+            continue
+        raw_currencies = rate.get("applicableCurrency")
+        currency: object
+        if raw_currencies is None:
+            currency = fallback_currency
+        else:
+            currencies = _datex_list(raw_currencies, "applicable currencies")
+            currency = currencies[0] if len(currencies) == 1 else None
+        if (
+            not isinstance(currency, str)
+            or len(currency) != 3
+            or not currency.isalpha()
+        ):
+            continue
+        raw_prices = rate.get("energyPrice")
+        if raw_prices is None:
+            continue
+        for price_value in _datex_list(raw_prices, "energy prices"):
+            price = _datex_object(price_value, "energy price")
+            component = _PRICE_COMPONENTS.get(
+                (_datex_code(price.get("priceType")) or "").casefold()
+            )
+            # Prices limited to a period or time of day are not the current
+            # ad-hoc price, so they are never published as one.
+            if (
+                component is None
+                or price.get("overallPeriod") is not None
+                or price.get("timeBasedApplicability") is not None
+            ):
                 continue
-            raw_prices = rate.get("energyPrice")
-            if raw_prices is None:
+            gross = _gross_price(price)
+            if gross is None:
                 continue
-            for price_value in _datex_list(raw_prices, "energy prices"):
-                price = _datex_object(price_value, "energy price")
-                if (
-                    _datex_code(price.get("priceType")) or ""
-                ).casefold() != "priceperkwh":
-                    continue
-                if price.get("overallPeriod") is not None:
-                    continue
-                if price.get("taxIncluded") is False:
-                    continue
-                rates.add(
-                    (
-                        currency.upper(),
-                        _datex_decimal(price.get("value"), "energy price"),
-                    )
-                )
-    if len(rates) != 1:
+            amount, vat_percentage = gross
+            prices[component].add((currency.upper(), amount))
+            if vat_percentage is not None:
+                vat_percentages.add(vat_percentage)
+
+    if len({currency for values in prices.values() for currency, _ in values}) != 1:
         return None
-    currency, price_per_kwh = next(iter(rates))
+    energy_prices = prices["kwh"]
+    if len(energy_prices) != 1:
+        return None
+    currency, price_per_kwh = next(iter(energy_prices))
     return ChargingTariff(
         currency=currency,
         price_per_kwh=price_per_kwh,
-        session_fee=None,
-        price_per_minute=None,
+        session_fee=_unique_price(prices["flat"]),
+        price_per_minute=_unique_price(prices["minute"]),
         description=None,
         source=provider_name,
+        vat_percentage=(
+            next(iter(vat_percentages)) if len(vat_percentages) == 1 else None
+        ),
     )
+
+
+def _unique_price(values: set[tuple[str, Decimal]]) -> Decimal | None:
+    return next(iter(values))[1] if len(values) == 1 else None
+
+
+def _gross_price(price: dict[str, object]) -> tuple[Decimal, Decimal | None] | None:
+    """Return the price including VAT, or None when it cannot be derived.
+
+    The Belgium feed publishes prices excluding VAT with their tax rate.
+    """
+    amount = _datex_decimal(price.get("value"), "energy price")
+    vat_percentage = _vat_percentage(price.get("taxRate"))
+    if price.get("taxIncluded") is False:
+        if vat_percentage is None:
+            return None
+        return amount * (Decimal(1) + vat_percentage / Decimal(100)), vat_percentage
+    return amount, vat_percentage
+
+
+def _vat_percentage(value: object) -> Decimal | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float, str)):
+        return None
+    try:
+        rate = Decimal(str(value))
+    except InvalidOperation:
+        return None
+    if not rate.is_finite() or not 0 <= rate <= 100:
+        return None
+    # The live feed mostly reports 21 but occasionally the fraction 0.21.
+    return rate.scaleb(2) if 0 < rate < 1 else rate
 
 
 def _location_coordinates(value: object, field: str) -> tuple[float, float] | None:

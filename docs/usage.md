@@ -59,13 +59,22 @@ terms. Eco-Movement issues these tokens; request access by emailing
 
 The `/locations` endpoint is paginated, with 1,000 sites per page. CurbCharge
 follows every next-page link before selecting nearby stations or favourites;
-only a complete validated static snapshot is cached, for 23 hours. Initial setup
-and an uncached refresh can take several minutes. Each page counts toward the
-shared limit of 30 location requests per rolling hour per token; pages are not
-artificially spaced two minutes apart. The other limits remain one request per
-10 seconds per source IP and two status requests per minute per EVSE per token.
-A token whose quota is exhausted must wait for earlier requests to leave the
-rolling window.
+only a complete validated static snapshot is cached, for 23 hours. The snapshot
+is shared by every CurbCharge entry and configuration flow that uses the same
+token, so finishing setup does not download all pages a second time. Initial
+setup and an uncached refresh can take several minutes, longer than Home
+Assistant allows an integration to block startup, so a Belgium entry loads its
+data in the background. Its entities report unavailable until the snapshot is
+in, station entities then appear with unknown status, and statuses and dynamic
+prices follow on the next scheduled poll. The feed occasionally
+publishes the same EVSE under several sites with different coordinates or
+addresses; because neither record can be trusted, CurbCharge omits those EVSEs
+and logs a warning with their count instead of rejecting the whole feed. Each
+page counts toward the shared limit of 30 location requests per rolling hour per
+token; pages are not artificially spaced two minutes apart. The other limits
+remain one request per 10 seconds per source IP and two status requests per
+minute per EVSE per token. A token whose quota is exhausted must wait for
+earlier requests to leave the rolling window.
 
 Eco-Movement's responses have a 60-second cache and the locations feed also
 contains dynamic data. CurbCharge currently caches only static infrastructure
@@ -78,13 +87,14 @@ limiter. If a token expires or is revoked, the integration prompts for a
 replacement token and validates it before updating the entry.
 
 The official documentation describes free token access and a CC BY 4.0 licence;
-review those terms before use. Static parsing is covered by synthetic examples
-matching the response structure reported in issue #380, including root
-publications and entrance coordinates. Complete live endpoint compatibility
-has not been verified. No recorded production response is committed.
-New `energyProduct` tariffs, VAT calculations, and ambiguous multi-rate prices
-remain unsupported; missing or explicitly tax-exclusive dynamic prices remain
-unknown rather than being presented as a final driver price.
+review those terms before use. Parsing has been checked against the live
+endpoint; no recorded production response is committed. The feed publishes
+ad-hoc prices excluding VAT together with their tax rate, so CurbCharge applies
+that rate to present a gross price per kWh, per minute, and per session. Status
+price updates omit their currency and use the static rate's currency instead.
+Time-limited prices, prices without a usable tax rate, and EVSEs with several
+energy prices (price groups) remain unknown rather than guessed. Many operators
+publish no price at all for their EVSEs.
 Missing status remains unknown; failed updates make coordinator entities
 unavailable instead of inferring charger state. A per-EVSE `404` is treated as
 missing status for that station and does not fail the other station updates.

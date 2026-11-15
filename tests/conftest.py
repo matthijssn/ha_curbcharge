@@ -39,6 +39,7 @@ class FakeProvider:
     provider_id = "ndw_dot_nl"
     provider_name = "NDW DOT-NL"
     country_code = "NL"
+    defers_initial_refresh = False
 
     def __init__(self, snapshots: list[Any] | None = None) -> None:
         self.snapshots = deque(snapshots or [])
