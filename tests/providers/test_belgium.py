@@ -166,7 +166,7 @@ async def test_root_locations_validate_and_map_entrance_and_connector_identity()
     station = belgium._parse_static_stations(document, 50.85, 4.35)[0]
 
     assert station.provider_id == "BE-EXAMPLE-1"
-    assert station.evse_id == "BE-EXAMPLE-1"
+    assert station.evse_id == "BE*EXAMPLE*1"
     assert station.name == "BE*EXAMPLE*1"
     assert (station.latitude, station.longitude) == (50.85, 4.35)
     assert station.address == "Example Street 1, 1000 Example City"
@@ -1397,9 +1397,11 @@ async def test_paginated_root_locations_include_later_nearby_and_favorite_statio
         "energyInfrastructureTable"
     ][0]["energyInfrastructureSite"][0]
     site["idG"] = "second-site"
-    site["energyInfrastructureStation"][0]["refillPoint"][0][
+    evse = site["energyInfrastructureStation"][0]["refillPoint"][0][
         "aegiElectricChargingPoint"
-    ]["idG"] = "BE-EXAMPLE-2"
+    ]
+    evse["idG"] = "BE-EXAMPLE-2"
+    evse["connector"][0]["externalIdentifier"][0]["identifier"] = "BE*EXAMPLE*2"
     first["aegiEnergyInfrastructureStatusPublication"] = {"unused": True}
     statuses = [
         _status_document(evse_id=evse_id)["messageContainer"]["payload"][0]
@@ -1441,8 +1443,8 @@ async def test_paginated_root_locations_include_later_nearby_and_favorite_statio
     assert [station.provider_id for station in result.favourites] == ["BE-EXAMPLE-1"]
     assert result.nearby[0].evse_status is EVSEStatus.AVAILABLE
     assert session.requests[1][0] == f"{belgium._LOCATIONS_URL}?offset=1000&limit=1000"
-    assert session.requests[2][0].endswith("/status/BE-EXAMPLE-2")
-    assert session.requests[3][0].endswith("/status/BE-EXAMPLE-1")
+    assert session.requests[2][0].endswith("/status/BE%2AEXAMPLE%2A2")
+    assert session.requests[3][0].endswith("/status/BE%2AEXAMPLE%2A1")
 
 
 @pytest.mark.asyncio
@@ -1762,3 +1764,25 @@ def test_static_tax_exclusive_price_is_not_published_as_a_driver_price():
         ]
     }
     assert belgium._static_ad_hoc_tariff(evse, "Example") is None
+
+
+def test_root_evse_status_uses_external_id_and_falls_back_to_internal_id():
+    """The live status endpoint returns 404 for internal ids that differ."""
+    document = _root_locations_document()
+    evse = document["aegiEnergyInfrastructureTablePublication"][
+        "energyInfrastructureTable"
+    ][0]["energyInfrastructureSite"][0]["energyInfrastructureStation"][0][
+        "refillPoint"
+    ][0]["aegiElectricChargingPoint"]
+    evse["idG"] = "BE-ENE-EENECO_G44971-1"
+    evse["connector"][0]["externalIdentifier"][0]["identifier"] = (
+        "BE*ENE*EENECO*G44971*1"
+    )
+
+    station = belgium._parse_static_stations(document, 50.85, 4.35)[0]
+    assert station.provider_id == "BE-ENE-EENECO_G44971-1"
+    assert station.evse_id == "BE*ENE*EENECO*G44971*1"
+
+    evse["connector"][0].pop("externalIdentifier")
+    station = belgium._parse_static_stations(document, 50.85, 4.35)[0]
+    assert station.evse_id == "BE-ENE-EENECO_G44971-1"

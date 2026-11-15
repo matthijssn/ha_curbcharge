@@ -597,9 +597,11 @@ def _parse_static_snapshot(
                             country_code=location.country_code,
                             location=location,
                             provider_name=PROVIDER_ECO_MOVEMENT_BE_NAME,
-                            evse_id=(
-                                evse_id if "entrance" in site else external_evse_id
-                            ),
+                            # The status endpoint only resolves the external
+                            # EVSE id; the internal idG returns 404 when the
+                            # two differ, as they do for most live EVSEs.
+                            evse_id=external_evse_id
+                            or (evse_id if "entrance" in site else None),
                             connector_count_reported=connector_count_reported,
                         )
                     )
