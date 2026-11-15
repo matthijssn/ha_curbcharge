@@ -234,18 +234,31 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
         device_trackers_enabled=device_trackers,
     )
     entry.runtime_data = coordinator
-    try:
-        await coordinator.async_config_entry_first_refresh()
-    except ConfigEntryNotReady as err:
-        cause = err.__cause__
-        if err.translation_key == "rate_limited" or (
-            isinstance(cause, UpdateFailed) and cause.translation_key == "rate_limited"
-        ):
-            raise ConfigEntryNotReady(
-                translation_domain=DOMAIN,
-                translation_key="rate_limited",
-            ) from err
-        raise
+    if provider.defers_initial_refresh:
+        # The first refresh can take longer than Home Assistant allows for
+        # setup during startup, which would leave the entry in a permanent
+        # setup error. Entities report unavailable until the first data
+        # arrives and are added as stations appear.
+        coordinator.last_update_success = False
+        entry.async_create_background_task(
+            hass,
+            coordinator.async_refresh(),
+            f"{DOMAIN} initial refresh {entry.entry_id}",
+        )
+    else:
+        try:
+            await coordinator.async_config_entry_first_refresh()
+        except ConfigEntryNotReady as err:
+            cause = err.__cause__
+            if err.translation_key == "rate_limited" or (
+                isinstance(cause, UpdateFailed)
+                and cause.translation_key == "rate_limited"
+            ):
+                raise ConfigEntryNotReady(
+                    translation_domain=DOMAIN,
+                    translation_key="rate_limited",
+                ) from err
+            raise
     platforms = PLATFORMS + OPTIONAL_PLATFORMS if device_trackers else PLATFORMS
     await hass.config_entries.async_forward_entry_setups(entry, platforms)
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))

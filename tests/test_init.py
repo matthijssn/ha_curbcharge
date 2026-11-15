@@ -2910,3 +2910,41 @@ async def test_options_update_applies_entity_movement_threshold(hass, monkeypatc
     assert entry.runtime_data is coordinator
     assert coordinator.location_movement_threshold_m == 0
     assert provider.station_calls[-1][:2] == moved
+
+
+@pytest.mark.asyncio
+async def test_slow_provider_setup_does_not_wait_for_first_refresh(
+    hass, monkeypatch, sample_stations
+):
+    """A cold Belgium snapshot can exceed Home Assistant's startup timeout."""
+    station = sample_stations[0]
+    release = asyncio.Event()
+
+    class SlowProvider(FakeProvider):
+        defers_initial_refresh = True
+
+        async def async_get_stations(self, *args, **kwargs):
+            await release.wait()
+            return await super().async_get_stations(*args, **kwargs)
+
+    provider = SlowProvider([(station,)])
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *args: provider)
+    entry = _entry()
+    entry.add_to_hass(hass)
+    device_identifier = (DOMAIN, f"{PROVIDER_NDW_DOT_NL}:{station.provider_id}")
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    coordinator = entry.runtime_data
+    assert entry.state is ConfigEntryState.LOADED
+    assert not coordinator.last_update_success
+    assert coordinator.data is None
+    assert not _has_device(dr.async_get(hass), entry.entry_id, device_identifier)
+
+    release.set()
+    await hass.async_block_till_done(wait_background_tasks=True)
+
+    assert coordinator.last_update_success
+    assert station.provider_id in coordinator.data
+    assert _has_device(dr.async_get(hass), entry.entry_id, device_identifier)

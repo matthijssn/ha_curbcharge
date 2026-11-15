@@ -62,7 +62,11 @@ follows every next-page link before selecting nearby stations or favourites;
 only a complete validated static snapshot is cached, for 23 hours. The snapshot
 is shared by every CurbCharge entry and configuration flow that uses the same
 token, so finishing setup does not download all pages a second time. Initial
-setup and an uncached refresh can take several minutes. The feed occasionally
+setup and an uncached refresh can take several minutes, longer than Home
+Assistant allows an integration to block startup, so a Belgium entry loads its
+data in the background. Its entities report unavailable until the snapshot is
+in, station entities then appear with unknown status, and statuses and dynamic
+prices follow on the next scheduled poll. The feed occasionally
 publishes the same EVSE under several sites with different coordinates or
 addresses; because neither record can be trusted, CurbCharge omits those EVSEs
 and logs a warning with their count instead of rejecting the whole feed. Each

@@ -1922,3 +1922,56 @@ def test_root_evse_status_uses_external_id_and_falls_back_to_internal_id():
     evse["connector"][0].pop("externalIdentifier")
     station = belgium._parse_static_stations(document, 50.85, 4.35)[0]
     assert station.evse_id == "BE-ENE-EENECO_G44971-1"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("latitude", "nearby_ids", "favourite_ids"),
+    [
+        # The favourite is nearby, so it is not repeated as a favourite.
+        (50.85, ["BE-EXAMPLE-1"], []),
+        # The favourite is outside the search radius.
+        (51.5, [], ["BE-EXAMPLE-1"]),
+    ],
+)
+async def test_factory_provider_publishes_static_stations_before_status(
+    hass, latitude, nearby_ids, favourite_ids
+):
+    """Entities appear once the snapshot loads; statuses follow on the next poll."""
+    session = FakeSession(
+        [
+            FakeResponse(_root_locations_document()),
+            FakeResponse(_status_document(evse_id="BE-EXAMPLE-1")),
+        ]
+    )
+    provider = belgium.create_belgium_provider(hass, session, "token")
+    favourite = FavouriteStationReference(
+        provider=provider.provider_id,
+        provider_id="BE-EXAMPLE-1",
+        name="BE*EXAMPLE*1",
+        latitude=50.85,
+        longitude=4.35,
+    )
+    assert provider.defers_initial_refresh
+
+    with patch.object(belgium.BelgiumRequestLimiter, "async_wait", AsyncMock()):
+        first = await provider.async_get_stations(
+            latitude, 4.35, 1000, 10, (favourite,)
+        )
+        assert [station.provider_id for station in first.nearby] == nearby_ids
+        assert [station.provider_id for station in first.favourites] == favourite_ids
+        assert not any(
+            station.availability_reported
+            for station in (*first.nearby, *first.favourites)
+        )
+        assert len(session.requests) == 1
+
+        second = await provider.async_get_stations(
+            latitude, 4.35, 1000, 10, (favourite,)
+        )
+
+    assert all(
+        station.availability_reported
+        for station in (*second.nearby, *second.favourites)
+    )
+    assert session.requests[1][0].endswith("/status/BE%2AEXAMPLE%2A1")

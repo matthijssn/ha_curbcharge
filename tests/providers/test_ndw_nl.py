@@ -497,6 +497,8 @@ def test_ndw_providers_share_request_limiter_per_home_assistant(hass):
     assert isinstance(first, NdwDotNlProvider)
     assert isinstance(second, NdwDotNlProvider)
     assert first._request_limiter is second._request_limiter
+    # NDW's first refresh is fast enough to block entry setup.
+    assert not first.defers_initial_refresh
 
 
 @pytest.mark.asyncio
@@ -1370,6 +1372,7 @@ def test_provider_factory_creates_belgium_with_home_assistant_limiter(hass):
     assert isinstance(provider, BelgiumChargingProvider)
     assert provider.provider_id == PROVIDER_ECO_MOVEMENT_BE
     assert provider.country_code == "BE"
+    assert provider.defers_initial_refresh
 
 
 @pytest.mark.asyncio

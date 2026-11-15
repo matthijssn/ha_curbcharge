@@ -368,9 +368,17 @@ class BelgiumDatexClient:
 class BelgiumChargingProvider(BaseChargingProvider):
     """Map Belgium DATEX II locations and status into shared station models."""
 
-    def __init__(self, client: BelgiumDatexClient) -> None:
-        """Initialize with a DATEX client using Home Assistant's session."""
+    def __init__(
+        self, client: BelgiumDatexClient, *, static_first: bool = False
+    ) -> None:
+        """Initialize with a DATEX client using Home Assistant's session.
+
+        With ``static_first``, the first discovery returns static stations
+        without per-EVSE status requests, so entities appear as soon as the
+        snapshot is available.
+        """
         self._client = client
+        self._initial_discovery = static_first
 
     @property
     def provider_name(self) -> str:
@@ -386,6 +394,11 @@ class BelgiumChargingProvider(BaseChargingProvider):
     def country_code(self) -> str:
         """Return the country served by this provider."""
         return COUNTRY_BE
+
+    @property
+    def defers_initial_refresh(self) -> bool:
+        """Load in the background: a cold snapshot alone takes about 3 minutes."""
+        return True
 
     async def async_validate_connection(
         self, latitude: float, longitude: float, radius_m: int
@@ -425,6 +438,21 @@ class BelgiumChargingProvider(BaseChargingProvider):
             favourites,
             self.provider_id,
         )
+
+        if self._initial_discovery:
+            # Publish the static stations as soon as the snapshot is available.
+            # Rate-limited per-EVSE status requests follow on the next poll.
+            self._initial_discovery = False
+            initial_nearby = tuple(nearby_candidates[:max_stations])
+            initial_ids = {station.provider_id for station in initial_nearby}
+            return StationDiscoveryResult(
+                nearby=initial_nearby,
+                favourites=tuple(
+                    station
+                    for station_id, station in favourite_stations.items()
+                    if station_id not in initial_ids
+                ),
+            )
 
         async def update_status(
             stations: list[ChargingStation],
@@ -527,7 +555,7 @@ def create_belgium_provider(
         _shared_request_limiter(hass),
         _shared_location_cache(hass),
     )
-    return BelgiumChargingProvider(client)
+    return BelgiumChargingProvider(client, static_first=True)
 
 
 def _parse_static_stations(
