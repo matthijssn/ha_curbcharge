@@ -470,9 +470,10 @@ def _station_from_feature(
         raise InvalidProviderResponseError("NDW DOT-NL returned invalid address")
     address = raw_address.strip() or None
     operator_id = _required_string(properties.get("cpo_id"), "CPO identifier")
-    is_open = properties.get("open")
-    if not isinstance(is_open, bool):
+    raw_is_open = properties.get("open")
+    if raw_is_open is not None and not isinstance(raw_is_open, bool):
         raise InvalidProviderResponseError("NDW DOT-NL returned invalid open status")
+    is_open = raw_is_open
     operator = _optional_string(properties.get("operator_name"), "operator")
     raw_last_updated = properties.get("last_updated")
     last_updated = (

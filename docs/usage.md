@@ -23,8 +23,9 @@ It does not identify individual connectors or distinguish occupied, reserved,
 out-of-service, and other unavailable connectors. CurbCharge reports the
 available and total counts exactly, derives the count not reported available,
 and leaves occupied status unknown when the source cannot establish it. The
-provider-reported `open` status is displayed separately; CurbCharge does not
-infer connector availability from it or vice versa.
+provider-reported `open` status is displayed separately and may be unknown when
+the provider omits it; CurbCharge does not infer connector availability from it
+or vice versa.
 
 Tariffs are shown only when every connector group at a station resolves to the
 same active currency and price components. Date-only OCPI restrictions are
