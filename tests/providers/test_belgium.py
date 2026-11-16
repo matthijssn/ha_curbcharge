@@ -1110,6 +1110,35 @@ async def test_later_page_failure_logs_page_and_cause_without_caching_partial_da
     assert client._locations_cached_at is None
 
 
+def test_expired_seed_is_discarded_on_access(monkeypatch):
+    current_time = [0.0]
+    monkeypatch.setattr(belgium.time, "monotonic", lambda: current_time[0])
+    cache = BelgiumLocationCache()
+    cache.store_seed("test-token", _root_locations_document(), None)
+    current_time[0] = belgium._LOCATION_SEED_SECONDS
+
+    assert cache.get_seed("test-token") is None
+    assert cache._seeds == {}
+
+
+@pytest.mark.asyncio
+async def test_invalid_full_snapshot_is_not_cached(caplog):
+    document = _root_locations_document()
+    evse = document["aegiEnergyInfrastructureTablePublication"][
+        "energyInfrastructureTable"
+    ][0]["energyInfrastructureSite"][0]["energyInfrastructureStation"][0][
+        "refillPoint"
+    ][0]["aegiElectricChargingPoint"]
+    evse["idG"] = ""
+    client = _client(FakeSession([FakeResponse(document)]))
+
+    with pytest.raises(InvalidProviderResponseError, match="invalid EVSE id"):
+        await client.async_get_locations()
+
+    assert "locations snapshot validation failed" in caplog.text
+    assert client._locations is None
+
+
 @pytest.mark.asyncio
 async def test_belgium_provider_rejects_unsupported_radius_before_network_call():
     session = FakeSession([])
