@@ -368,14 +368,18 @@ Eco-Movement API token, NOBIL asks for a NOBIL API key, and the U.S. AFDC
 source asks for an NLR API key; Finland, Switzerland and Luxembourg require no
 credentials. Each
 provider is validated before creating the entry.
-You can change the polling interval, radius, station limit, and whether to
-include stations without availability data later in Options. For Entity
-sources, Options also offers a movement threshold that defaults to 100 metres;
-set it to `0` to disable the threshold. Favourites can also be selected by
-their displayed names. They are stored per config entry, continue to be
-refreshed outside the search radius, and are added beyond the normal nearby
-station limit. The provider is selected during setup and cannot be switched
-from Options.
+You can change the polling interval, radius, station limit, whether to include
+stations without availability data, and whether to show chargers on the Home
+Assistant map later in Options. Map-tracker changes take effect without
+reloading the CurbCharge entry or requesting provider data; newly enabled
+trackers use the current station snapshot and update on the next scheduled
+poll. The other station entities and coordinator remain active.
+For Entity sources, Options also offers a movement threshold that defaults to
+100 metres; set it to `0` to disable the threshold. Favourites can also be
+selected by their displayed names. They are stored per config entry, continue
+to be refreshed outside the search radius, and are added beyond the normal
+nearby station limit. The provider is selected during setup and cannot be
+switched from Options.
 For NDW DOT-NL, an additional setup step and the Options flow offer connector
 type, minimum power, and require-available filters. Select zero or more
 connector types; if several are selected, any one may match, but the same
