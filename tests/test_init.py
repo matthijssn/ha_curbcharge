@@ -2016,6 +2016,7 @@ async def test_setup_uses_initial_scan_interval(
 
     assert await hass.config_entries.async_setup(entry.entry_id)
     assert entry.runtime_data.scan_interval_minutes == expected_interval
+    assert await hass.config_entries.async_unload(entry.entry_id)
 
 
 @pytest.mark.asyncio
@@ -2034,6 +2035,7 @@ async def test_setup_loads_ev_estimate_settings(hass, monkeypatch):
 
     assert await hass.config_entries.async_setup(entry.entry_id)
     assert entry.runtime_data.ev_estimate_settings == settings
+    assert await hass.config_entries.async_unload(entry.entry_id)
 
 
 @pytest.mark.asyncio
@@ -2089,6 +2091,7 @@ async def test_ev_estimates_update_when_vehicle_sensor_changes(
 
     assert hass.states.get(cost_entity_id).state == "6.7"
     assert hass.states.get(duration_entity_id).state == "1.2"
+    assert await hass.config_entries.async_unload(entry.entry_id)
 
 
 @pytest.mark.asyncio

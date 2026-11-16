@@ -113,11 +113,19 @@ def test_ev_estimate_settings_default_and_round_trip():
     assert EVEstimateSettings.from_config(saved.as_config()) == saved
 
 
+def test_ev_estimate_settings_reject_non_mapping():
+    with pytest.raises(ValueError, match="mapping"):
+        EVEstimateSettings.from_config("not-a-mapping")
+
+
 @pytest.mark.parametrize(
     "overrides",
     [
         {CONF_EV_SOC_ENTITY: "sensor.ev_soc"},
         {CONF_EV_SOC_ATTRIBUTE: "battery_percent"},
+        {CONF_EV_SOC_ENTITY: True},
+        {CONF_EV_SOC_ENTITY: "sensor.ev soc"},
+        {CONF_EV_SOC_ENTITY: "sensor.ev_soc", CONF_EV_SOC_ATTRIBUTE: 1},
         {CONF_EV_CAPACITY_ENTITY: "number.ev_capacity"},
         {
             CONF_EV_SOC_ENTITY: "sensor.ev_soc",
@@ -134,6 +142,7 @@ def test_ev_estimate_settings_default_and_round_trip():
         {CONF_EV_ASSUMED_POWER_KW: 0},
         {CONF_EV_ASSUMED_POWER_KW: float("inf")},
         {CONF_EV_ASSUMED_POWER_KW: 10**400},
+        {CONF_EV_ASSUMED_POWER_KW: "7.2"},
         {"unknown": True},
     ],
 )

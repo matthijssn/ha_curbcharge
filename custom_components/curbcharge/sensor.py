@@ -1959,10 +1959,7 @@ def _ev_cost_estimate(
         cost = Decimal(str(energy_needed_kwh)) * price_per_kwh
         if session_fee is not None:
             cost += session_fee
-    try:
-        estimate = float(cost)
-    except OverflowError:
-        return None, None
+    estimate = float(cost)
     return (estimate, currency) if isfinite(estimate) else (None, None)
 
 
