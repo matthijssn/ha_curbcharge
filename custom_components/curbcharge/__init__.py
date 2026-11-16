@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
@@ -273,9 +273,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
 
 async def async_unload_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -> bool:
     """Unload CurbCharge platforms."""
-    return await hass.config_entries.async_unload_platforms(
-        entry, PLATFORMS + OPTIONAL_PLATFORMS
+    coordinator = getattr(entry, "runtime_data", None)
+    platforms = (
+        PLATFORMS + OPTIONAL_PLATFORMS
+        if isinstance(coordinator, CurbChargeCoordinator)
+        and coordinator.device_trackers_enabled
+        else PLATFORMS
     )
+    return await hass.config_entries.async_unload_platforms(entry, platforms)
 
 
 async def _async_options_updated(
@@ -297,12 +302,10 @@ async def _async_options_updated(
     scan_interval = options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES)
     include_unknown = options.get(CONF_INCLUDE_UNKNOWN, DEFAULT_INCLUDE_UNKNOWN)
     device_trackers = options.get(CONF_DEVICE_TRACKERS, DEFAULT_DEVICE_TRACKERS)
-    if (
-        not isinstance(device_trackers, bool)
-        or device_trackers != coordinator.device_trackers_enabled
-    ):
+    if not isinstance(device_trackers, bool):
         await hass.config_entries.async_reload(entry.entry_id)
         return
+    device_trackers_changed = device_trackers != coordinator.device_trackers_enabled
     location_movement_threshold_m = _location_movement_threshold(
         options, entry.data.get(CONF_LOCATION_SOURCE)
     )
@@ -346,6 +349,28 @@ async def _async_options_updated(
         await hass.config_entries.async_reload(entry.entry_id)
         return
 
+    if device_trackers_changed:
+        try:
+            if device_trackers:
+                await hass.config_entries.async_forward_entry_setups(
+                    entry, OPTIONAL_PLATFORMS
+                )
+            elif not await hass.config_entries.async_unload_platforms(
+                entry, OPTIONAL_PLATFORMS
+            ):
+                _LOGGER.error(
+                    "Could not unload CurbCharge map trackers; reloading config entry"
+                )
+                await hass.config_entries.async_reload(entry.entry_id)
+                return
+        except (HomeAssistantError, ImportError):
+            _LOGGER.exception(
+                "Could not update CurbCharge map trackers; reloading config entry"
+            )
+            await hass.config_entries.async_reload(entry.entry_id)
+            return
+        coordinator.device_trackers_enabled = device_trackers
+
     favourites_changed = favourites != coordinator.favourites
     personalization_changed = (
         personalization_profile != coordinator.personalization_profile
@@ -364,6 +389,12 @@ async def _async_options_updated(
     personalization_only_changed = (
         personalization_changed and refresh_options_unchanged and not favourites_changed
     )
+    tracker_only_changed = (
+        device_trackers_changed
+        and refresh_options_unchanged
+        and not favourites_changed
+        and not personalization_changed
+    )
     coordinator.update_options(
         radius_m=radius_m,
         max_stations=max_stations,
@@ -380,6 +411,8 @@ async def _async_options_updated(
         coordinator.recompute_cached_recommendations()
         return
     if favourites_only_changed:
+        return
+    if tracker_only_changed:
         return
     await coordinator.async_request_refresh()
 
