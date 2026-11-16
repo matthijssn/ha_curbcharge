@@ -10,14 +10,17 @@ import math
 import re
 import time
 from collections import deque
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
+from functools import partial
 from typing import TypedDict, cast
 from urllib.parse import quote, urljoin, urlsplit
 
 import aiohttp
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HassJob, HomeAssistant
+from homeassistant.helpers.event import async_call_later
 
 from ..const import (
     COUNTRY_BE,
@@ -168,12 +171,13 @@ class BelgiumLocationCache:
     connection validation seeds its first page for the background refresh.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, hass: HomeAssistant | None = None) -> None:
         """Initialize empty snapshot state."""
+        self._hass = hass
         self._snapshots: dict[bytes, tuple[BelgiumDatexDocument, float]] = {}
         self._seeds: dict[
             bytes,
-            tuple[BelgiumDatexDocument, str | None, float, asyncio.TimerHandle],
+            tuple[BelgiumDatexDocument, str | None, float, Callable[[], None] | None],
         ] = {}
         self._locks: dict[bytes, asyncio.Lock] = {}
 
@@ -210,10 +214,15 @@ class BelgiumLocationCache:
         key = _token_key(token)
         self.discard_seed(token)
         expires_at = time.monotonic() + _LOCATION_SEED_SECONDS
-        handle = asyncio.get_running_loop().call_later(
-            _LOCATION_SEED_SECONDS, self._expire_seed, key, expires_at
-        )
-        self._seeds[key] = (document, next_url, expires_at, handle)
+        cancel_expiry = None
+        if self._hass is not None:
+            job = HassJob(
+                partial(self._expire_seed, key, expires_at),
+                "expire Belgium location seed",
+                cancel_on_shutdown=True,
+            )
+            cancel_expiry = async_call_later(self._hass, _LOCATION_SEED_SECONDS, job)
+        self._seeds[key] = (document, next_url, expires_at, cancel_expiry)
 
     def discard_seed(
         self, token: str, document: BelgiumDatexDocument | None = None
@@ -223,9 +232,10 @@ class BelgiumLocationCache:
         seed = self._seeds.get(key)
         if seed is not None and (document is None or seed[0] is document):
             del self._seeds[key]
-            seed[3].cancel()
+            if seed[3] is not None:
+                seed[3]()
 
-    def _expire_seed(self, key: bytes, expires_at: float) -> None:
+    def _expire_seed(self, key: bytes, expires_at: float, _fired_at: datetime) -> None:
         seed = self._seeds.get(key)
         if seed is not None and seed[2] == expires_at:
             del self._seeds[key]
@@ -240,7 +250,7 @@ def _shared_location_cache(hass: HomeAssistant) -> BelgiumLocationCache:
     domain_data = hass.data.setdefault(DOMAIN, {})
     cache = domain_data.get(_LOCATION_CACHE_DATA_KEY)
     if cache is None:
-        cache = BelgiumLocationCache()
+        cache = BelgiumLocationCache(hass)
         domain_data[_LOCATION_CACHE_DATA_KEY] = cache
     if not isinstance(cache, BelgiumLocationCache):
         raise RuntimeError("CurbCharge Belgium location cache has an invalid type")

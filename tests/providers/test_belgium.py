@@ -33,6 +33,7 @@ from custom_components.curbcharge.providers.base import (
 from custom_components.curbcharge.providers.belgium import (
     BelgiumChargingProvider,
     BelgiumDatexClient,
+    BelgiumLocationCache,
     BelgiumRequestLimiter,
 )
 
@@ -1058,7 +1059,7 @@ async def test_warm_snapshot_validation_makes_no_location_request():
 
 
 @pytest.mark.asyncio
-async def test_unconsumed_location_seed_expires(monkeypatch):
+async def test_unconsumed_location_seed_expires(hass, monkeypatch):
     monkeypatch.setattr(belgium, "_LOCATION_SEED_SECONDS", 0.01)
     session = FakeSession(
         [
@@ -1069,7 +1070,9 @@ async def test_unconsumed_location_seed_expires(monkeypatch):
             FakeResponse(_root_locations_document()),
         ]
     )
-    client = _client(session)
+    client = BelgiumDatexClient(
+        session, "test-token", NoWaitLimiter(), BelgiumLocationCache(hass)
+    )
     provider = BelgiumChargingProvider(client)
 
     await provider.async_validate_connection(50.85, 4.35, 1000)
