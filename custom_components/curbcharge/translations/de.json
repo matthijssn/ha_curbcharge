@@ -207,7 +207,8 @@
         "title": "CurbCharge-Optionen",
         "menu_options": {
           "general": "Allgemeine Einstellungen",
-          "personalization": "Personalisierung"
+          "personalization": "Personalisierung",
+          "ev_estimates": "EV-Ladeschätzungen"
         }
       },
       "general": {
@@ -239,6 +240,29 @@
           "location_movement_threshold": "Mindeststrecke, die sich die ausgewählte Entität bewegen muss, bevor der Suchstandort aktualisiert wird. Mit 0 wird die Schwelle deaktiviert."
         }
       },
+      "ev_estimates": {
+        "title": "EV-Ladeschätzungen",
+        "data": {
+          "soc_entity": "Sensor für Batterieladestand",
+          "soc_attribute": "Ladestandattribut (optional)",
+          "capacity_entity": "Sensor für nutzbare Batteriekapazität",
+          "capacity_attribute": "Kapazitätsattribut (optional)",
+          "power_entity": "Sensor für Fahrzeug-Ladeleistung (optional)",
+          "power_attribute": "Ladeleistungsattribut (optional)",
+          "target_soc": "Zielladestand (%)",
+          "assumed_power_kw": "Angenommene Fahrzeug-Ladeleistung (kW)"
+        },
+        "data_description": {
+          "soc_entity": "Zusammen mit der nutzbaren Batteriekapazität erforderlich. Der Sensorzustand muss % liefern; ein ausgewähltes Attribut wird als Prozentwert interpretiert.",
+          "soc_attribute": "Liest statt des Sensorzustands ein numerisches Attribut; der Wert wird ohne Umrechnung als % interpretiert.",
+          "capacity_entity": "Zusammen mit dem Ladestand erforderlich. Der Sensorzustand muss kWh liefern; ein ausgewähltes Attribut wird als kWh interpretiert.",
+          "capacity_attribute": "Liest statt des Sensorzustands ein numerisches Attribut; der Wert wird ohne Umrechnung als kWh interpretiert.",
+          "power_entity": "Optional und nur für die Dauer verwendet. Der Sensorzustand muss kW liefern; ein ausgewähltes Attribut wird als kW interpretiert. Ungültige oder nicht verfügbare Werte führen zu keinem Ersatzwert.",
+          "power_attribute": "Liest statt des Sensorzustands ein numerisches Attribut; der Wert wird ohne Umrechnung als kW interpretiert.",
+          "target_soc": "Wählen Sie ein Ziel zwischen 0 und 100 %. Standard: 100 %. Liegt das Ziel unter dem aktuellen Ladestand, wird kein Energiebedarf angenommen.",
+          "assumed_power_kw": "Optionale Alternative zum Leistungssensor für die Dauer. Geben Sie einen endlichen positiven Wert in kW ein; konfigurieren Sie nicht beide Quellen."
+        }
+      },
       "personalization": {
         "title": "Personalisierung",
         "data": {
@@ -268,6 +292,8 @@
       }
     },
     "error": {
+      "invalid_ev_estimate_settings": "Legen Sie Ladestands- und Kapazitätssensor gemeinsam fest, wählen Sie einen Leistungssensor oder eine positive angenommene Leistung (nicht beides) und ein Ziel von 0 bis 100 %.",
+      "invalid_saved_ev_estimate_settings": "Die gespeicherten EV-Schätzeinstellungen sind ungültig. Prüfen Sie Sensoren, Attribute und Ziel und speichern Sie erneut.",
       "invalid_discovery_filters": "Geben Sie gültige Filter ein. Die Mindestleistung muss eine endliche positive Zahl sein.",
       "invalid_favourites": "Eine oder mehrere ausgewählte bevorzugte Ladestationen sind nicht mehr verfügbar. Aktualisieren Sie die Optionen und versuchen Sie es erneut.",
       "invalid_personalization_profile": "Geben Sie ein gültiges Profil ein. Leistung und Preis müssen endlich und nicht negativ sein, ein Höchstpreis benötigt einen dreistelligen Währungscode, Betreiberreferenzen benötigen ein unterstütztes Anbieterpräfix und ein Betreiber darf nicht gleichzeitig bevorzugt und ausgeschlossen sein.",
@@ -478,6 +504,12 @@
       },
       "fastest_available_charger": {
         "name": "Schnellste verfügbare Ladestation"
+      },
+      "estimated_charging_cost": {
+        "name": "Geschätzte Ladekosten"
+      },
+      "estimated_charging_duration": {
+        "name": "Geschätzte Ladedauer"
       },
       "top_nearby_chargers": {
         "name": "Top-Ladestationen in der Nähe"

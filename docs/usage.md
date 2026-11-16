@@ -466,6 +466,26 @@ entity IDs, `reason`, base ranking and card content retain their prior meaning.
 Older entries without a profile remain disabled without a config-entry
 migration.
 
+The **EV estimates** Options page configures per-entry vehicle inputs for native
+estimate sensors. Select state-of-charge (`%`) and usable-capacity (`kWh`)
+sensors together, set a target from 0 to 100% (default 100%), and optionally
+select a vehicle charging-power sensor (`kW`) or enter an assumed power. Use
+only one power source. Optional attribute names read numeric attributes instead
+of sensor states; those values are interpreted in the documented unit without
+conversion. An unavailable or invalid selected power sensor does not fall back
+to assumed power. Existing entries remain unconfigured until these inputs are
+saved; no config-entry migration is needed.
+
+The entry-level **Estimated charging cost** and **Estimated charging duration**
+sensors use the current **Best nearby charger** only. Cost is unknown unless
+the tariff has a comparable per-kWh price, valid currency, known session-fee
+status, and no nonzero per-minute price. Duration uses only the configured
+vehicle power, never the charger's advertised maximum. Both estimates exclude
+charging losses and charging-curve variation. They update on vehicle sensor
+changes and regular CurbCharge refreshes; missing or invalid inputs and no
+current recommendation produce unknown values, while a failed provider refresh
+makes the entities unavailable.
+
 See the
 [Belgium preview setup](#belgium-preview-setup) steps before choosing that
 provider.
@@ -615,6 +635,13 @@ maximum are reported only when all eligible prices share one currency; no
 currency conversion or country-based choice is made. The comparable-price
 station count is zero when the eligible prices are mixed. Price attributes
 distinguish valid-but-mixed prices, unknown prices, and invalid tariffs.
+
+The entry-level **Estimated charging cost** sensor uses the currency of the
+selected Best nearby station and is unknown when its tariff is incomplete or
+ambiguous. **Estimated charging duration** is reported in hours when vehicle
+power is available. Both sensors stay unknown until valid battery inputs are
+configured and are not estimates for the Nearest, Cheapest, Fastest, or Top
+nearby results.
 
 The Home Assistant State object has its own `last_changed` and `last_updated`
 timestamps. `last_changed` is when Home Assistant last observed the entity's

@@ -29,6 +29,7 @@ from .models import (
     ChargingLocation,
     ChargingStation,
     DiscoveryFilterSettings,
+    EVEstimateSettings,
     FavouriteStationReference,
     OperatorReference,
     PersonalizationProfile,
@@ -129,6 +130,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         location_movement_threshold_m: int = DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
         discovery_filters: DiscoveryFilterSettings | None = None,
         personalization_profile: PersonalizationProfile | None = None,
+        ev_estimate_settings: EVEstimateSettings | None = None,
         device_trackers_enabled: bool = DEFAULT_DEVICE_TRACKERS,
     ) -> None:
         """Initialize the shared coordinator."""
@@ -151,6 +153,11 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
             personalization_profile
             if personalization_profile is not None
             else PersonalizationProfile()
+        )
+        self.ev_estimate_settings = (
+            ev_estimate_settings
+            if ev_estimate_settings is not None
+            else EVEstimateSettings()
         )
         self.device_trackers_enabled = device_trackers_enabled
         self.favourite_ids = {favourite.provider_id for favourite in favourites}

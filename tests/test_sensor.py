@@ -22,6 +22,7 @@ from custom_components.curbcharge.models import (
     ChargingTariff,
     ConnectorStatus,
     ConnectorTypeId,
+    EVEstimateSettings,
     EVSEStatus,
     FavouriteStationReference,
     OperatorReference,
@@ -39,6 +40,8 @@ from custom_components.curbcharge.sensor import (
     ConnectorAvailabilityPercentageSensor,
     ConnectorGroupSensor,
     DistanceSensor,
+    EstimatedChargingCostSensor,
+    EstimatedChargingDurationSensor,
     FastestAvailableChargerSensor,
     FavoriteStatusSensor,
     FavoriteSummarySensor,
@@ -141,6 +144,7 @@ def _coordinator(
     provider=None,
     favourites=(),
     personalization_profile=None,
+    ev_estimate_settings=None,
 ):
     if provider is None:
         provider = FakeProvider()
@@ -155,6 +159,7 @@ def _coordinator(
         include_unknown,
         favourites,
         personalization_profile=personalization_profile,
+        ev_estimate_settings=ev_estimate_settings,
     )
     coordinator.async_set_updated_data({station.provider_id: station})
     return coordinator
@@ -173,6 +178,284 @@ def _selection_station(station, *, distance, power, price):
         connectors=(connector,),
         tariff=ChargingTariff("EUR", Decimal(price), None, None, None, "test"),
     )
+
+
+def test_ev_estimate_sensors_use_best_nearby_price_and_vehicle_power(
+    hass, sample_stations
+):
+    station = _selection_station(
+        sample_stations[0], distance=10, power=300, price="0.35"
+    )
+    station = replace(
+        station,
+        tariff=replace(
+            station.tariff,
+            session_fee=Decimal("2.50"),
+            price_per_minute=Decimal("0"),
+        ),
+    )
+    hass.states.async_set("sensor.ev_soc", "25", {"unit_of_measurement": "%"})
+    hass.states.async_set("sensor.ev_capacity", "60", {"unit_of_measurement": "kWh"})
+    hass.states.async_set("sensor.ev_power", "11", {"unit_of_measurement": "kW"})
+    coordinator = _coordinator(
+        hass,
+        station,
+        ev_estimate_settings=EVEstimateSettings(
+            soc_entity="sensor.ev_soc",
+            capacity_entity="sensor.ev_capacity",
+            power_entity="sensor.ev_power",
+            target_soc=80,
+        ),
+    )
+    entry = MockConfigEntry(domain=DOMAIN, entry_id="ev-estimates")
+    cost = EstimatedChargingCostSensor(coordinator, entry)
+    duration = EstimatedChargingDurationSensor(coordinator, entry)
+
+    assert cost.native_value == pytest.approx(14.05)
+    assert cost.native_unit_of_measurement == "EUR"
+    assert duration.native_value == pytest.approx(3)
+
+
+def test_ev_estimates_use_attributes_and_zero_energy(hass, sample_stations):
+    station = _selection_station(
+        sample_stations[0], distance=10, power=300, price="0.35"
+    )
+    station = replace(
+        station,
+        tariff=replace(station.tariff, session_fee=Decimal("2.50")),
+    )
+    hass.states.async_set("sensor.ev", "not-a-number", {"soc": 50})
+    hass.states.async_set("sensor.battery", "not-a-number", {"capacity": 60})
+    hass.states.async_set("sensor.charging", "not-a-number", {"power_kw": 7.2})
+    settings = EVEstimateSettings(
+        soc_entity="sensor.ev",
+        soc_attribute="soc",
+        capacity_entity="sensor.battery",
+        capacity_attribute="capacity",
+        power_entity="sensor.charging",
+        power_attribute="power_kw",
+        target_soc=20,
+    )
+    coordinator = _coordinator(hass, station, ev_estimate_settings=settings)
+    entry = MockConfigEntry(domain=DOMAIN, entry_id="zero-energy")
+
+    assert EstimatedChargingCostSensor(coordinator, entry).native_value == 0
+    assert EstimatedChargingDurationSensor(coordinator, entry).native_value == 0
+
+
+def test_unconfigured_ev_estimates_remain_unknown(hass, sample_stations):
+    station = _selection_station(
+        sample_stations[0], distance=10, power=300, price="0.35"
+    )
+    coordinator = _coordinator(hass, station)
+    entry = MockConfigEntry(domain=DOMAIN, entry_id="unconfigured-estimates")
+    cost = EstimatedChargingCostSensor(coordinator, entry)
+
+    assert cost.native_value is None
+    assert cost.native_unit_of_measurement == "EUR"
+    assert EstimatedChargingDurationSensor(coordinator, entry).native_value is None
+
+    coordinator = _coordinator(
+        hass,
+        station,
+        ev_estimate_settings=EVEstimateSettings(
+            soc_entity="sensor.ev_soc",
+            capacity_entity="sensor.ev_capacity",
+        ),
+    )
+    assert EstimatedChargingCostSensor(coordinator, entry).native_value is None
+
+
+@pytest.mark.parametrize(
+    ("soc", "attributes"),
+    [
+        ("unknown", {"unit_of_measurement": "%"}),
+        ("not-a-number", {"unit_of_measurement": "%"}),
+        ("101", {"unit_of_measurement": "%"}),
+        ("50", {"unit_of_measurement": "‰"}),
+        ("50", {"unit_of_measurement": "%", "restored": True}),
+        ("50", {"unit_of_measurement": "%", "is_stale": True}),
+    ],
+)
+def test_ev_estimate_sensors_ignore_invalid_battery_state(
+    hass, sample_stations, soc, attributes
+):
+    station = _selection_station(
+        sample_stations[0], distance=10, power=300, price="0.35"
+    )
+    hass.states.async_set("sensor.ev_soc", soc, attributes)
+    hass.states.async_set("sensor.ev_capacity", "60", {"unit_of_measurement": "kWh"})
+    coordinator = _coordinator(
+        hass,
+        station,
+        ev_estimate_settings=EVEstimateSettings(
+            soc_entity="sensor.ev_soc",
+            capacity_entity="sensor.ev_capacity",
+            assumed_power_kw=7.2,
+        ),
+    )
+    entry = MockConfigEntry(domain=DOMAIN, entry_id="invalid-battery-input")
+
+    assert EstimatedChargingCostSensor(coordinator, entry).native_value is None
+    assert EstimatedChargingDurationSensor(coordinator, entry).native_value is None
+
+
+@pytest.mark.parametrize("soc_value", [True, ["50"]])
+def test_ev_estimate_attributes_must_be_numeric(hass, sample_stations, soc_value):
+    station = _selection_station(
+        sample_stations[0], distance=10, power=300, price="0.35"
+    )
+    hass.states.async_set("sensor.ev", "stale", {"soc": soc_value})
+    hass.states.async_set("sensor.capacity", "60", {"unit_of_measurement": "kWh"})
+    coordinator = _coordinator(
+        hass,
+        station,
+        ev_estimate_settings=EVEstimateSettings(
+            soc_entity="sensor.ev",
+            soc_attribute="soc",
+            capacity_entity="sensor.capacity",
+            assumed_power_kw=7.2,
+        ),
+    )
+    entry = MockConfigEntry(domain=DOMAIN, entry_id="invalid-ev-attribute")
+
+    assert EstimatedChargingCostSensor(coordinator, entry).native_value is None
+    assert EstimatedChargingDurationSensor(coordinator, entry).native_value is None
+
+
+@pytest.mark.parametrize(
+    ("capacity", "attributes"),
+    [
+        ("unknown", {"unit_of_measurement": "kWh"}),
+        ("0", {"unit_of_measurement": "kWh"}),
+        ("60", {"unit_of_measurement": "Wh"}),
+    ],
+)
+def test_ev_estimates_ignore_invalid_capacity(
+    hass, sample_stations, capacity, attributes
+):
+    station = _selection_station(
+        sample_stations[0], distance=10, power=300, price="0.35"
+    )
+    hass.states.async_set("sensor.ev_soc", "0", {"unit_of_measurement": "%"})
+    hass.states.async_set("sensor.ev_capacity", capacity, attributes)
+    coordinator = _coordinator(
+        hass,
+        station,
+        ev_estimate_settings=EVEstimateSettings(
+            soc_entity="sensor.ev_soc",
+            capacity_entity="sensor.ev_capacity",
+            assumed_power_kw=7.2,
+        ),
+    )
+    entry = MockConfigEntry(domain=DOMAIN, entry_id="invalid-capacity")
+
+    assert EstimatedChargingCostSensor(coordinator, entry).native_value is None
+    assert EstimatedChargingDurationSensor(coordinator, entry).native_value is None
+
+
+@pytest.mark.parametrize(
+    ("power", "attributes"),
+    [
+        ("unknown", {"unit_of_measurement": "kW"}),
+        ("0", {"unit_of_measurement": "kW"}),
+        ("5", {"unit_of_measurement": "W"}),
+    ],
+)
+def test_invalid_vehicle_power_does_not_produce_duration(
+    hass, sample_stations, power, attributes
+):
+    station = _selection_station(
+        sample_stations[0], distance=10, power=300, price="0.35"
+    )
+    hass.states.async_set("sensor.ev_soc", "50", {"unit_of_measurement": "%"})
+    hass.states.async_set("sensor.ev_capacity", "60", {"unit_of_measurement": "kWh"})
+    hass.states.async_set("sensor.ev_power", power, attributes)
+    coordinator = _coordinator(
+        hass,
+        station,
+        ev_estimate_settings=EVEstimateSettings(
+            soc_entity="sensor.ev_soc",
+            capacity_entity="sensor.ev_capacity",
+            power_entity="sensor.ev_power",
+            target_soc=80,
+        ),
+    )
+    entry = MockConfigEntry(domain=DOMAIN, entry_id="invalid-vehicle-power")
+
+    assert EstimatedChargingCostSensor(coordinator, entry).native_value is not None
+    assert EstimatedChargingDurationSensor(coordinator, entry).native_value is None
+
+
+def test_ev_estimate_duration_rejects_non_finite_result(hass, sample_stations):
+    station = _selection_station(
+        sample_stations[0], distance=10, power=300, price="0.35"
+    )
+    hass.states.async_set("sensor.ev_soc", "0", {"unit_of_measurement": "%"})
+    hass.states.async_set(
+        "sensor.ev_capacity", "1.79e308", {"unit_of_measurement": "kWh"}
+    )
+    hass.states.async_set("sensor.ev_power", "0.1", {"unit_of_measurement": "kW"})
+    coordinator = _coordinator(
+        hass,
+        station,
+        ev_estimate_settings=EVEstimateSettings(
+            soc_entity="sensor.ev_soc",
+            capacity_entity="sensor.ev_capacity",
+            power_entity="sensor.ev_power",
+        ),
+    )
+    entry = MockConfigEntry(domain=DOMAIN, entry_id="overflowing-duration")
+
+    assert EstimatedChargingCostSensor(coordinator, entry).native_value is not None
+    assert EstimatedChargingDurationSensor(coordinator, entry).native_value is None
+
+
+@pytest.mark.parametrize(
+    "tariff",
+    [
+        None,
+        ChargingTariff("EUR", Decimal("0.35"), None, Decimal("0.01"), None, "test"),
+        ChargingTariff("EUR", Decimal("0.35"), Decimal("-1"), None, None, "test"),
+        ChargingTariff("EUR", Decimal("0.35"), Decimal("NaN"), None, None, "test"),
+        ChargingTariff("EUR", Decimal("-0.01"), None, None, None, "test"),
+        ChargingTariff("EURO", Decimal("0.35"), None, None, None, "test"),
+        ChargingTariff("€UR", Decimal("0.35"), None, None, None, "test"),
+        ChargingTariff("1UR", Decimal("0.35"), None, None, None, "test"),
+        ChargingTariff("EUR", Decimal("1e308"), None, None, None, "test"),
+        ChargingTariff(
+            "EUR",
+            Decimal("0.35"),
+            None,
+            None,
+            None,
+            "test",
+            status=TariffStatus.INCOMPLETE,
+        ),
+    ],
+)
+def test_ev_estimate_cost_requires_a_complete_per_kwh_tariff(
+    hass, sample_stations, tariff
+):
+    station = _selection_station(
+        sample_stations[0], distance=10, power=300, price="0.35"
+    )
+    station = replace(station, tariff=tariff)
+    hass.states.async_set("sensor.ev_soc", "25", {"unit_of_measurement": "%"})
+    hass.states.async_set("sensor.ev_capacity", "60", {"unit_of_measurement": "kWh"})
+    coordinator = _coordinator(
+        hass,
+        station,
+        ev_estimate_settings=EVEstimateSettings(
+            soc_entity="sensor.ev_soc",
+            capacity_entity="sensor.ev_capacity",
+            assumed_power_kw=7.2,
+        ),
+    )
+    entry = MockConfigEntry(domain=DOMAIN, entry_id="incomplete-tariff")
+
+    assert EstimatedChargingCostSensor(coordinator, entry).native_value is None
+    assert EstimatedChargingDurationSensor(coordinator, entry).native_value is not None
 
 
 def _belgian_evse(

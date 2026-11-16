@@ -9,6 +9,14 @@ import pytest
 from custom_components.curbcharge.const import (
     CONF_ALLOW_FALLBACK,
     CONF_CONNECTOR_TYPE_IDS,
+    CONF_EV_ASSUMED_POWER_KW,
+    CONF_EV_CAPACITY_ATTRIBUTE,
+    CONF_EV_CAPACITY_ENTITY,
+    CONF_EV_POWER_ATTRIBUTE,
+    CONF_EV_POWER_ENTITY,
+    CONF_EV_SOC_ATTRIBUTE,
+    CONF_EV_SOC_ENTITY,
+    CONF_EV_TARGET_SOC,
     CONF_EXCLUDED_OPERATORS,
     CONF_MAXIMUM_PRICE,
     CONF_MAXIMUM_PRICE_CURRENCY,
@@ -31,6 +39,7 @@ from custom_components.curbcharge.models import (
     ConnectorStatus,
     ConnectorTypeId,
     DiscoveryFilterSettings,
+    EVEstimateSettings,
     EVSEStatus,
     FavouriteStationReference,
     OperatorReference,
@@ -73,6 +82,76 @@ def test_missing_personalization_profile_defaults_disabled_without_entry_migrati
     assert CONFIG_ENTRY_VERSION == 2
     assert not profile.enabled
     assert profile.as_config() == _personalization_config()
+
+
+def test_ev_estimate_settings_default_and_round_trip():
+    settings = EVEstimateSettings.from_config(None)
+    assert settings.target_soc == 100
+    assert settings.soc_entity is None
+
+    config = settings.as_config()
+    config.update(
+        {
+            CONF_EV_SOC_ENTITY: "sensor.ev_soc",
+            CONF_EV_SOC_ATTRIBUTE: "battery_percent",
+            CONF_EV_CAPACITY_ENTITY: "sensor.ev_capacity",
+            CONF_EV_CAPACITY_ATTRIBUTE: "usable_kwh",
+            CONF_EV_POWER_ENTITY: None,
+            CONF_EV_POWER_ATTRIBUTE: None,
+            CONF_EV_TARGET_SOC: 80,
+            CONF_EV_ASSUMED_POWER_KW: 7.2,
+        }
+    )
+    saved = EVEstimateSettings.from_config(config)
+
+    assert saved.soc_entity == "sensor.ev_soc"
+    assert saved.soc_attribute == "battery_percent"
+    assert saved.capacity_entity == "sensor.ev_capacity"
+    assert saved.capacity_attribute == "usable_kwh"
+    assert saved.target_soc == 80
+    assert saved.assumed_power_kw == 7.2
+    assert EVEstimateSettings.from_config(saved.as_config()) == saved
+
+
+def test_ev_estimate_settings_reject_non_mapping():
+    with pytest.raises(ValueError, match="mapping"):
+        EVEstimateSettings.from_config("not-a-mapping")
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {CONF_EV_SOC_ENTITY: "sensor.ev_soc"},
+        {CONF_EV_SOC_ATTRIBUTE: "battery_percent"},
+        {CONF_EV_SOC_ENTITY: True},
+        {CONF_EV_SOC_ENTITY: "sensor.ev soc"},
+        {CONF_EV_SOC_ENTITY: "sensor.ev_soc", CONF_EV_SOC_ATTRIBUTE: 1},
+        {CONF_EV_CAPACITY_ENTITY: "number.ev_capacity"},
+        {
+            CONF_EV_SOC_ENTITY: "sensor.ev_soc",
+            CONF_EV_CAPACITY_ENTITY: "sensor.ev_capacity",
+            CONF_EV_POWER_ENTITY: "sensor.ev_power",
+            CONF_EV_ASSUMED_POWER_KW: 7.2,
+        },
+        {CONF_EV_POWER_ATTRIBUTE: "power_kw"},
+        {CONF_EV_TARGET_SOC: -1},
+        {CONF_EV_TARGET_SOC: 101},
+        {CONF_EV_TARGET_SOC: float("nan")},
+        {CONF_EV_TARGET_SOC: True},
+        {CONF_EV_TARGET_SOC: 10**400},
+        {CONF_EV_ASSUMED_POWER_KW: 0},
+        {CONF_EV_ASSUMED_POWER_KW: float("inf")},
+        {CONF_EV_ASSUMED_POWER_KW: 10**400},
+        {CONF_EV_ASSUMED_POWER_KW: "7.2"},
+        {"unknown": True},
+    ],
+)
+def test_ev_estimate_settings_reject_invalid_values(overrides):
+    config = EVEstimateSettings().as_config()
+    config.update(overrides)
+
+    with pytest.raises(ValueError):
+        EVEstimateSettings.from_config(config)
 
 
 def test_personalization_profile_round_trips_and_deduplicates_values():

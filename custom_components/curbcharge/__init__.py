@@ -22,6 +22,7 @@ else:
 from .const import (
     CONF_API_TOKEN,
     CONF_DEVICE_TRACKERS,
+    CONF_EV_ESTIMATES,
     CONF_FAVOURITES,
     CONF_INCLUDE_UNKNOWN,
     CONF_LOCATION_MOVEMENT_THRESHOLD,
@@ -57,6 +58,7 @@ from .coordinator import CurbChargeCoordinator
 from .location import resolve_location
 from .models import (
     DiscoveryFilterSettings,
+    EVEstimateSettings,
     PersonalizationProfile,
     parse_favourite_references,
 )
@@ -157,6 +159,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
         personalization_profile = PersonalizationProfile.from_config(
             options.get(CONF_PERSONALIZATION)
         )
+        ev_estimate_settings = EVEstimateSettings.from_config(
+            options.get(CONF_EV_ESTIMATES)
+        )
     except ValueError as err:
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN,
@@ -231,6 +236,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
         location_movement_threshold_m=location_movement_threshold_m,
         discovery_filters=discovery_filters,
         personalization_profile=personalization_profile,
+        ev_estimate_settings=ev_estimate_settings,
         device_trackers_enabled=device_trackers,
     )
     entry.runtime_data = coordinator
@@ -309,7 +315,13 @@ async def _async_options_updated(
         personalization_profile = PersonalizationProfile.from_config(
             options.get(CONF_PERSONALIZATION)
         )
+        ev_estimate_settings = EVEstimateSettings.from_config(
+            options.get(CONF_EV_ESTIMATES)
+        )
     except ValueError:
+        await hass.config_entries.async_reload(entry.entry_id)
+        return
+    if ev_estimate_settings != coordinator.ev_estimate_settings:
         await hass.config_entries.async_reload(entry.entry_id)
         return
     if (

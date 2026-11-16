@@ -207,7 +207,8 @@
         "title": "CurbCharge opcijas",
         "menu_options": {
           "general": "Vispārīgie iestatījumi",
-          "personalization": "Personalizācija"
+          "personalization": "Personalizācija",
+          "ev_estimates": "EV uzlādes aplēses"
         }
       },
       "general": {
@@ -239,6 +240,29 @@
           "location_movement_threshold": "Minimālais attālums, par kādu atlasītajai entītijai jāpārvietojas, lai atjauninātu meklēšanas atrašanās vietu. Iestatiet 0, lai izslēgtu slieksni."
         }
       },
+      "ev_estimates": {
+        "title": "EV uzlādes aplēses",
+        "data": {
+          "soc_entity": "Akumulatora uzlādes līmeņa sensors",
+          "soc_attribute": "Uzlādes līmeņa atribūts (neobligāts)",
+          "capacity_entity": "Izmantojamās akumulatora ietilpības sensors",
+          "capacity_attribute": "Akumulatora ietilpības atribūts (neobligāts)",
+          "power_entity": "Transportlīdzekļa uzlādes jaudas sensors (neobligāts)",
+          "power_attribute": "Uzlādes jaudas atribūts (neobligāts)",
+          "target_soc": "Mērķa uzlādes līmenis (%)",
+          "assumed_power_kw": "Pieņemtā transportlīdzekļa uzlādes jauda (kW)"
+        },
+        "data_description": {
+          "soc_entity": "Nepieciešams kopā ar izmantojamo akumulatora ietilpību. Sensora stāvokļa mērvienībai jābūt %; izvēlētais atribūts tiek interpretēts kā procentu vērtība.",
+          "soc_attribute": "Sensora stāvokļa vietā nolasa skaitlisku atribūtu; tā vērtība tiek interpretēta procentos bez pārrēķina.",
+          "capacity_entity": "Nepieciešams kopā ar uzlādes līmeni. Sensora stāvokļa mērvienībai jābūt kWh; izvēlētais atribūts tiek interpretēts kWh.",
+          "capacity_attribute": "Sensora stāvokļa vietā nolasa skaitlisku atribūtu; tā vērtība tiek interpretēta kWh bez pārrēķina.",
+          "power_entity": "Neobligāts; tiek izmantots tikai ilguma aprēķinam. Sensora stāvokļa mērvienībai jābūt kW; izvēlētais atribūts tiek interpretēts kW. Nederīgām vai nepieejamām vērtībām netiek izmantota aizstājējvērtība.",
+          "power_attribute": "Sensora stāvokļa vietā nolasa skaitlisku atribūtu; tā vērtība tiek interpretēta kW bez pārrēķina.",
+          "target_soc": "Izvēlieties mērķi no 0 līdz 100 %. Pēc noklusējuma 100 %. Mērķis zem pašreizējā uzlādes līmeņa nozīmē, ka enerģija nav nepieciešama.",
+          "assumed_power_kw": "Neobligāta alternatīva jaudas sensoram ilguma aprēķinam. Ievadiet galīgu, pozitīvu kW vērtību; nekonfigurējiet abus jaudas avotus."
+        }
+      },
       "personalization": {
         "title": "Personalizācija",
         "data": {
@@ -268,6 +292,8 @@
       }
     },
     "error": {
+      "invalid_ev_estimate_settings": "Norādiet uzlādes līmeņa un ietilpības sensorus kopā, izvēlieties jaudas sensoru vai pozitīvu pieņemto jaudu (ne abus) un iestatiet mērķi no 0 līdz 100 %.",
+      "invalid_saved_ev_estimate_settings": "Saglabātie EV aplēšu iestatījumi nav derīgi. Pārbaudiet sensorus, atribūtus un mērķi, pēc tam saglabājiet tos vēlreiz.",
       "invalid_discovery_filters": "Ievadiet derīgus atrašanas filtrus. Minimālajai jaudai jābūt galīgam pozitīvam skaitlim.",
       "invalid_favourites": "Viena vai vairākas atlasītās izlases stacijas vairs nav pieejamas. Atsvaidziniet opcijas un mēģiniet vēlreiz.",
       "invalid_personalization_profile": "Ievadiet derīgu profilu. Jaudai un cenai jābūt galīgām un nenegatīvām, maksimālajai cenai vajadzīgs trīs burtu valūtas kods, operatora atsaucēm vajadzīgs atbalstīts pakalpojumu sniedzēja prefikss, un operators nedrīkst būt gan vēlamo, gan izslēgto sarakstā.",
@@ -478,6 +504,12 @@
       },
       "fastest_available_charger": {
         "name": "Ātrākā pieejamā uzlādes stacija"
+      },
+      "estimated_charging_cost": {
+        "name": "Aprēķinātās uzlādes izmaksas"
+      },
+      "estimated_charging_duration": {
+        "name": "Aprēķinātais uzlādes ilgums"
       },
       "top_nearby_chargers": {
         "name": "Labākās uzlādes stacijas tuvumā"

@@ -27,9 +27,9 @@ before you head out.
   price. CurbCharge explains when a recommendation uses a fallback.
 - **Keep favorites in view:** Monitor saved stations and build automations
   around availability or price changes.
-- **Estimate your charge:** Optionally show estimated cost and time to a target
-  battery level in the bundled card, using your EV battery sensors. Estimates
-  are hidden by default and depend on the vehicle and tariff data you provide.
+- **Estimate your charge:** Show optional per-card estimates, or configure
+  vehicle sensors for native Best nearby cost and duration entities. Estimates
+  need valid vehicle inputs; cost also needs complete tariff data.
 - **Choose your dashboard:** Use Home Assistant's built-in cards or the
   bundled CurbCharge card, with copyable dashboard and automation examples.
 

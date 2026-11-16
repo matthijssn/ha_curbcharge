@@ -21,6 +21,7 @@ import custom_components.curbcharge.entity as curbcharge_entity
 from custom_components.curbcharge.const import (
     CONF_API_TOKEN,
     CONF_CONNECTOR_TYPES,
+    CONF_EV_ESTIMATES,
     CONF_FAVOURITES,
     CONF_INCLUDE_UNKNOWN,
     CONF_LOCATION_ENTITY,
@@ -53,6 +54,7 @@ from custom_components.curbcharge.models import (
     ConnectorStatus,
     ConnectorTypeId,
     DiscoveryFilterSettings,
+    EVEstimateSettings,
     FavouriteStationReference,
     OperatorReference,
     PersonalizationProfile,
@@ -2014,6 +2016,82 @@ async def test_setup_uses_initial_scan_interval(
 
     assert await hass.config_entries.async_setup(entry.entry_id)
     assert entry.runtime_data.scan_interval_minutes == expected_interval
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+@pytest.mark.asyncio
+async def test_setup_loads_ev_estimate_settings(hass, monkeypatch):
+    settings = EVEstimateSettings(
+        soc_entity="sensor.ev_soc",
+        capacity_entity="sensor.ev_capacity",
+        target_soc=80,
+        assumed_power_kw=7.2,
+    )
+    entry = _entry(options={CONF_EV_ESTIMATES: settings.as_config()})
+    monkeypatch.setattr(
+        curbcharge, "create_provider", lambda *_args: FakeProvider([()])
+    )
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    assert entry.runtime_data.ev_estimate_settings == settings
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+@pytest.mark.asyncio
+async def test_ev_estimates_update_when_vehicle_sensor_changes(
+    hass, monkeypatch, sample_stations
+):
+    base_station = sample_stations[0]
+    connector = replace(
+        base_station.connectors[0],
+        status=ConnectorStatus.AVAILABLE,
+        count=1,
+        available_count=1,
+        max_power_kw=300,
+    )
+    station = replace(
+        base_station,
+        distance_m=10,
+        connectors=(connector,),
+        tariff=ChargingTariff(
+            "EUR", Decimal("0.35"), Decimal("2.50"), None, None, "test"
+        ),
+        tariff_status=None,
+        availability_reported=True,
+    )
+    settings = EVEstimateSettings(
+        soc_entity="sensor.ev_soc",
+        capacity_entity="sensor.ev_capacity",
+        target_soc=80,
+        assumed_power_kw=10,
+    )
+    hass.states.async_set("sensor.ev_soc", "50", {"unit_of_measurement": "%"})
+    hass.states.async_set("sensor.ev_capacity", "60", {"unit_of_measurement": "kWh"})
+    provider = FakeProvider([(station,)])
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    entry = _entry(options={CONF_EV_ESTIMATES: settings.as_config()})
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    registry = er.async_get(hass)
+    cost_entity_id = registry.async_get_entity_id(
+        "sensor", DOMAIN, f"{entry.entry_id}_estimated_charging_cost"
+    )
+    duration_entity_id = registry.async_get_entity_id(
+        "sensor", DOMAIN, f"{entry.entry_id}_estimated_charging_duration"
+    )
+    assert cost_entity_id is not None
+    assert duration_entity_id is not None
+    assert hass.states.get(cost_entity_id).state == "8.8"
+    assert hass.states.get(duration_entity_id).state == "1.8"
+
+    hass.states.async_set("sensor.ev_soc", "60", {"unit_of_measurement": "%"})
+    await hass.async_block_till_done()
+
+    assert hass.states.get(cost_entity_id).state == "6.7"
+    assert hass.states.get(duration_entity_id).state == "1.2"
+    assert await hass.config_entries.async_unload(entry.entry_id)
 
 
 @pytest.mark.asyncio
@@ -2040,6 +2118,16 @@ async def test_setup_rejects_invalid_options(hass, key, value):
 @pytest.mark.asyncio
 async def test_setup_rejects_malformed_saved_personalization_profile(hass):
     entry = _entry(options={CONF_PERSONALIZATION: {"unknown": True}})
+
+    with pytest.raises(ConfigEntryNotReady) as error:
+        await curbcharge.async_setup_entry(hass, entry)
+
+    assert error.value.translation_key == "invalid_config"
+
+
+@pytest.mark.asyncio
+async def test_setup_rejects_malformed_saved_ev_estimates(hass):
+    entry = _entry(options={CONF_EV_ESTIMATES: {"unknown": True}})
 
     with pytest.raises(ConfigEntryNotReady) as error:
         await curbcharge.async_setup_entry(hass, entry)
@@ -2359,6 +2447,39 @@ async def test_invalid_live_options_reload_the_entry(hass, monkeypatch, options)
 
     monkeypatch.setattr(hass.config_entries, "async_reload", reload_entry)
 
+    await curbcharge._async_options_updated(hass, entry)
+
+    assert reloaded == [entry.entry_id]
+
+
+@pytest.mark.asyncio
+async def test_changed_ev_estimate_options_reload_entity_listeners(hass, monkeypatch):
+    entry = _entry()
+    entry.add_to_hass(hass)
+    entry.runtime_data = CurbChargeCoordinator(
+        hass,
+        FakeProvider(),
+        52.0,
+        5.0,
+        500,
+        10,
+        5,
+        True,
+        config_entry=entry,
+    )
+    settings = EVEstimateSettings(
+        soc_entity="sensor.ev_soc",
+        capacity_entity="sensor.ev_capacity",
+    )
+    hass.config_entries.async_update_entry(
+        entry, options={CONF_EV_ESTIMATES: settings.as_config()}
+    )
+    reloaded: list[str] = []
+
+    async def reload_entry(entry_id: str) -> None:
+        reloaded.append(entry_id)
+
+    monkeypatch.setattr(hass.config_entries, "async_reload", reload_entry)
     await curbcharge._async_options_updated(hass, entry)
 
     assert reloaded == [entry.entry_id]
