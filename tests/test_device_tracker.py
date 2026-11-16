@@ -24,6 +24,7 @@ from custom_components.curbcharge.const import (
     PLATFORMS,
     PROVIDER_NDW_DOT_NL,
 )
+from custom_components.curbcharge.coordinator import CurbChargeCoordinator
 from tests.conftest import FakeProvider
 
 pytestmark = pytest.mark.usefixtures("enable_custom_integrations")
@@ -125,6 +126,34 @@ async def test_disabled_trackers_are_not_forwarded(hass, monkeypatch, sample_sta
     monkeypatch.setattr(hass.config_entries, "async_unload_platforms", track_unload)
     assert await hass.config_entries.async_unload(entry.entry_id)
     assert unload_calls == [PLATFORMS]
+
+
+@pytest.mark.asyncio
+async def test_invalid_tracker_option_reloads_entry(hass, monkeypatch):
+    entry = _entry(options={CONF_DEVICE_TRACKERS: "invalid"})
+    entry.add_to_hass(hass)
+    coordinator = CurbChargeCoordinator(
+        hass,
+        FakeProvider(),
+        52.0,
+        5.0,
+        500,
+        10,
+        5,
+        True,
+        config_entry=entry,
+    )
+    entry.runtime_data = coordinator
+    reloaded: list[str] = []
+
+    async def reload_entry(entry_id: str) -> None:
+        reloaded.append(entry_id)
+
+    monkeypatch.setattr(hass.config_entries, "async_reload", reload_entry)
+    await curbcharge._async_options_updated(hass, entry)
+
+    assert reloaded == [entry.entry_id]
+    assert coordinator.device_trackers_enabled
 
 
 @pytest.mark.asyncio
