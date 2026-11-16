@@ -164,9 +164,8 @@ class BelgiumRequestLimiter:
 class BelgiumLocationCache:
     """Share validated static snapshots per token across clients.
 
-    A complete snapshot takes roughly 18 paginated location requests, so a
-    config flow followed by entry setup would otherwise exhaust the rolling
-    location quota and stall setup for up to an hour.
+    A complete snapshot takes roughly 18 paginated location requests, so cold
+    connection validation seeds its first page for the background refresh.
     """
 
     def __init__(self) -> None:
@@ -324,7 +323,7 @@ class BelgiumDatexClient:
                 )
             except InvalidProviderResponseError as err:
                 _LOGGER.warning(
-                    "Belgium DATEX II first locations page validation failed: %s",
+                    "Belgium DATEX II locations validation failed on first page: %s",
                     err,
                 )
                 raise
