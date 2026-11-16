@@ -209,6 +209,43 @@ async def test_connector_filter_preserves_radius_limit(sample_geojson):
     assert len(session.requests) == 1
 
 
+@pytest.mark.parametrize("remove_open", [True, False])
+def test_missing_or_null_open_status_is_unknown(sample_geojson, remove_open):
+    feature = copy.deepcopy(sample_geojson["features"][0])
+    if remove_open:
+        feature["properties"].pop("open")
+    else:
+        feature["properties"]["open"] = None
+
+    station = _station_from_feature(feature, 52.0, 5.0)
+
+    assert station.is_open is None
+
+
+def test_open_status_preserves_reported_booleans(sample_geojson):
+    is_open = [
+        _station_from_feature(feature, 52.0, 5.0).is_open
+        for feature in sample_geojson["features"]
+    ]
+
+    assert is_open == [True, True, False]
+
+
+@pytest.mark.asyncio
+async def test_unknown_open_status_does_not_fail_station_update(sample_geojson):
+    payload = _without_tariffs(copy.deepcopy(sample_geojson))
+    payload["features"][0]["properties"].pop("open")
+    session = FakeSession([FakeResponse(payload)])
+    provider = NdwDotNlProvider(session)
+
+    result = await provider.async_get_stations(52.0, 5.0, 500, 10)
+
+    station = next(item for item in result.nearby if item.provider_id == "NL-TEST-001")
+    assert station.is_open is None
+    assert station.available_connectors == 2
+    assert len(session.requests) == 1
+
+
 @pytest.mark.asyncio
 async def test_filtered_candidates_break_distance_ties_by_station_id(sample_geojson):
     payload = copy.deepcopy(sample_geojson)
@@ -982,6 +1019,7 @@ def test_feature_collection_rejects_malformed_payloads(payload):
         (("properties", "address"), None),
         (("properties", "cpo_id"), ""),
         (("properties", "open"), 1),
+        (("properties", "open"), "true"),
         (("properties", "operator_name"), 5),
         (("properties", "last_updated"), "not-a-timestamp"),
         (("properties", "last_updated"), "2026-10-11T12:00:00"),
