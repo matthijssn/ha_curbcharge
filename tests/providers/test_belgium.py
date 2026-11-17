@@ -13,7 +13,10 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from custom_components.curbcharge.const import PROVIDER_ECO_MOVEMENT_BE
+from custom_components.curbcharge.const import (
+    PROVIDER_ECO_MOVEMENT_BE,
+    PROVIDER_ECO_MOVEMENT_BE_NAME,
+)
 from custom_components.curbcharge.models import (
     ConnectorStatus,
     ConnectorTypeId,
@@ -2194,8 +2197,29 @@ async def test_fresh_snapshot_uses_bundled_status_during_regular_refresh():
 
     result = await provider.async_get_stations(50.85, 4.35, 1000, 10)
 
+    assert provider.provider_name == PROVIDER_ECO_MOVEMENT_BE_NAME
     assert result.nearby[0].availability_reported
     assert result.nearby[0].evse_status is EVSEStatus.CHARGING
+    assert len(session.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_bundled_status_selection_excludes_unknown_when_requested():
+    locations = _with_bundled_statuses(
+        _locations_document_with_evse_count(2),
+        _status_document(evse_id="evse-internal-0"),
+    )
+    session = FakeSession([FakeResponse(locations)])
+    provider = BelgiumChargingProvider(
+        BelgiumDatexClient(session, "token", NoWaitLimiter())
+    )
+
+    result = await provider.async_get_stations(
+        50.85, 4.35, 1000, 1, include_unknown=False
+    )
+
+    assert [station.provider_id for station in result.nearby] == ["evse-internal-0"]
+    assert result.nearby[0].evse_status is EVSEStatus.AVAILABLE
     assert len(session.requests) == 1
 
 
