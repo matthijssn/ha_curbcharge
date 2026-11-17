@@ -10,12 +10,12 @@ import math
 import re
 import time
 from collections import deque
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from functools import partial
-from typing import TypedDict, cast
+from typing import NamedTuple, TypedDict, cast
 from urllib.parse import quote, urljoin, urlsplit
 
 import aiohttp
@@ -90,6 +90,12 @@ class BelgiumDatexDocument(TypedDict, total=False):
     messageContainer: dict[str, object]
     aegiEnergyInfrastructureTablePublication: dict[str, object]
     aegiEnergyInfrastructureStatusPublication: dict[str, object]
+
+
+class BundledEVSEStatus(NamedTuple):
+    status: object
+    last_updated: object
+    energy_rate_update: object
 
 
 def _parse_datex_document(body: bytes) -> BelgiumDatexDocument:
@@ -270,7 +276,7 @@ def _shared_request_limiter(hass: HomeAssistant) -> BelgiumRequestLimiter:
 
 
 class BelgiumDatexClient:
-    """Fetch Belgium locations and per-EVSE DATEX II status documents."""
+    """Fetch Belgium locations, bundled statuses, and per-EVSE status documents."""
 
     def __init__(
         self,
@@ -301,17 +307,31 @@ class BelgiumDatexClient:
 
     async def async_get_locations(self) -> BelgiumDatexDocument:
         """Return the shared, read-only static snapshot, cached for less than a day."""
+        locations, _ = await self._async_get_locations(include_bundled_statuses=False)
+        return locations
+
+    async def async_get_locations_with_bundled_statuses(
+        self,
+    ) -> tuple[BelgiumDatexDocument, dict[str, BundledEVSEStatus] | None]:
+        """Return bundled EVSE statuses only when this call downloads the snapshot."""
+        return await self._async_get_locations(include_bundled_statuses=True)
+
+    async def _async_get_locations(
+        self, *, include_bundled_statuses: bool
+    ) -> tuple[BelgiumDatexDocument, dict[str, BundledEVSEStatus] | None]:
         async with self._location_cache.lock(self._token):
             cached = self._location_cache.get(self._token)
             if (
                 cached is not None
                 and time.monotonic() - cached[1] < _LOCATION_CACHE_SECONDS
             ):
-                return cached[0]
-            locations = await self._async_fetch_locations()
+                return cached[0], None
+            locations, bundled_statuses = await self._async_fetch_locations(
+                include_bundled_statuses=include_bundled_statuses
+            )
             self._location_cache.store(self._token, locations)
             self._location_cache.discard_seed(self._token)
-            return locations
+            return locations, bundled_statuses
 
     async def async_get_locations_for_validation(self) -> BelgiumDatexDocument:
         """Return a fresh snapshot or validate and retain only the first page."""
@@ -344,12 +364,39 @@ class BelgiumDatexClient:
         """Discard the first-page seed when provider-level validation rejects it."""
         self._location_cache.discard_seed(self._token, document)
 
-    async def _async_fetch_locations(self) -> BelgiumDatexDocument:
+    async def _async_fetch_locations(
+        self, *, include_bundled_statuses: bool
+    ) -> tuple[BelgiumDatexDocument, dict[str, BundledEVSEStatus] | None]:
         """Download and validate every locations page."""
         tables: list[dict[str, object]] = []
+        bundled_statuses: dict[str, BundledEVSEStatus] | None = None
         seen_urls: set[str] = set()
         loop = asyncio.get_running_loop()
         seed = self._location_cache.get_seed(self._token)
+
+        async def collect_bundled_statuses(
+            page: BelgiumDatexDocument, page_number: int
+        ) -> None:
+            nonlocal bundled_statuses
+            if not include_bundled_statuses:
+                return
+            try:
+                page_statuses = await loop.run_in_executor(
+                    None, _bundled_evse_statuses, page
+                )
+                if page_statuses is None:
+                    return
+                if bundled_statuses is None:
+                    bundled_statuses = {}
+                for evse_id, status_record in page_statuses.items():
+                    bundled_statuses.setdefault(evse_id, status_record)
+            except InvalidProviderResponseError as err:
+                _LOGGER.warning(
+                    "Belgium DATEX II bundled status page %d was ignored: %s",
+                    page_number,
+                    err,
+                )
+
         if seed is None:
             url: str | None = _LOCATIONS_URL
             page_number = 0
@@ -358,6 +405,7 @@ class BelgiumDatexClient:
             page_number = 1
             seen_urls.add(_LOCATIONS_URL)
             tables.extend(await loop.run_in_executor(None, _static_tables, page))
+            await collect_bundled_statuses(page, page_number)
         try:
             while url is not None:
                 if page_number >= _MAX_LOCATION_PAGES:
@@ -372,6 +420,7 @@ class BelgiumDatexClient:
                 page_number += 1
                 page, url = await self._async_request_json(url)
                 tables.extend(await loop.run_in_executor(None, _static_tables, page))
+                await collect_bundled_statuses(page, page_number)
         except (
             AuthenticationError,
             InvalidProviderResponseError,
@@ -404,7 +453,7 @@ class BelgiumDatexClient:
                 "with conflicting duplicate records",
                 conflicting,
             )
-        return locations
+        return locations, bundled_statuses
 
     async def async_get_evse_status(self, evse_id: str) -> BelgiumDatexDocument | None:
         """Fetch current status and ad-hoc price for one EVSE."""
@@ -482,8 +531,8 @@ class BelgiumChargingProvider(BaseChargingProvider):
         """Initialize with a DATEX client using Home Assistant's session.
 
         With ``static_first``, the first discovery returns static stations
-        without per-EVSE status requests, so entities appear as soon as the
-        snapshot is available.
+        with fresh bundled statuses when available, without per-EVSE requests.
+        Warm snapshots do not reuse their older bundled statuses.
         """
         self._client = client
         self._initial_discovery = static_first
@@ -537,7 +586,10 @@ class BelgiumChargingProvider(BaseChargingProvider):
         include_unknown: bool = True,
     ) -> StationDiscoveryResult:
         """Fetch nearby EVSEs and separately selected favourites."""
-        document = await self._client.async_get_locations()
+        (
+            document,
+            bundled_statuses,
+        ) = await self._client.async_get_locations_with_bundled_statuses()
         (
             nearby_candidates,
             favourite_stations,
@@ -553,23 +605,43 @@ class BelgiumChargingProvider(BaseChargingProvider):
         )
 
         if self._initial_discovery:
-            # Publish the static stations as soon as the snapshot is available.
-            # Rate-limited per-EVSE status requests follow on the next poll.
             self._initial_discovery = False
             initial_nearby = tuple(nearby_candidates[:max_stations])
             initial_ids = {station.provider_id for station in initial_nearby}
+            initial_favourites = tuple(
+                station
+                for station_id, station in favourite_stations.items()
+                if station_id not in initial_ids
+            )
+            if bundled_statuses is not None:
+                loop = asyncio.get_running_loop()
+                initial_nearby = await loop.run_in_executor(
+                    None,
+                    _with_bundled_statuses,
+                    initial_nearby,
+                    bundled_statuses,
+                )
+                initial_favourites = await loop.run_in_executor(
+                    None,
+                    _with_bundled_statuses,
+                    initial_favourites,
+                    bundled_statuses,
+                )
             return StationDiscoveryResult(
                 nearby=initial_nearby,
-                favourites=tuple(
-                    station
-                    for station_id, station in favourite_stations.items()
-                    if station_id not in initial_ids
-                ),
+                favourites=initial_favourites,
             )
 
         async def update_status(
             stations: list[ChargingStation],
         ) -> tuple[ChargingStation, ...]:
+            if bundled_statuses is not None:
+                return await asyncio.get_running_loop().run_in_executor(
+                    None,
+                    _with_bundled_statuses,
+                    tuple(stations),
+                    bundled_statuses,
+                )
             updated: list[ChargingStation] = []
             for station in stations:
                 if station.evse_id is None:
@@ -589,40 +661,9 @@ class BelgiumChargingProvider(BaseChargingProvider):
                 if status_record is None:
                     updated.append(station)
                     continue
-                status = _evse_status(status_record.get("status"))
-                if status is EVSEStatus.REMOVED:
-                    continue
-                status_last_updated = _optional_date(
-                    status_record.get("lastUpdated"), "EVSE status"
-                )
-                raw_energy_rate_updates = status_record.get("energyRateUpdate")
-                tariff = (
-                    _ad_hoc_tariff(
-                        status_record,
-                        self.provider_name,
-                        station.tariff.currency if station.tariff is not None else None,
-                    )
-                    if raw_energy_rate_updates
-                    else station.tariff
-                )
-                updated.append(
-                    replace(
-                        station,
-                        availability_reported=True,
-                        evse_status=status,
-                        last_updated=(
-                            status_last_updated
-                            if status_last_updated is not None
-                            else station.last_updated
-                        ),
-                        last_updated_source=(
-                            ProviderTimestampSource.BELGIUM_EVSE_STATUS
-                            if status_last_updated is not None
-                            else ProviderTimestampSource.BELGIUM_STATIC_FALLBACK
-                        ),
-                        tariff=tariff,
-                    )
-                )
+                updated_station = _station_with_evse_status(station, status_record)
+                if updated_station is not None:
+                    updated.append(updated_station)
             return tuple(updated)
 
         checked_ids: set[str] = set()
@@ -631,6 +672,28 @@ class BelgiumChargingProvider(BaseChargingProvider):
             selected_candidates = nearby_candidates[:max_stations]
             checked_ids.update(station.provider_id for station in selected_candidates)
             nearby = await update_status(selected_candidates)
+        elif bundled_statuses is not None:
+            updated_candidates = await asyncio.get_running_loop().run_in_executor(
+                None,
+                _with_bundled_statuses,
+                tuple(nearby_candidates),
+                bundled_statuses,
+            )
+            updated_by_id = {
+                station.provider_id: station for station in updated_candidates
+            }
+            bundled_selected: list[ChargingStation] = []
+            for station in nearby_candidates:
+                if len(bundled_selected) >= max_stations:
+                    break
+                checked_ids.add(station.provider_id)
+                updated_station = updated_by_id.get(station.provider_id)
+                if updated_station is not None and (
+                    updated_station.availability_reported
+                    or updated_station.provider_id in favourite_ids
+                ):
+                    bundled_selected.append(updated_station)
+            nearby = tuple(bundled_selected)
         else:
             selected: list[ChargingStation] = []
             for station in nearby_candidates:
@@ -1100,9 +1163,9 @@ def _belgium_connector_type_id(
     }.get(connector_type.casefold())
 
 
-def _evse_status_record(
-    document: BelgiumDatexDocument, evse_id: str
-) -> dict[str, object] | None:
+def _iter_evse_status_records(
+    document: BelgiumDatexDocument,
+) -> Iterator[tuple[str, dict[str, object]]]:
     for publication in _datex_publications(
         document, "aegiEnergyInfrastructureStatusPublication"
     ):
@@ -1137,9 +1200,98 @@ def _evse_status_record(
                     if not isinstance(reference_value, dict):
                         continue
                     reference = _datex_object(reference_value, "EVSE status reference")
-                    if reference.get("idG") == evse_id:
-                        return status
-    return None
+                    evse_id = reference.get("idG")
+                    if isinstance(evse_id, str) and evse_id:
+                        yield evse_id, status
+
+
+def _evse_status_record(
+    document: BelgiumDatexDocument, evse_id: str
+) -> dict[str, object] | None:
+    return next(
+        (
+            status
+            for status_id, status in _iter_evse_status_records(document)
+            if status_id == evse_id
+        ),
+        None,
+    )
+
+
+def _bundled_evse_statuses(
+    document: BelgiumDatexDocument,
+) -> dict[str, BundledEVSEStatus] | None:
+    if not _datex_publications(document, "aegiEnergyInfrastructureStatusPublication"):
+        return None
+    statuses: dict[str, BundledEVSEStatus] = {}
+    for evse_id, record in _iter_evse_status_records(document):
+        statuses.setdefault(
+            evse_id,
+            BundledEVSEStatus(
+                record.get("status"),
+                record.get("lastUpdated"),
+                record.get("energyRateUpdate"),
+            ),
+        )
+    return statuses
+
+
+def _with_bundled_statuses(
+    stations: tuple[ChargingStation, ...],
+    bundled_statuses: dict[str, BundledEVSEStatus],
+) -> tuple[ChargingStation, ...]:
+    updated_stations: list[ChargingStation] = []
+    for station in stations:
+        values = bundled_statuses.get(station.provider_id)
+        if values is None:
+            updated_stations.append(station)
+            continue
+        record = {
+            "status": values.status,
+            "lastUpdated": values.last_updated,
+            "energyRateUpdate": values.energy_rate_update,
+        }
+        updated = _station_with_evse_status(station, record)
+        if updated is not None:
+            updated_stations.append(updated)
+    return tuple(updated_stations)
+
+
+def _station_with_evse_status(
+    station: ChargingStation, status_record: dict[str, object]
+) -> ChargingStation | None:
+    status = _evse_status(status_record.get("status"))
+    if status is EVSEStatus.REMOVED:
+        return None
+    status_last_updated = _optional_date(
+        status_record.get("lastUpdated"), "EVSE status"
+    )
+    raw_energy_rate_updates = status_record.get("energyRateUpdate")
+    tariff = (
+        _ad_hoc_tariff(
+            status_record,
+            PROVIDER_ECO_MOVEMENT_BE_NAME,
+            station.tariff.currency if station.tariff is not None else None,
+        )
+        if raw_energy_rate_updates
+        else station.tariff
+    )
+    return replace(
+        station,
+        availability_reported=True,
+        evse_status=status,
+        last_updated=(
+            status_last_updated
+            if status_last_updated is not None
+            else station.last_updated
+        ),
+        last_updated_source=(
+            ProviderTimestampSource.BELGIUM_EVSE_STATUS
+            if status_last_updated is not None
+            else ProviderTimestampSource.BELGIUM_STATIC_FALLBACK
+        ),
+        tariff=tariff,
+    )
 
 
 def _evse_status(value: object) -> EVSEStatus:
