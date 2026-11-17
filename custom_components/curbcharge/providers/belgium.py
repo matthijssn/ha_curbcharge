@@ -180,7 +180,7 @@ class BelgiumLocationCache:
     def __init__(self, hass: HomeAssistant | None = None) -> None:
         """Initialize empty snapshot state."""
         self._hass = hass
-        self._snapshots: dict[bytes, tuple[BelgiumDatexDocument, float]] = {}
+        self._snapshots: dict[bytes, tuple[tuple[ChargingStation, ...], float]] = {}
         self._seeds: dict[
             bytes,
             tuple[BelgiumDatexDocument, str | None, float, Callable[[], None] | None],
@@ -191,13 +191,13 @@ class BelgiumLocationCache:
         """Return the lock that coalesces snapshot downloads for one token."""
         return self._locks.setdefault(_token_key(token), asyncio.Lock())
 
-    def get(self, token: str) -> tuple[BelgiumDatexDocument, float] | None:
+    def get(self, token: str) -> tuple[tuple[ChargingStation, ...], float] | None:
         """Return the cached snapshot and its monotonic timestamp, if any."""
         return self._snapshots.get(_token_key(token))
 
-    def store(self, token: str, document: BelgiumDatexDocument) -> None:
+    def store(self, token: str, stations: tuple[ChargingStation, ...]) -> None:
         """Replace the snapshot for one token after it fully validated."""
-        self._snapshots[_token_key(token)] = (document, time.monotonic())
+        self._snapshots[_token_key(token)] = (stations, time.monotonic())
 
     def get_seed(self, token: str) -> tuple[BelgiumDatexDocument, str | None] | None:
         """Return a live first-page seed for this token, if present."""
@@ -296,7 +296,7 @@ class BelgiumDatexClient:
         )
 
     @property
-    def _locations(self) -> BelgiumDatexDocument | None:
+    def _locations(self) -> tuple[ChargingStation, ...] | None:
         cached = self._location_cache.get(self._token)
         return cached[0] if cached is not None else None
 
@@ -305,20 +305,20 @@ class BelgiumDatexClient:
         cached = self._location_cache.get(self._token)
         return cached[1] if cached is not None else None
 
-    async def async_get_locations(self) -> BelgiumDatexDocument:
+    async def async_get_locations(self) -> tuple[ChargingStation, ...]:
         """Return the shared, read-only static snapshot, cached for less than a day."""
         locations, _ = await self._async_get_locations(include_bundled_statuses=False)
         return locations
 
     async def async_get_locations_with_bundled_statuses(
         self,
-    ) -> tuple[BelgiumDatexDocument, dict[str, BundledEVSEStatus] | None]:
+    ) -> tuple[tuple[ChargingStation, ...], dict[str, BundledEVSEStatus] | None]:
         """Return bundled EVSE statuses only when this call downloads the snapshot."""
         return await self._async_get_locations(include_bundled_statuses=True)
 
     async def _async_get_locations(
         self, *, include_bundled_statuses: bool
-    ) -> tuple[BelgiumDatexDocument, dict[str, BundledEVSEStatus] | None]:
+    ) -> tuple[tuple[ChargingStation, ...], dict[str, BundledEVSEStatus] | None]:
         async with self._location_cache.lock(self._token):
             cached = self._location_cache.get(self._token)
             if (
@@ -333,7 +333,9 @@ class BelgiumDatexClient:
             self._location_cache.discard_seed(self._token)
             return locations, bundled_statuses
 
-    async def async_get_locations_for_validation(self) -> BelgiumDatexDocument:
+    async def async_get_locations_for_validation(
+        self,
+    ) -> BelgiumDatexDocument | tuple[ChargingStation, ...]:
         """Return a fresh snapshot or validate and retain only the first page."""
         async with self._location_cache.lock(self._token):
             cached = self._location_cache.get(self._token)
@@ -366,9 +368,10 @@ class BelgiumDatexClient:
 
     async def _async_fetch_locations(
         self, *, include_bundled_statuses: bool
-    ) -> tuple[BelgiumDatexDocument, dict[str, BundledEVSEStatus] | None]:
+    ) -> tuple[tuple[ChargingStation, ...], dict[str, BundledEVSEStatus] | None]:
         """Download and validate every locations page."""
-        tables: list[dict[str, object]] = []
+        stations: dict[str, ChargingStation] = {}
+        conflicting_ids: set[str] = set()
         bundled_statuses: dict[str, BundledEVSEStatus] | None = None
         seen_urls: set[str] = set()
         loop = asyncio.get_running_loop()
@@ -397,6 +400,18 @@ class BelgiumDatexClient:
                     err,
                 )
 
+        async def collect_page(page: BelgiumDatexDocument) -> None:
+            try:
+                await loop.run_in_executor(
+                    None, _merge_static_page, page, stations, conflicting_ids
+                )
+            except InvalidProviderResponseError as err:
+                _LOGGER.warning(
+                    "Belgium DATEX II locations snapshot validation failed: %s", err
+                )
+                raise
+            await collect_bundled_statuses(page, page_number)
+
         if seed is None:
             url: str | None = _LOCATIONS_URL
             page_number = 0
@@ -404,8 +419,9 @@ class BelgiumDatexClient:
             page, url = seed
             page_number = 1
             seen_urls.add(_LOCATIONS_URL)
-            tables.extend(await loop.run_in_executor(None, _static_tables, page))
-            await collect_bundled_statuses(page, page_number)
+            await collect_page(page)
+            del page
+        del seed
         try:
             while url is not None:
                 if page_number >= _MAX_LOCATION_PAGES:
@@ -419,8 +435,8 @@ class BelgiumDatexClient:
                 seen_urls.add(url)
                 page_number += 1
                 page, url = await self._async_request_json(url)
-                tables.extend(await loop.run_in_executor(None, _static_tables, page))
-                await collect_bundled_statuses(page, page_number)
+                await collect_page(page)
+                del page
         except (
             AuthenticationError,
             InvalidProviderResponseError,
@@ -433,27 +449,13 @@ class BelgiumDatexClient:
                 err,
             )
             raise
-        locations = BelgiumDatexDocument(
-            aegiEnergyInfrastructureTablePublication={
-                "energyInfrastructureTable": tables
-            }
-        )
-        try:
-            _, conflicting = await loop.run_in_executor(
-                None, _parse_static_snapshot, locations, 0, 0
-            )
-        except InvalidProviderResponseError as err:
-            _LOGGER.warning(
-                "Belgium DATEX II locations snapshot validation failed: %s", err
-            )
-            raise
-        if conflicting:
+        if conflicting_ids:
             _LOGGER.warning(
                 "Belgium DATEX II omitted %d EVSEs that the provider published "
                 "with conflicting duplicate records",
-                conflicting,
+                len(conflicting_ids),
             )
-        return locations, bundled_statuses
+        return tuple(stations.values()), bundled_statuses
 
     async def async_get_evse_status(self, evse_id: str) -> BelgiumDatexDocument | None:
         """Fetch current status and ad-hoc price for one EVSE."""
@@ -566,6 +568,8 @@ class BelgiumChargingProvider(BaseChargingProvider):
                 "The Belgium provider does not support this search radius"
             )
         document = await self._client.async_get_locations_for_validation()
+        if isinstance(document, tuple):
+            return
         try:
             await asyncio.get_running_loop().run_in_executor(
                 None, _parse_static_stations, document, latitude, longitude
@@ -737,14 +741,23 @@ def create_belgium_provider(
 def _parse_static_stations(
     document: BelgiumDatexDocument, latitude: float, longitude: float
 ) -> list[ChargingStation]:
-    return _parse_static_snapshot(document, latitude, longitude)[0]
+    stations: dict[str, ChargingStation] = {}
+    _merge_static_page(document, stations, set())
+    return [
+        replace(
+            station,
+            distance_m=distance_m(
+                latitude, longitude, station.latitude, station.longitude
+            ),
+        )
+        for station in stations.values()
+    ]
 
 
-def _parse_static_snapshot(
-    document: BelgiumDatexDocument, latitude: float, longitude: float
-) -> tuple[list[ChargingStation], int]:
-    """Parse static EVSEs and count ids omitted for conflicting duplicates."""
-    stations: list[ChargingStation] = []
+def _iter_static_stations(
+    document: BelgiumDatexDocument,
+) -> Iterator[ChargingStation]:
+    """Normalize a page without retaining unused DATEX fields or query distances."""
     for table_value in _static_tables(document):
         table = _datex_object(table_value, "energy-infrastructure table")
         sites = _datex_list(
@@ -776,57 +789,52 @@ def _parse_static_snapshot(
                         evse_id, evse
                     )
                     external_evse_id = _external_evse_id(evse)
-                    stations.append(
-                        ChargingStation(
-                            provider_id=evse_id,
-                            name=external_evse_id or evse_id,
-                            latitude=station_coordinates[0],
-                            longitude=station_coordinates[1],
-                            address=location.address,
-                            operator=location.operator,
-                            distance_m=distance_m(
-                                latitude,
-                                longitude,
-                                station_coordinates[0],
-                                station_coordinates[1],
-                            ),
-                            connectors=connectors,
-                            tariff=_static_ad_hoc_tariff(
-                                evse, PROVIDER_ECO_MOVEMENT_BE_NAME
-                            ),
-                            last_updated=_optional_date(
-                                evse.get("lastUpdated"), "EVSE"
-                            ),
-                            last_updated_source=(
-                                ProviderTimestampSource.BELGIUM_STATIC_FALLBACK
-                            ),
-                            provider=PROVIDER_ECO_MOVEMENT_BE,
-                            availability_reported=False,
-                            country_code=location.country_code,
-                            location=location,
-                            provider_name=PROVIDER_ECO_MOVEMENT_BE_NAME,
-                            # The status endpoint only resolves the external
-                            # EVSE id; the internal idG returns 404 when the
-                            # two differ, as they do for most live EVSEs.
-                            evse_id=external_evse_id
-                            or (evse_id if "entrance" in site else None),
-                            connector_count_reported=connector_count_reported,
-                        )
+                    yield ChargingStation(
+                        provider_id=evse_id,
+                        name=external_evse_id or evse_id,
+                        latitude=station_coordinates[0],
+                        longitude=station_coordinates[1],
+                        address=location.address,
+                        operator=location.operator,
+                        distance_m=None,
+                        connectors=connectors,
+                        tariff=_static_ad_hoc_tariff(
+                            evse, PROVIDER_ECO_MOVEMENT_BE_NAME
+                        ),
+                        last_updated=_optional_date(evse.get("lastUpdated"), "EVSE"),
+                        last_updated_source=(
+                            ProviderTimestampSource.BELGIUM_STATIC_FALLBACK
+                        ),
+                        provider=PROVIDER_ECO_MOVEMENT_BE,
+                        availability_reported=False,
+                        country_code=location.country_code,
+                        location=location,
+                        provider_name=PROVIDER_ECO_MOVEMENT_BE_NAME,
+                        # The status endpoint only resolves the external
+                        # EVSE id; the internal idG returns 404 when the
+                        # two differ, as they do for most live EVSEs.
+                        evse_id=external_evse_id
+                        or (evse_id if "entrance" in site else None),
+                        connector_count_reported=connector_count_reported,
                     )
-    unique_stations: dict[str, ChargingStation] = {}
-    conflicting_ids: set[str] = set()
-    for parsed_station in stations:
-        previous = unique_stations.get(parsed_station.provider_id)
+
+
+def _merge_static_page(
+    document: BelgiumDatexDocument,
+    stations: dict[str, ChargingStation],
+    conflicting_ids: set[str],
+) -> None:
+    """Keep only unambiguous EVSEs across every page in a snapshot."""
+    for parsed_station in _iter_static_stations(document):
+        evse_id = parsed_station.provider_id
+        if evse_id in conflicting_ids:
+            continue
+        previous = stations.get(evse_id)
         if previous is None:
-            unique_stations[parsed_station.provider_id] = parsed_station
+            stations[evse_id] = parsed_station
         elif previous != parsed_station:
-            conflicting_ids.add(parsed_station.provider_id)
-    # The live feed publishes some EVSE ids under several sites with different
-    # coordinates and addresses. Neither copy can be trusted, so omit them
-    # instead of rejecting the whole national snapshot.
-    for conflicting_id in conflicting_ids:
-        del unique_stations[conflicting_id]
-    return list(unique_stations.values()), len(conflicting_ids)
+            conflicting_ids.add(evse_id)
+            del stations[evse_id]
 
 
 def _datex_publications(
@@ -899,21 +907,31 @@ def _next_locations_url(link_header: str | None, current_url: str) -> str | None
 
 
 def _select_static_stations(
-    document: BelgiumDatexDocument,
+    stations: tuple[ChargingStation, ...],
     latitude: float,
     longitude: float,
     radius_m: int,
     favourites: tuple[FavouriteStationReference, ...],
     provider_id: str,
 ) -> tuple[list[ChargingStation], dict[str, ChargingStation]]:
-    """Parse the snapshot and select nearby and favourited stations."""
-    all_stations = _parse_static_stations(document, latitude, longitude)
-    stations_by_id = {station.provider_id: station for station in all_stations}
-    nearby = [
-        station
-        for station in all_stations
-        if station.distance_m is not None and station.distance_m <= radius_m
-    ]
+    """Select from the normalized snapshot, copying only matching stations."""
+    favourite_ids: set[str] = set()
+    for favourite in favourites:
+        if favourite.provider != provider_id:
+            raise InvalidProviderResponseError(
+                "A saved favourite belongs to a different provider"
+            )
+        favourite_ids.add(favourite.provider_id)
+    nearby: list[ChargingStation] = []
+    favourites_by_id: dict[str, ChargingStation] = {}
+    for station in stations:
+        distance = distance_m(latitude, longitude, station.latitude, station.longitude)
+        if distance <= radius_m or station.provider_id in favourite_ids:
+            selected = replace(station, distance_m=distance)
+            if distance <= radius_m:
+                nearby.append(selected)
+            if station.provider_id in favourite_ids:
+                favourites_by_id[station.provider_id] = selected
     nearby.sort(
         key=lambda station: (
             station.distance_m is None,
@@ -922,15 +940,11 @@ def _select_static_stations(
         )
     )
 
-    favourite_stations: dict[str, ChargingStation] = {}
-    for favourite in favourites:
-        if favourite.provider != provider_id:
-            raise InvalidProviderResponseError(
-                "A saved favourite belongs to a different provider"
-            )
-        station = stations_by_id.get(favourite.provider_id)
-        if station is not None:
-            favourite_stations[favourite.provider_id] = station
+    favourite_stations = {
+        favourite.provider_id: favourites_by_id[favourite.provider_id]
+        for favourite in favourites
+        if favourite.provider_id in favourites_by_id
+    }
     return nearby, favourite_stations
 
 

@@ -66,6 +66,26 @@ The frontend test uses Node.js separately:
 node --test tests/curbcharge-card.test.mjs
 ```
 
+### Belgium snapshot memory benchmark
+
+Run `python scripts/benchmark_belgium_snapshot.py` from the repository root with
+the integration's runtime dependencies installed. It exercises discovery against
+18 generated pages (18,000 sites, 72,000 EVSEs, 128.26 MiB of JSON), without
+network requests. Unused synthetic publisher metadata pads the wire size to
+approximate the national feed. Run the same script on both revisions.
+
+On Windows/Python 3.14, comparing `4d8c4f2` with the compact snapshot cache:
+
+| Traced Python allocations | Raw snapshot | Compact snapshot |
+|---|---:|---:|
+| Peak during discovery | 448.60 MiB | 117.71 MiB |
+| Retained after discovery and GC | 373.02 MiB | 86.19 MiB |
+
+These are `tracemalloc` measurements after runtime imports, not total process RSS
+or a measurement inside Home Assistant. The workload uses static tariffs and an
+empty bundled status publication; live payload shape, dynamic statuses, Python
+allocator behavior, and host hardware affect actual memory use.
+
 ## HACS release smoke checklist
 
 Run this on a clean Home Assistant instance for a full published release:

@@ -64,10 +64,15 @@ authorized page and its next-page link. CurbCharge keeps that page as a
 token-scoped seed for up to five minutes, then reuses it when the background
 refresh fetches the remaining pages. An unconsumed seed is removed at expiry;
 only a complete validated static snapshot is cached for 23 hours and shared by
-entries and flows using the same token. A warm complete snapshot avoids a
-validation request. The full snapshot is still required to select nearby
+entries and flows using the same token. Each page is normalized into compact
+EVSE records in an executor; unused raw DATEX fields are discarded, and later
+polls select from those records without reparsing the national feed. Conflicting
+duplicate EVSEs are checked across all pages before the cache is replaced.
+A warm complete snapshot avoids a validation request.
+The full snapshot is still required to select nearby
 stations or favourites, so a cold entry loads its data in the background and
-its entities report unavailable until the snapshot is in. After a fresh full download, selected stations use the status, timestamp, and
+its entities report unavailable until the snapshot is in. After a fresh full
+download, selected stations use the status, timestamp, and
 ad-hoc price bundled with their location pages for that refresh, without
 per-EVSE requests.
 Bundled status data is transient and is not retained with the shared static
