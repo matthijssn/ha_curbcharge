@@ -1799,7 +1799,10 @@ async def test_duplicate_evse_pages_are_deduplicated_or_omitted(conflicting, cap
                 headers={"Link": '<?offset=1000>; rel="next"'},
             ),
             FakeResponse(second, headers={"Link": '<?offset=2000>; rel="next"'}),
-            FakeResponse(_root_locations_document()),
+            FakeResponse(
+                _root_locations_document(),
+                headers={"Link": '<?offset=0>; rel="prev"'},
+            ),
         ]
     )
     client = BelgiumDatexClient(session, "test-token", NoWaitLimiter())
