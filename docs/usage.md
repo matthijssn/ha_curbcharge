@@ -67,9 +67,12 @@ only a complete validated static snapshot is cached for 23 hours and shared by
 entries and flows using the same token. A warm complete snapshot avoids a
 validation request. The full snapshot is still required to select nearby
 stations or favourites, so a cold entry loads its data in the background and
-its entities report unavailable until the snapshot is in. Station entities
-then appear with unknown status, and statuses and dynamic prices follow on the
-next scheduled poll. A later-page failure is reported as an update failure;
+its entities report unavailable until the snapshot is in. After a fresh full download, selected stations use the status, timestamp, and
+ad-hoc price bundled with their location pages for that refresh, without
+per-EVSE requests.
+Bundled status data is transient and is not retained with the shared static
+snapshot; a warm snapshot's older statuses are ignored. Later polls continue to
+use `/status` as before. A later-page failure is reported as an update failure;
 the log identifies the failed page and cause, and partial station data is not
 published. The feed occasionally
 publishes the same EVSE under several sites with different coordinates or

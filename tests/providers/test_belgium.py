@@ -13,7 +13,10 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from custom_components.curbcharge.const import PROVIDER_ECO_MOVEMENT_BE
+from custom_components.curbcharge.const import (
+    PROVIDER_ECO_MOVEMENT_BE,
+    PROVIDER_ECO_MOVEMENT_BE_NAME,
+)
 from custom_components.curbcharge.models import (
     ConnectorStatus,
     ConnectorTypeId,
@@ -212,6 +215,21 @@ def _status_document(
     else:
         point_status.pop("energyRateUpdate", None)
     return document
+
+
+def _with_bundled_statuses(
+    locations: dict[str, Any], *status_documents: dict[str, Any]
+) -> dict[str, Any]:
+    location_payload = locations.get("payload", locations)
+    site_statuses = []
+    for document in status_documents:
+        status_payload = document["messageContainer"]["payload"][0]
+        publication = status_payload["aegiEnergyInfrastructureStatusPublication"]
+        site_statuses.extend(publication["energyInfrastructureSiteStatus"])
+    location_payload["aegiEnergyInfrastructureStatusPublication"] = {
+        "energyInfrastructureSiteStatus": site_statuses
+    }
+    return locations
 
 
 @pytest.mark.asyncio
@@ -2064,13 +2082,31 @@ def test_root_evse_status_uses_external_id_and_falls_back_to_internal_id():
         (51.5, [], ["BE-EXAMPLE-1"]),
     ],
 )
-async def test_factory_provider_publishes_static_stations_before_status(
+async def test_factory_provider_uses_bundled_status_then_status_endpoints(
     hass, latitude, nearby_ids, favourite_ids
 ):
-    """Entities appear once the snapshot loads; statuses follow on the next poll."""
+    """Use downloaded status once, then return to per-EVSE updates."""
+    bundled_status = _status_document(
+        status="charging",
+        price=0.5,
+        currency=None,
+        evse_id="BE-EXAMPLE-1",
+    )
+    bundled_price = bundled_status["messageContainer"]["payload"][0][
+        "aegiEnergyInfrastructureStatusPublication"
+    ]["energyInfrastructureSiteStatus"][0]["energyInfrastructureStationStatus"][0][
+        "refillPointStatus"
+    ][0]["aegiElectricChargingPointStatus"]["energyRateUpdate"][0]["energyPrice"][0]
+    bundled_price["taxIncluded"] = False
+    bundled_price["taxRate"] = 21
     session = FakeSession(
         [
-            FakeResponse(_root_locations_document()),
+            FakeResponse(
+                _with_bundled_statuses(
+                    _root_locations_document(),
+                    bundled_status,
+                )
+            ),
             FakeResponse(_status_document(evse_id="BE-EXAMPLE-1")),
         ]
     )
@@ -2090,11 +2126,25 @@ async def test_factory_provider_publishes_static_stations_before_status(
         )
         assert [station.provider_id for station in first.nearby] == nearby_ids
         assert [station.provider_id for station in first.favourites] == favourite_ids
-        assert not any(
-            station.availability_reported
-            for station in (*first.nearby, *first.favourites)
+        first_stations = (*first.nearby, *first.favourites)
+        assert len(first_stations) == 1
+        assert first_stations[0].availability_reported
+        assert first_stations[0].evse_status is EVSEStatus.CHARGING
+        assert first_stations[0].last_updated_source is (
+            ProviderTimestampSource.BELGIUM_EVSE_STATUS
         )
+        assert first_stations[0].last_updated is not None
+        assert first_stations[0].last_updated.isoformat() == (
+            "2026-10-11T10:01:00+00:00"
+        )
+        assert first_stations[0].tariff is not None
+        assert first_stations[0].tariff.currency == "EUR"
+        assert first_stations[0].tariff.price_per_kwh == Decimal("0.605")
+        assert first_stations[0].tariff.vat_percentage == Decimal("21")
         assert len(session.requests) == 1
+        assert "aegiEnergyInfrastructureStatusPublication" not in (
+            provider._client._locations or {}
+        )
 
         second = await provider.async_get_stations(
             latitude, 4.35, 1000, 10, (favourite,)
@@ -2105,3 +2155,116 @@ async def test_factory_provider_publishes_static_stations_before_status(
         for station in (*second.nearby, *second.favourites)
     )
     assert session.requests[1][0].endswith("/status/BE%2AEXAMPLE%2A1")
+
+
+@pytest.mark.asyncio
+async def test_static_first_does_not_reuse_statuses_from_cached_snapshot():
+    locations = _with_bundled_statuses(
+        _root_locations_document(),
+        _status_document(evse_id="BE-EXAMPLE-1"),
+    )
+    session = FakeSession(
+        [
+            FakeResponse(locations),
+            FakeResponse(_status_document(evse_id="BE-EXAMPLE-1")),
+        ]
+    )
+    client = BelgiumDatexClient(session, "token", NoWaitLimiter())
+    await client.async_get_locations()
+    provider = BelgiumChargingProvider(client, static_first=True)
+
+    first = await provider.async_get_stations(50.85, 4.35, 1000, 10)
+
+    assert not first.nearby[0].availability_reported
+    assert len(session.requests) == 1
+
+    second = await provider.async_get_stations(50.85, 4.35, 1000, 10)
+
+    assert second.nearby[0].availability_reported
+    assert session.requests[1][0].endswith("/status/BE%2AEXAMPLE%2A1")
+
+
+@pytest.mark.asyncio
+async def test_fresh_snapshot_uses_bundled_status_during_regular_refresh():
+    locations = _with_bundled_statuses(
+        _root_locations_document(),
+        _status_document(status="charging", evse_id="BE-EXAMPLE-1"),
+    )
+    session = FakeSession([FakeResponse(locations)])
+    provider = BelgiumChargingProvider(
+        BelgiumDatexClient(session, "token", NoWaitLimiter())
+    )
+
+    result = await provider.async_get_stations(50.85, 4.35, 1000, 10)
+
+    assert provider.provider_name == PROVIDER_ECO_MOVEMENT_BE_NAME
+    assert result.nearby[0].availability_reported
+    assert result.nearby[0].evse_status is EVSEStatus.CHARGING
+    assert len(session.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_bundled_status_selection_excludes_unknown_when_requested():
+    locations = _with_bundled_statuses(
+        _locations_document_with_evse_count(2),
+        _status_document(evse_id="evse-internal-0"),
+    )
+    session = FakeSession([FakeResponse(locations)])
+    provider = BelgiumChargingProvider(
+        BelgiumDatexClient(session, "token", NoWaitLimiter())
+    )
+
+    result = await provider.async_get_stations(
+        50.85, 4.35, 1000, 1, include_unknown=False
+    )
+
+    assert [station.provider_id for station in result.nearby] == ["evse-internal-0"]
+    assert result.nearby[0].evse_status is EVSEStatus.AVAILABLE
+    assert len(session.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_static_first_uses_bundled_status_from_later_snapshot_page():
+    first_page = _locations_document()
+    first_site = first_page["payload"]["aegiEnergyInfrastructureTablePublication"][
+        "energyInfrastructureTable"
+    ][0]["energyInfrastructureSite"][0]
+    first_station = first_site["energyInfrastructureStation"][0]
+    first_station["locationReference"]["locPointLocation"]["coordinatesForDisplay"][
+        "latitude"
+    ] = 51.5
+
+    second_page = _locations_document()
+    second_site = second_page["payload"]["aegiEnergyInfrastructureTablePublication"][
+        "energyInfrastructureTable"
+    ][0]["energyInfrastructureSite"][0]
+    second_site["idG"] = "site-2"
+    second_station = second_site["energyInfrastructureStation"][0]
+    second_station["idG"] = "station-2"
+    second_evse = second_station["refillPoint"][0]["aegiElectricChargingPoint"]
+    second_evse["idG"] = "BE-EXAMPLE-2"
+    second_evse["externalIdentifier"][0]["identifier"] = "BE*EXAMPLE*2"
+    second_page = _with_bundled_statuses(
+        second_page,
+        _status_document(status="charging", evse_id="BE-EXAMPLE-2"),
+    )
+
+    session = FakeSession(
+        [
+            FakeResponse(
+                first_page,
+                headers={"Link": '<?offset=1000&limit=1000>; rel="next"'},
+            ),
+            FakeResponse(second_page),
+        ]
+    )
+    client = BelgiumDatexClient(session, "test-token", NoWaitLimiter())
+    provider = BelgiumChargingProvider(client, static_first=True)
+    await provider.async_validate_connection(50.85, 4.35, 1000)
+
+    result = await provider.async_get_stations(50.85, 4.35, 1000, 10)
+
+    assert [station.provider_id for station in result.nearby] == ["BE-EXAMPLE-2"]
+    assert result.nearby[0].evse_status is EVSEStatus.CHARGING
+    assert len(session.requests) == 2
+    assert not any("/status/" in url for url, _ in session.requests)
