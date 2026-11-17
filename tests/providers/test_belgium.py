@@ -235,13 +235,20 @@ def _with_bundled_statuses(
 @pytest.mark.asyncio
 async def test_locations_are_authorized_cached_and_parsed_in_executor(monkeypatch):
     parser_threads: list[int] = []
+    normalization_threads: list[int] = []
     parse_document = belgium._parse_datex_document
+    merge_page = belgium._merge_static_page
 
     def record_parser_thread(body: bytes) -> belgium.BelgiumDatexDocument:
         parser_threads.append(threading.get_ident())
         return parse_document(body)
 
+    def record_normalization_thread(*args: Any) -> None:
+        normalization_threads.append(threading.get_ident())
+        merge_page(*args)
+
     monkeypatch.setattr(belgium, "_parse_datex_document", record_parser_thread)
+    monkeypatch.setattr(belgium, "_merge_static_page", record_normalization_thread)
     session = FakeSession([FakeResponse(_locations_document())])
     client = _client(session)
 
@@ -249,11 +256,10 @@ async def test_locations_are_authorized_cached_and_parsed_in_executor(monkeypatc
     cached = await client.async_get_locations()
 
     assert cached is locations
-    assert (
-        locations["aegiEnergyInfrastructureTablePublication"]
-        == _locations_document()["payload"]["aegiEnergyInfrastructureTablePublication"]
-    )
+    assert locations == tuple(belgium._iter_static_stations(_locations_document()))
+    assert locations[0].distance_m is None
     assert parser_threads and parser_threads[0] != threading.get_ident()
+    assert normalization_threads and normalization_threads[0] != threading.get_ident()
     assert len(session.requests) == 1
     url, headers = session.requests[0]
     assert url == f"{belgium._API_BASE_URL}/locations"
@@ -1077,6 +1083,45 @@ async def test_warm_snapshot_validation_makes_no_location_request():
 
 
 @pytest.mark.asyncio
+async def test_cached_stations_are_selected_without_reparsing_or_mutation():
+    session = FakeSession([FakeResponse(_root_locations_document())])
+    client = BelgiumDatexClient(session, "test-token", NoWaitLimiter())
+    snapshot = await client.async_get_locations()
+    original = snapshot[0]
+    favourite = FavouriteStationReference(
+        provider=PROVIDER_ECO_MOVEMENT_BE,
+        provider_id=original.provider_id,
+        name=original.name,
+        latitude=original.latitude,
+        longitude=original.longitude,
+    )
+    with patch.object(
+        belgium, "_iter_static_stations", side_effect=AssertionError("reparsed cache")
+    ):
+        provider = BelgiumChargingProvider(client)
+        await provider.async_validate_connection(51.5, 4.35, 1000)
+        assert await client.async_get_locations() is snapshot
+        nearby, _ = belgium._select_static_stations(
+            snapshot, 50.85, 4.35, 1000, (), provider.provider_id
+        )
+        distant, favourites = belgium._select_static_stations(
+            snapshot, 51.5, 4.35, 1000, (favourite,), provider.provider_id
+        )
+
+    assert len(nearby) == 1 and nearby[0].distance_m == 0
+    assert distant == []
+    assert favourites[original.provider_id].distance_m == belgium.distance_m(
+        51.5, 4.35, original.latitude, original.longitude
+    )
+    assert original.distance_m is None
+    assert original.availability_reported is False
+    assert nearby[0].connectors is original.connectors
+    assert nearby[0].tariff is original.tariff
+    assert nearby[0].location is original.location
+    assert len(session.requests) == 1
+
+
+@pytest.mark.asyncio
 async def test_unconsumed_location_seed_expires(hass, monkeypatch):
     monkeypatch.setattr(belgium, "_LOCATION_SEED_SECONDS", 0.01)
     session = FakeSession(
@@ -1573,7 +1618,8 @@ async def test_paginated_root_locations_include_later_nearby_and_favorite_statio
 
     await provider.async_validate_connection(50.85, 4.35, 1000)
     cached = await client.async_get_locations()
-    assert "aegiEnergyInfrastructureStatusPublication" not in cached
+    assert len(cached) == 2
+    assert all(not station.availability_reported for station in cached)
     assert len(session.requests) == 2
     result = await provider.async_get_stations(
         50.85,
@@ -1612,9 +1658,7 @@ async def test_empty_locations_page_with_next_link_does_not_end_discovery():
     )
     client = BelgiumDatexClient(session, "test-token", NoWaitLimiter())
 
-    stations = belgium._parse_static_stations(
-        await client.async_get_locations(), 50.85, 4.35
-    )
+    stations = await client.async_get_locations()
 
     assert len(stations) == 1
     assert len(session.requests) == 2
@@ -1754,13 +1798,12 @@ async def test_duplicate_evse_pages_are_deduplicated_or_omitted(conflicting, cap
                 _root_locations_document(),
                 headers={"Link": '<?offset=1000>; rel="next"'},
             ),
-            FakeResponse(second, headers={"Link": '<?offset=0>; rel="prev"'}),
+            FakeResponse(second, headers={"Link": '<?offset=2000>; rel="next"'}),
+            FakeResponse(_root_locations_document()),
         ]
     )
     client = BelgiumDatexClient(session, "test-token", NoWaitLimiter())
-    stations = belgium._parse_static_stations(
-        await client.async_get_locations(), 50.85, 4.35
-    )
+    stations = await client.async_get_locations()
 
     if conflicting:
         # The ambiguous EVSE is omitted, but the rest of the snapshot is usable.
@@ -1773,6 +1816,29 @@ async def test_duplicate_evse_pages_are_deduplicated_or_omitted(conflicting, cap
         ]
         assert "omitted" not in caplog.text
     assert "test-token" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_conflicting_evse_within_page_cannot_return_on_a_later_page(caplog):
+    first = _root_locations_document()
+    sites = first["aegiEnergyInfrastructureTablePublication"][
+        "energyInfrastructureTable"
+    ][0]["energyInfrastructureSite"]
+    duplicate = copy.deepcopy(sites[0])
+    duplicate["idG"] = "conflicting-site"
+    sites.append(duplicate)
+    session = FakeSession(
+        [
+            FakeResponse(first, headers={"Link": '<?offset=1000>; rel="next"'}),
+            FakeResponse(_root_locations_document()),
+        ]
+    )
+    client = BelgiumDatexClient(session, "test-token", NoWaitLimiter())
+
+    snapshot = await client.async_get_locations()
+
+    assert snapshot == ()
+    assert "omitted 1 EVSEs" in caplog.text
 
 
 def test_root_entrances_and_connector_identity_remain_strict():
@@ -2142,8 +2208,10 @@ async def test_factory_provider_uses_bundled_status_then_status_endpoints(
         assert first_stations[0].tariff.price_per_kwh == Decimal("0.605")
         assert first_stations[0].tariff.vat_percentage == Decimal("21")
         assert len(session.requests) == 1
-        assert "aegiEnergyInfrastructureStatusPublication" not in (
-            provider._client._locations or {}
+        assert provider._client._locations is not None
+        assert all(
+            not station.availability_reported and station.evse_status is None
+            for station in provider._client._locations
         )
 
         second = await provider.async_get_stations(
