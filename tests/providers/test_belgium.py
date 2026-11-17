@@ -33,6 +33,7 @@ from custom_components.curbcharge.providers.base import (
 from custom_components.curbcharge.providers.belgium import (
     BelgiumChargingProvider,
     BelgiumDatexClient,
+    BelgiumLocationCache,
     BelgiumRequestLimiter,
 )
 
@@ -906,26 +907,29 @@ async def test_belgium_provider_factory_shares_rate_limits_between_entries(
 async def test_belgium_provider_factory_shares_location_snapshot_between_flows(
     hass,
 ):
-    """A config flow followed by entry setup must not refetch every page."""
+    """Entry setup reuses the validation page and completes the shared snapshot."""
     flow_session = FakeSession(
         [
             FakeResponse(
                 _root_locations_document(),
                 headers={"Link": '<?offset=1000>; rel="next"'},
-            ),
-            FakeResponse(_root_locations_document()),
+            )
         ]
     )
-    setup_session = FakeSession([])
+    setup_session = FakeSession([FakeResponse(_root_locations_document())])
     flow_provider = belgium.create_belgium_provider(hass, flow_session, "token")
     setup_provider = belgium.create_belgium_provider(hass, setup_session, "token")
 
     with patch.object(belgium.BelgiumRequestLimiter, "async_wait", AsyncMock()):
         await flow_provider.async_validate_connection(50.85, 4.35, 1000)
+        assert len(flow_session.requests) == 1
+        assert flow_provider._client._locations is None
+        await setup_provider._client.async_get_locations()
         await setup_provider.async_validate_connection(50.85, 4.35, 1000)
 
-    assert len(flow_session.requests) == 2
-    assert setup_session.requests == []
+    assert len(flow_session.requests) == 1
+    assert len(setup_session.requests) == 1
+    assert setup_session.requests[0][0] == f"{belgium._LOCATIONS_URL}?offset=1000"
 
 
 @pytest.mark.asyncio
@@ -1007,6 +1011,132 @@ async def test_belgium_provider_validates_the_static_location_snapshot():
     )
 
     await provider.async_validate_connection(50.85, 4.35, 1000)
+
+
+@pytest.mark.asyncio
+async def test_cold_validation_seeds_one_page_for_full_snapshot_fetch():
+    first_page = _root_locations_document()
+    session = FakeSession(
+        [
+            FakeResponse(
+                first_page,
+                headers={"Link": '<?offset=1000>; rel="next"'},
+            ),
+            FakeResponse(_root_locations_document()),
+        ]
+    )
+    client = _client(session)
+    provider = BelgiumChargingProvider(client)
+
+    await provider.async_validate_connection(50.85, 4.35, 1000)
+
+    assert len(session.requests) == 1
+    assert client._locations is None
+    assert client._locations_cached_at is None
+    assert client._location_cache.get_seed("test-token") == (
+        first_page,
+        f"{belgium._LOCATIONS_URL}?offset=1000",
+    )
+
+    snapshot = await client.async_get_locations()
+
+    assert snapshot is client._locations
+    assert len(session.requests) == 2
+    assert session.requests[1][0] == f"{belgium._LOCATIONS_URL}?offset=1000"
+    assert client._location_cache.get_seed("test-token") is None
+
+
+@pytest.mark.asyncio
+async def test_warm_snapshot_validation_makes_no_location_request():
+    session = FakeSession([FakeResponse(_root_locations_document())])
+    client = _client(session)
+    provider = BelgiumChargingProvider(client)
+
+    await client.async_get_locations()
+    await provider.async_validate_connection(50.85, 4.35, 1000)
+
+    assert len(session.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_unconsumed_location_seed_expires(hass, monkeypatch):
+    monkeypatch.setattr(belgium, "_LOCATION_SEED_SECONDS", 0.01)
+    session = FakeSession(
+        [
+            FakeResponse(
+                _root_locations_document(),
+                headers={"Link": '<?offset=1000>; rel="next"'},
+            ),
+            FakeResponse(_root_locations_document()),
+        ]
+    )
+    client = BelgiumDatexClient(
+        session, "test-token", NoWaitLimiter(), BelgiumLocationCache(hass)
+    )
+    provider = BelgiumChargingProvider(client)
+
+    await provider.async_validate_connection(50.85, 4.35, 1000)
+    assert client._location_cache.get_seed("test-token") is not None
+    await asyncio.sleep(0.02)
+
+    assert client._location_cache.get_seed("test-token") is None
+    await client.async_get_locations()
+    assert session.requests[1][0] == belgium._LOCATIONS_URL
+
+
+@pytest.mark.asyncio
+async def test_later_page_failure_logs_page_and_cause_without_caching_partial_data(
+    caplog,
+):
+    session = FakeSession(
+        [
+            FakeResponse(
+                _root_locations_document(),
+                headers={"Link": '<?offset=1000>; rel="next"'},
+            ),
+            FakeResponse({}, status=503),
+        ]
+    )
+    client = _client(session)
+    provider = BelgiumChargingProvider(client)
+    await provider.async_validate_connection(50.85, 4.35, 1000)
+
+    with pytest.raises(ProviderConnectionError):
+        await client.async_get_locations()
+
+    assert "locations page 2 failed" in caplog.text
+    assert "HTTP 503" in caplog.text
+    assert client._locations is None
+    assert client._locations_cached_at is None
+
+
+def test_expired_seed_is_discarded_on_access(monkeypatch):
+    current_time = [0.0]
+    monkeypatch.setattr(belgium.time, "monotonic", lambda: current_time[0])
+    cache = BelgiumLocationCache()
+    cache.store_seed("test-token", _root_locations_document(), None)
+    current_time[0] = belgium._LOCATION_SEED_SECONDS
+
+    assert cache.get_seed("test-token") is None
+    assert cache._seeds == {}
+
+
+@pytest.mark.asyncio
+async def test_invalid_full_snapshot_is_not_cached(caplog):
+    document = _root_locations_document()
+    evse = document["aegiEnergyInfrastructureTablePublication"][
+        "energyInfrastructureTable"
+    ][0]["energyInfrastructureSite"][0]["energyInfrastructureStation"][0][
+        "refillPoint"
+    ][0]["aegiElectricChargingPoint"]
+    evse["idG"] = ""
+    client = _client(FakeSession([FakeResponse(document)]))
+
+    with pytest.raises(InvalidProviderResponseError, match="invalid EVSE id"):
+        await client.async_get_locations()
+
+    assert "locations snapshot validation failed" in caplog.text
+    assert client._locations is None
 
 
 @pytest.mark.asyncio
@@ -1711,7 +1841,7 @@ async def test_invalid_location_json_logs_a_safe_reason_without_body_or_token(ca
     with pytest.raises(InvalidProviderResponseError):
         await client.async_get_locations()
 
-    assert "locations validation failed" in caplog.text
+    assert "locations page 1 failed" in caplog.text
     assert "invalid Belgium DATEX II JSON" in caplog.text
     assert "private provider response" not in caplog.text
     assert "secret-token" not in caplog.text

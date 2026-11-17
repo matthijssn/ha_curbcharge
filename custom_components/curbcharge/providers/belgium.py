@@ -10,14 +10,17 @@ import math
 import re
 import time
 from collections import deque
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
+from functools import partial
 from typing import TypedDict, cast
 from urllib.parse import quote, urljoin, urlsplit
 
 import aiohttp
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HassJob, HomeAssistant
+from homeassistant.helpers.event import async_call_later
 
 from ..const import (
     COUNTRY_BE,
@@ -55,6 +58,7 @@ _API_BASE_URL = "https://nap-be.eco-movement.com/datex2/v1"
 _LOCATIONS_URL = f"{_API_BASE_URL}/locations"
 _REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=20)
 _LOCATION_CACHE_SECONDS = 23 * 60 * 60
+_LOCATION_SEED_SECONDS = 5 * 60
 _IP_REQUEST_INTERVAL = 10
 _LOCATION_REQUEST_WINDOW = 60 * 60
 _LOCATION_REQUEST_LIMIT = 30
@@ -163,14 +167,18 @@ class BelgiumRequestLimiter:
 class BelgiumLocationCache:
     """Share validated static snapshots per token across clients.
 
-    A complete snapshot takes roughly 18 paginated location requests, so a
-    config flow followed by entry setup would otherwise exhaust the rolling
-    location quota and stall setup for up to an hour.
+    A complete snapshot takes roughly 18 paginated location requests, so cold
+    connection validation seeds its first page for the background refresh.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, hass: HomeAssistant | None = None) -> None:
         """Initialize empty snapshot state."""
+        self._hass = hass
         self._snapshots: dict[bytes, tuple[BelgiumDatexDocument, float]] = {}
+        self._seeds: dict[
+            bytes,
+            tuple[BelgiumDatexDocument, str | None, float, Callable[[], None] | None],
+        ] = {}
         self._locks: dict[bytes, asyncio.Lock] = {}
 
     def lock(self, token: str) -> asyncio.Lock:
@@ -185,6 +193,53 @@ class BelgiumLocationCache:
         """Replace the snapshot for one token after it fully validated."""
         self._snapshots[_token_key(token)] = (document, time.monotonic())
 
+    def get_seed(self, token: str) -> tuple[BelgiumDatexDocument, str | None] | None:
+        """Return a live first-page seed for this token, if present."""
+        key = _token_key(token)
+        seed = self._seeds.get(key)
+        if seed is None:
+            return None
+        if seed[2] <= time.monotonic():
+            self.discard_seed(token)
+            return None
+        return seed[0], seed[1]
+
+    def store_seed(
+        self,
+        token: str,
+        document: BelgiumDatexDocument,
+        next_url: str | None,
+    ) -> None:
+        """Keep a validated first page briefly for the background full fetch."""
+        key = _token_key(token)
+        self.discard_seed(token)
+        expires_at = time.monotonic() + _LOCATION_SEED_SECONDS
+        cancel_expiry = None
+        if self._hass is not None:
+            job = HassJob(
+                partial(self._expire_seed, key, expires_at),
+                "expire Belgium location seed",
+                cancel_on_shutdown=True,
+            )
+            cancel_expiry = async_call_later(self._hass, _LOCATION_SEED_SECONDS, job)
+        self._seeds[key] = (document, next_url, expires_at, cancel_expiry)
+
+    def discard_seed(
+        self, token: str, document: BelgiumDatexDocument | None = None
+    ) -> None:
+        """Drop a seed, optionally only when it is the supplied document."""
+        key = _token_key(token)
+        seed = self._seeds.get(key)
+        if seed is not None and (document is None or seed[0] is document):
+            del self._seeds[key]
+            if seed[3] is not None:
+                seed[3]()
+
+    def _expire_seed(self, key: bytes, expires_at: float, _fired_at: datetime) -> None:
+        seed = self._seeds.get(key)
+        if seed is not None and seed[2] == expires_at:
+            del self._seeds[key]
+
 
 def _token_key(token: str) -> bytes:
     return hashlib.sha256(token.encode("ascii")).digest()
@@ -195,7 +250,7 @@ def _shared_location_cache(hass: HomeAssistant) -> BelgiumLocationCache:
     domain_data = hass.data.setdefault(DOMAIN, {})
     cache = domain_data.get(_LOCATION_CACHE_DATA_KEY)
     if cache is None:
-        cache = BelgiumLocationCache()
+        cache = BelgiumLocationCache(hass)
         domain_data[_LOCATION_CACHE_DATA_KEY] = cache
     if not isinstance(cache, BelgiumLocationCache):
         raise RuntimeError("CurbCharge Belgium location cache has an invalid type")
@@ -255,40 +310,93 @@ class BelgiumDatexClient:
                 return cached[0]
             locations = await self._async_fetch_locations()
             self._location_cache.store(self._token, locations)
+            self._location_cache.discard_seed(self._token)
             return locations
+
+    async def async_get_locations_for_validation(self) -> BelgiumDatexDocument:
+        """Return a fresh snapshot or validate and retain only the first page."""
+        async with self._location_cache.lock(self._token):
+            cached = self._location_cache.get(self._token)
+            if (
+                cached is not None
+                and time.monotonic() - cached[1] < _LOCATION_CACHE_SECONDS
+            ):
+                return cached[0]
+            seed = self._location_cache.get_seed(self._token)
+            if seed is not None:
+                return seed[0]
+
+            try:
+                document, next_url = await self._async_request_json(_LOCATIONS_URL)
+                await asyncio.get_running_loop().run_in_executor(
+                    None, _static_tables, document
+                )
+            except InvalidProviderResponseError as err:
+                _LOGGER.warning(
+                    "Belgium DATEX II locations validation failed on first page: %s",
+                    err,
+                )
+                raise
+            self._location_cache.store_seed(self._token, document, next_url)
+            return document
+
+    def discard_validation_seed(self, document: BelgiumDatexDocument) -> None:
+        """Discard the first-page seed when provider-level validation rejects it."""
+        self._location_cache.discard_seed(self._token, document)
 
     async def _async_fetch_locations(self) -> BelgiumDatexDocument:
         """Download and validate every locations page."""
         tables: list[dict[str, object]] = []
         seen_urls: set[str] = set()
-        url: str | None = _LOCATIONS_URL
         loop = asyncio.get_running_loop()
+        seed = self._location_cache.get_seed(self._token)
+        if seed is None:
+            url: str | None = _LOCATIONS_URL
+            page_number = 0
+        else:
+            page, url = seed
+            page_number = 1
+            seen_urls.add(_LOCATIONS_URL)
+            tables.extend(await loop.run_in_executor(None, _static_tables, page))
         try:
-            for _ in range(_MAX_LOCATION_PAGES):
-                assert url is not None
+            while url is not None:
+                if page_number >= _MAX_LOCATION_PAGES:
+                    raise InvalidProviderResponseError(
+                        "Belgium DATEX II exceeded the locations page bound"
+                    )
                 if url in seen_urls:
                     raise InvalidProviderResponseError(
                         "Belgium DATEX II returned a pagination loop"
                     )
                 seen_urls.add(url)
+                page_number += 1
                 page, url = await self._async_request_json(url)
                 tables.extend(await loop.run_in_executor(None, _static_tables, page))
-                if url is None:
-                    break
-            else:
-                raise InvalidProviderResponseError(
-                    "Belgium DATEX II exceeded the locations page bound"
-                )
-            locations = BelgiumDatexDocument(
-                aegiEnergyInfrastructureTablePublication={
-                    "energyInfrastructureTable": tables
-                }
+        except (
+            AuthenticationError,
+            InvalidProviderResponseError,
+            ProviderConnectionError,
+            ProviderRateLimitError,
+        ) as err:
+            _LOGGER.warning(
+                "Belgium DATEX II locations page %d failed: %s",
+                max(page_number, 1),
+                err,
             )
+            raise
+        locations = BelgiumDatexDocument(
+            aegiEnergyInfrastructureTablePublication={
+                "energyInfrastructureTable": tables
+            }
+        )
+        try:
             _, conflicting = await loop.run_in_executor(
                 None, _parse_static_snapshot, locations, 0, 0
             )
         except InvalidProviderResponseError as err:
-            _LOGGER.warning("Belgium DATEX II locations validation failed: %s", err)
+            _LOGGER.warning(
+                "Belgium DATEX II locations snapshot validation failed: %s", err
+            )
             raise
         if conflicting:
             _LOGGER.warning(
@@ -408,10 +516,15 @@ class BelgiumChargingProvider(BaseChargingProvider):
             raise UnsupportedLocationError(
                 "The Belgium provider does not support this search radius"
             )
-        document = await self._client.async_get_locations()
-        await asyncio.get_running_loop().run_in_executor(
-            None, _parse_static_stations, document, latitude, longitude
-        )
+        document = await self._client.async_get_locations_for_validation()
+        try:
+            await asyncio.get_running_loop().run_in_executor(
+                None, _parse_static_stations, document, latitude, longitude
+            )
+        except InvalidProviderResponseError as err:
+            self._client.discard_validation_seed(document)
+            _LOGGER.warning("Belgium DATEX II locations validation failed: %s", err)
+            raise
 
     async def async_get_stations(
         self,
