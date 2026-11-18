@@ -116,7 +116,7 @@ def _parse_datex_document(body: bytes) -> BelgiumDatexDocument:
 
 
 class BelgiumRequestLimiter:
-    """Share documented Belgium endpoint and per-IP limits across clients."""
+    """Share CurbCharge's conservative Belgium request pacing across clients."""
 
     def __init__(self) -> None:
         """Initialize limiter state for one Home Assistant instance."""
