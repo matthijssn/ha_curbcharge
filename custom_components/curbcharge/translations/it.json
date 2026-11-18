@@ -97,7 +97,7 @@
       },
       "belgium_credentials": {
         "title": "Connetti a Eco-Movement Belgio",
-        "description": "Inserisci il token API rilasciato a te da Eco-Movement. Il token è memorizzato in questa voce di configurazione e oscurato nella diagnostica.",
+        "description": "Inserisci il token API rilasciato a te da Eco-Movement. Il token è memorizzato in questa voce di configurazione e oscurato nella diagnostica. Dopo la configurazione, il caricamento iniziale dei dati del Belgio avviene in background. Potrebbero essere necessari alcuni minuti prima che i primi dispositivi delle stazioni siano disponibili.",
         "data": {
           "api_token": "Token API Eco-Movement"
         },

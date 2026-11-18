@@ -97,7 +97,7 @@
       },
       "belgium_credentials": {
         "title": "Verbinden met Eco-Movement België",
-        "description": "Voer de API-token in die Eco-Movement aan u heeft verstrekt. De token wordt in deze integratie opgeslagen en in diagnostiek afgeschermd.",
+        "description": "Voer de API-token in die Eco-Movement aan u heeft verstrekt. De token wordt in deze integratie opgeslagen en in diagnostiek afgeschermd. Na het instellen worden de eerste Belgische gegevens op de achtergrond geladen. Het kan enkele minuten duren voordat de eerste stations als apparaten beschikbaar zijn.",
         "data": {
           "api_token": "Eco-Movement API-token"
         },

@@ -97,7 +97,7 @@
       },
       "belgium_credentials": {
         "title": "Anslut till Eco-Movement Belgien",
-        "description": "Ange den API-token du har fått från Eco-Movement. Den lagras i den här konfigurationsposten och döljs i diagnostiken.",
+        "description": "Ange den API-token du har fått från Eco-Movement. Den lagras i den här konfigurationsposten och döljs i diagnostiken. Efter konfigurationen hämtas de första belgiska uppgifterna i bakgrunden. Det kan ta flera minuter innan de första laddstationerna blir tillgängliga som enheter.",
         "data": {
           "api_token": "API-token från Eco-Movement"
         },

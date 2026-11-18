@@ -97,7 +97,7 @@
       },
       "belgium_credentials": {
         "title": "Connexion à Eco-Movement Belgique",
-        "description": "Saisissez le jeton API qui vous a été délivré par Eco-Movement. Il est stocké dans cette entrée et masqué dans les diagnostics.",
+        "description": "Saisissez le jeton API qui vous a été délivré par Eco-Movement. Il est stocké dans cette entrée et masqué dans les diagnostics. Après la configuration, le premier chargement des données pour la Belgique s'effectue en arrière-plan. Les premiers appareils de station peuvent mettre plusieurs minutes à devenir disponibles.",
         "data": {
           "api_token": "Jeton API Eco-Movement"
         },

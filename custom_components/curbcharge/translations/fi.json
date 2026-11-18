@@ -97,7 +97,7 @@
       },
       "belgium_credentials": {
         "title": "Yhdistä Eco-Movement Belgiaan",
-        "description": "Syötä Eco-Movementin sinulle myöntämä API-tunnus. Tunnus tallennetaan tähän asetuskohteeseen ja piilotetaan diagnostiikasta.",
+        "description": "Syötä Eco-Movementin sinulle myöntämä API-tunnus. Tunnus tallennetaan tähän asetuskohteeseen ja piilotetaan diagnostiikasta. Asetusten jälkeen Belgian ensimmäiset tiedot ladataan taustalla. Ensimmäisten latausasemien ilmestymiseen laitteina voi kulua useita minuutteja.",
         "data": {
           "api_token": "Eco-Movement API-tunnus"
         },
