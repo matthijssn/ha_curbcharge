@@ -2340,6 +2340,18 @@ async def test_disabling_error_notifications_dismisses_without_refreshing(
 
 
 @pytest.mark.asyncio
+async def test_invalid_error_notification_option_reloads_entry(hass, monkeypatch):
+    entry = _entry(options={CONF_NOTIFY_ON_ERROR: "yes"})
+    entry.add_to_hass(hass)
+    reload_entry = AsyncMock()
+    monkeypatch.setattr(hass.config_entries, "async_reload", reload_entry)
+
+    await curbcharge._async_options_updated(hass, entry)
+
+    reload_entry.assert_awaited_once_with(entry.entry_id)
+
+
+@pytest.mark.asyncio
 async def test_enabling_error_notifications_during_outage_notifies_without_refreshing(
     hass, monkeypatch
 ):
