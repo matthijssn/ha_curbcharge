@@ -2270,6 +2270,9 @@ async def test_platform_setup_error_creates_notification_and_propagates(
 ):
     entry = _entry(options={CONF_NOTIFY_ON_ERROR: True})
     entry.add_to_hass(hass)
+    entry._async_set_state(  # noqa: SLF001
+        hass, ConfigEntryState.SETUP_IN_PROGRESS, None
+    )
     monkeypatch.setattr(
         curbcharge, "create_provider", lambda *_args: FakeProvider([()])
     )
