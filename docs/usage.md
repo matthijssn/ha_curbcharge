@@ -83,19 +83,29 @@ published. The feed occasionally
 publishes the same EVSE under several sites with different coordinates or
 addresses; because neither record can be trusted, CurbCharge omits those EVSEs
 and logs a warning with their count instead of rejecting the whole feed. Each
-page counts toward the shared limit of 30 location requests per rolling hour per
-token; seed reuse saves one request per cold flow. Pages are not artificially
-spaced two minutes apart. The other limits remain one request per 10 seconds
-per source IP and two status requests per minute per EVSE per token. A token
-whose quota is exhausted must wait for earlier requests to leave the rolling
-window.
+page counts toward CurbCharge's local cap of 30 location requests per rolling
+hour per token; seed reuse saves one request per cold flow. The
+[Belgium API documentation][belgium-datex-api] describes a 60-second response
+cache but does not publish a request quota or per-IP spacing. Eco-Movement's
+separate OCPI API documents a combined limit of 750 requests per minute for its
+`locations`, `evse`, and
+`tariffs` endpoints ([EVSE API][eco-movement-ocpi-evse]) and recommends no more
+than five simultaneous GET requests ([Data API User Guide][eco-movement-ocpi-guide]);
+those limits are not documented for the Belgium DATEX II API.
 
-Eco-Movement's responses have a 60-second cache and the locations feed also
-contains dynamic data. CurbCharge currently caches only static infrastructure
-and requests status per selected EVSE on its scheduled polls; the default
-interval is five minutes and quotas may add further delay. Bulk-status refresh
-is not implemented. A refresh can therefore take several minutes when many
-EVSEs need status updates.
+Until Eco-Movement confirms limits for Belgium DATEX II, CurbCharge retains
+conservative local pacing rather than treating those OCPI limits as applicable:
+at least 10 seconds between requests shared by Belgium entries in one Home
+Assistant instance, and at least 30 seconds between status requests for the
+same EVSE and token. These are client safeguards, not confirmed provider
+quotas. A token at CurbCharge's local location cap must wait for earlier
+requests to leave the rolling window.
+
+The locations feed also contains dynamic data. CurbCharge currently caches only
+static infrastructure and requests status per selected EVSE on its scheduled
+polls; the default interval is five minutes and CurbCharge's local pacing may
+add further delay. Bulk-status refresh is not implemented. A refresh can
+therefore take several minutes when many EVSEs need status updates.
 A `Retry-After` response pauses requests from all Belgium entries sharing that
 limiter. If a token expires or is revoked, the integration prompts for a
 replacement token and validates it before updating the entry.
@@ -900,9 +910,11 @@ parent devices, and connector groups add sensor entries.
 No hard cap is introduced. The Belgium 50-favourite case can spend about 8m10s
 to 8m20s in rate-limit spacing, longer than the default five-minute poll. At
 that default interval, one status request per EVSE averages 0.2 per minute,
-below the documented two-per-minute per-EVSE quota; the shared IP limit is the
-aggregate bottleneck. NOBIL publishes no equivalent time-based quota, so no
-fixed request spacing is imposed. These synthetic counts show linear growth
+below CurbCharge's local two-per-minute per-EVSE pacing; the shared 10-second
+request interval is the aggregate bottleneck. These are CurbCharge safeguards,
+not published Belgium DATEX II quotas. NOBIL publishes no equivalent time-based
+quota, so no fixed request spacing is imposed. These synthetic counts show
+linear growth
 but do not establish a safe universal cut-off or an HA resource limit. Saved
 favourites are therefore preserved. Any future cap needs an explicit policy that
 grandfathers existing favourites instead of silently truncating them.
@@ -1033,6 +1045,8 @@ and restart Home Assistant.
 [geojson-api]: https://docs.ndw.nu/data-uitwisseling/interface-beschrijvingen/dafne-api/dafne_api_consumer_pull/
 [tariffs]: https://opendata.ndw.nu/charging_point_tariffs_ocpi.json.gz
 [belgium-datex-api]: https://developers.eco-movement.com/v5/docs/belgium-datex-ii
+[eco-movement-ocpi-evse]: https://developers.eco-movement.com/reference/evse
+[eco-movement-ocpi-guide]: https://developers.eco-movement.com/docs/data-api-user-guide
 [belgium-dataset]: https://transportdata.be/en/dataset/public-charging-infrastructure-static-dataset-selected-cpos-datex-ii
 [nobil]: https://nobil.no
 [nobil-api]: https://info.nobil.no/api
