@@ -224,7 +224,8 @@
           "min_power_kw": "Mindestleistung (kW)",
           "require_available": "Verfügbaren Anschluss voraussetzen",
           "favourites": "Bevorzugte Ladestationen",
-          "location_movement_threshold": "Bewegungsschwelle des Standorts (m)"
+          "location_movement_threshold": "Bewegungsschwelle des Standorts (m)",
+          "notify_on_error": "Bei Fehlern benachrichtigen"
         },
         "data_description": {
           "scan_interval": "Wie oft Home Assistant die Ladestationsdaten aktualisiert.",
@@ -237,7 +238,8 @@
           "min_power_kw": "Optional. Eine passende Anschlussgruppe muss mindestens diese Leistung melden.",
           "require_available": "Nur Ladestationen einbeziehen, deren passende Anschlussgruppe verfügbare Anschlüsse meldet.",
           "favourites": "Ladestationen anhand ihres Namens auswählen. Bevorzugte Ladestationen bleiben außerhalb des Suchradius verfügbar und werden zusätzlich zum Limit für nahe gelegene Stationen aufgenommen.",
-          "location_movement_threshold": "Mindeststrecke, die sich die ausgewählte Entität bewegen muss, bevor der Suchstandort aktualisiert wird. Mit 0 wird die Schwelle deaktiviert."
+          "location_movement_threshold": "Mindeststrecke, die sich die ausgewählte Entität bewegen muss, bevor der Suchstandort aktualisiert wird. Mit 0 wird die Schwelle deaktiviert.",
+          "notify_on_error": "Dauerhafte Home-Assistant-Benachrichtigungen bei Anbieter-, Einrichtungs- und Dienstfehlern anzeigen. Anbieterbenachrichtigungen werden nach der Wiederherstellung geschlossen; Einrichtungs- und Dienstbenachrichtigungen bleiben bis zum manuellen Schließen."
         }
       },
       "ev_estimates": {
@@ -354,6 +356,18 @@
     },
     "invalid_station_id": {
       "message": "Geben Sie eine nicht leere Stations-ID ein."
+    },
+    "notification_error": {
+      "message": "Ein CurbCharge-Fehler ist aufgetreten. Weitere Informationen stehen im Home-Assistant-Protokoll."
+    },
+    "provider_update_failed": {
+      "message": "CurbCharge konnte die Ladestationsdaten nicht aktualisieren."
+    },
+    "service_call_failed": {
+      "message": "Ein CurbCharge-Dienstaufruf ist fehlgeschlagen."
+    },
+    "setup_failed": {
+      "message": "CurbCharge konnte nicht eingerichtet werden. Prüfe die Konfiguration und das Home-Assistant-Protokoll."
     },
     "station_not_discovered": {
       "message": "Die Station muss von diesem Konfigurationseintrag kürzlich entdeckt worden sein, bevor sie als Favorit hinzugefügt werden kann."

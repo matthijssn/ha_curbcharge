@@ -1,18 +1,23 @@
 """Favorite management services for CurbCharge."""
 
+import logging
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import HomeAssistant, ServiceCall, callback
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import selector
 from homeassistant.helpers.service import async_register_admin_service
 
-from .const import CONF_FAVOURITES, DOMAIN
+from .const import CONF_FAVOURITES, CONF_NOTIFY_ON_ERROR, DOMAIN
 from .coordinator import CurbChargeCoordinator
 from .models import FavouriteStationReference, parse_favourite_references
+from .notifications import async_create_error_notification
 from .schema import vol
+
+_LOGGER = logging.getLogger(__name__)
 
 ATTR_CONFIG_ENTRY_ID = "config_entry_id"
 ATTR_STATION_ID = "station_id"
@@ -34,10 +39,10 @@ def async_setup_services(hass: HomeAssistant) -> None:
     """Register admin-only favorite management services."""
 
     async def handle_add_favorite(call: ServiceCall) -> None:
-        await async_add_favorite(hass, call)
+        await _async_handle_service_call(hass, call, async_add_favorite)
 
     async def handle_remove_favorite(call: ServiceCall) -> None:
-        await async_remove_favorite(hass, call)
+        await _async_handle_service_call(hass, call, async_remove_favorite)
 
     async_register_admin_service(
         hass, DOMAIN, SERVICE_ADD_FAVORITE, handle_add_favorite, _SERVICE_SCHEMA
@@ -45,6 +50,38 @@ def async_setup_services(hass: HomeAssistant) -> None:
     async_register_admin_service(
         hass, DOMAIN, SERVICE_REMOVE_FAVORITE, handle_remove_favorite, _SERVICE_SCHEMA
     )
+
+
+async def _async_handle_service_call(
+    hass: HomeAssistant,
+    call: ServiceCall,
+    handler: Callable[[HomeAssistant, ServiceCall], Awaitable[None]],
+) -> None:
+    """Keep the original validation error while adding an optional notification."""
+    try:
+        await handler(hass, call)
+    except ServiceValidationError as err:
+        entry_id = call.data.get(ATTR_CONFIG_ENTRY_ID)
+        entry = (
+            hass.config_entries.async_get_entry(entry_id)
+            if isinstance(entry_id, str)
+            else None
+        )
+        if (
+            entry is not None
+            and entry.domain == DOMAIN
+            and entry.options.get(CONF_NOTIFY_ON_ERROR) is True
+        ):
+            try:
+                await async_create_error_notification(
+                    hass,
+                    entry.entry_id,
+                    "service",
+                    err.translation_key or "service_call_failed",
+                )
+            except (HomeAssistantError, OSError):
+                _LOGGER.exception("Could not create CurbCharge service notification")
+        raise
 
 
 async def async_add_favorite(hass: HomeAssistant, call: ServiceCall) -> None:

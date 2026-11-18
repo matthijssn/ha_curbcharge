@@ -1,6 +1,7 @@
 """Tests for favorite management services."""
 
 from dataclasses import replace
+from unittest.mock import AsyncMock
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
@@ -15,6 +16,7 @@ from custom_components.curbcharge.const import (
     CONF_FAVOURITES,
     CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
+    CONF_NOTIFY_ON_ERROR,
     CONF_PROVIDER,
     CONF_SEARCH_RADIUS,
     DOMAIN,
@@ -52,10 +54,10 @@ def _entry(
     )
 
 
-async def _setup_entry(hass, monkeypatch, snapshots):
+async def _setup_entry(hass, monkeypatch, snapshots, *, options=None):
     provider = FakeProvider(snapshots)
     monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
-    entry = _entry()
+    entry = _entry(options=options)
     entry.add_to_hass(hass)
 
     assert await hass.config_entries.async_setup(entry.entry_id)
@@ -184,6 +186,58 @@ async def test_favorite_services_validate_station_ids(
             _entry(options={CONF_FAVOURITES: "invalid"}), coordinator
         )
     assert err.value.translation_key == "invalid_config"
+
+
+@pytest.mark.asyncio
+async def test_service_validation_error_creates_notification_when_enabled(
+    hass, monkeypatch, sample_stations
+):
+    create_notification = AsyncMock()
+    monkeypatch.setattr(
+        services, "async_create_error_notification", create_notification
+    )
+    entry, _provider = await _setup_entry(
+        hass,
+        monkeypatch,
+        [(sample_stations[0],)],
+        options={CONF_NOTIFY_ON_ERROR: True},
+    )
+
+    with pytest.raises(ServiceValidationError) as error:
+        await _call_service(
+            hass, SERVICE_REMOVE_FAVORITE, entry.entry_id, "not-a-favorite"
+        )
+
+    assert error.value.translation_key == "favorite_not_found"
+    create_notification.assert_awaited_once_with(
+        hass, entry.entry_id, "service", "favorite_not_found"
+    )
+
+
+@pytest.mark.asyncio
+async def test_notification_failure_does_not_replace_service_validation_error(
+    hass, monkeypatch, sample_stations, caplog
+):
+    monkeypatch.setattr(
+        services,
+        "async_create_error_notification",
+        AsyncMock(side_effect=HomeAssistantError("notification unavailable")),
+    )
+    entry, _provider = await _setup_entry(
+        hass,
+        monkeypatch,
+        [(sample_stations[0],)],
+        options={CONF_NOTIFY_ON_ERROR: True},
+    )
+
+    with caplog.at_level("ERROR", logger=services.__name__):
+        with pytest.raises(ServiceValidationError) as error:
+            await _call_service(
+                hass, SERVICE_REMOVE_FAVORITE, entry.entry_id, "not-a-favorite"
+            )
+
+    assert error.value.translation_key == "favorite_not_found"
+    assert "Could not create CurbCharge service notification" in caplog.text
 
 
 @pytest.mark.asyncio

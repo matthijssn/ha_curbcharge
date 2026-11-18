@@ -224,7 +224,8 @@
           "min_power_kw": "Minimum power (kW)",
           "require_available": "Require an available connector",
           "favourites": "Favourite charging points",
-          "location_movement_threshold": "Location movement threshold (m)"
+          "location_movement_threshold": "Location movement threshold (m)",
+          "notify_on_error": "Notify on errors"
         },
         "data_description": {
           "scan_interval": "How often Home Assistant refreshes charging station data.",
@@ -237,7 +238,8 @@
           "min_power_kw": "Optional. A matching connector group must report at least this power.",
           "require_available": "Only include stations when a matching connector group reports available connectors.",
           "favourites": "Select charging points by name. Favourites remain available outside the search radius and are added beyond the nearby station limit.",
-          "location_movement_threshold": "Minimum distance the selected entity must move before the search location is updated. Set to 0 to disable the threshold."
+          "location_movement_threshold": "Minimum distance the selected entity must move before the search location is updated. Set to 0 to disable the threshold.",
+          "notify_on_error": "Show persistent Home Assistant notifications for provider, setup, and service errors. Provider notifications are dismissed after recovery; setup and service notifications stay until dismissed."
         }
       },
       "ev_estimates": {
@@ -354,6 +356,18 @@
     },
     "invalid_station_id": {
       "message": "Enter a non-empty station ID."
+    },
+    "notification_error": {
+      "message": "A CurbCharge error occurred. Check the Home Assistant logs for details."
+    },
+    "provider_update_failed": {
+      "message": "CurbCharge could not refresh charging station data."
+    },
+    "service_call_failed": {
+      "message": "A CurbCharge service call failed."
+    },
+    "setup_failed": {
+      "message": "CurbCharge could not be set up. Check the configuration and Home Assistant logs."
     },
     "station_not_discovered": {
       "message": "The station must be freshly discovered by this configuration entry before it can be added as a favorite."

@@ -224,7 +224,8 @@
           "min_power_kw": "Lägsta effekt (kW)",
           "require_available": "Kräv en ledig laddkontakt",
           "favourites": "Favoritladdpunkter",
-          "location_movement_threshold": "Rörelsetröskel för position (m)"
+          "location_movement_threshold": "Rörelsetröskel för position (m)",
+          "notify_on_error": "Meddela vid fel"
         },
         "data_description": {
           "scan_interval": "Hur ofta Home Assistant uppdaterar laddstationsdata.",
@@ -237,7 +238,8 @@
           "min_power_kw": "Valfritt. En matchande kontaktgrupp måste rapportera minst denna effekt.",
           "require_available": "Ta bara med stationer där en matchande kontaktgrupp rapporterar lediga laddkontakter.",
           "favourites": "Välj laddpunkter efter namn. Favoriter behålls även utanför sökradien och läggs till utöver gränsen för närliggande stationer.",
-          "location_movement_threshold": "Minsta avstånd som den valda entiteten måste förflytta sig innan sökpositionen uppdateras. Ange 0 för att inaktivera tröskeln."
+          "location_movement_threshold": "Minsta avstånd som den valda entiteten måste förflytta sig innan sökpositionen uppdateras. Ange 0 för att inaktivera tröskeln.",
+          "notify_on_error": "Visa bestående Home Assistant-meddelanden för fel hos leverantören, vid konfiguration och tjänstanrop. Leverantörsmeddelanden stängs efter återhämtning; konfigurations- och tjänstemeddelanden finns kvar tills de stängs manuellt."
         }
       },
       "ev_estimates": {
@@ -354,6 +356,18 @@
     },
     "invalid_station_id": {
       "message": "Ange ett stations-ID som inte är tomt."
+    },
+    "notification_error": {
+      "message": "Ett CurbCharge-fel inträffade. Kontrollera Home Assistant-loggarna för mer information."
+    },
+    "provider_update_failed": {
+      "message": "CurbCharge kunde inte uppdatera laddstationsdata."
+    },
+    "service_call_failed": {
+      "message": "Ett CurbCharge-tjänsteanrop misslyckades."
+    },
+    "setup_failed": {
+      "message": "CurbCharge kunde inte konfigureras. Kontrollera konfigurationen och Home Assistant-loggarna."
     },
     "station_not_discovered": {
       "message": "Stationen måste nyligen ha hittats av den här konfigurationsposten innan den kan läggas till som favorit."

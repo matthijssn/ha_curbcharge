@@ -36,6 +36,10 @@ from .models import (
     PersonalizationRankingPreset,
     PersonalizationUnknownDataPolicy,
 )
+from .notifications import (
+    async_create_error_notification,
+    async_dismiss_error_notification,
+)
 from .providers.base import (
     AuthenticationError,
     BaseChargingProvider,
@@ -132,6 +136,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         personalization_profile: PersonalizationProfile | None = None,
         ev_estimate_settings: EVEstimateSettings | None = None,
         device_trackers_enabled: bool = DEFAULT_DEVICE_TRACKERS,
+        notify_on_error: bool = False,
     ) -> None:
         """Initialize the shared coordinator."""
         self.provider = provider
@@ -160,6 +165,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
             else EVEstimateSettings()
         )
         self.device_trackers_enabled = device_trackers_enabled
+        self.notify_on_error = notify_on_error
         self.favourite_ids = {favourite.provider_id for favourite in favourites}
         self.nearby_station_ids: set[str] | None = None
         self.results_may_be_truncated = False
@@ -174,6 +180,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         self.recommendation_results: RecommendationResults | None = None
         self.statistics_snapshot: StatisticsSnapshot | None = None
         self._update_unavailable = False
+        self._last_update_error_key: str | None = None
         super().__init__(
             hass,
             _LOGGER,
@@ -193,7 +200,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
     async def _async_update_data(self) -> dict[str, ChargingStation]:
         """Fetch stations and retain ones temporarily missing upstream."""
         self.recommendation_results = None
-        self._update_search_location()
+        await self._update_search_location()
         try:
             stations = await self.provider.async_get_stations(
                 self.latitude,
@@ -205,13 +212,15 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
                 include_unknown=self.include_unknown,
             )
         except AuthenticationError as err:
-            self._log_update_unavailable(type(err).__name__)
+            await self._log_update_unavailable(
+                type(err).__name__, "authentication_failed"
+            )
             raise ConfigEntryAuthFailed(
                 translation_domain=DOMAIN,
                 translation_key="authentication_failed",
             ) from err
         except ProviderRateLimitError as err:
-            self._log_update_unavailable(type(err).__name__)
+            await self._log_update_unavailable(type(err).__name__, "rate_limited")
             retry_seconds = err.retry_after or int(
                 self._default_update_interval.total_seconds()
             )
@@ -227,12 +236,21 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
             vars(update_failed)["retry_after"] = retry_seconds
             raise update_failed from err
         except ChargingProviderError as err:
-            self._log_update_unavailable(type(err).__name__)
-            raise UpdateFailed("Could not update charging station data") from err
+            await self._log_update_unavailable(
+                type(err).__name__, "provider_update_failed"
+            )
+            raise UpdateFailed(
+                "Could not update charging station data",
+                translation_domain=DOMAIN,
+                translation_key="provider_update_failed",
+            ) from err
 
         if self._update_unavailable:
             _LOGGER.info("CurbCharge data updates have recovered")
             self._update_unavailable = False
+            self._last_update_error_key = None
+            if self.entry_id is not None:
+                async_dismiss_error_notification(self.hass, self.entry_id, "provider")
         self.update_interval = self._default_update_interval
         self.nearby_station_ids = {station.provider_id for station in stations.nearby}
         self.results_may_be_truncated = stations.results_may_be_truncated
@@ -247,7 +265,14 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         }
         for station in stations.favourites:
             if station.provider_id not in self.favourite_ids:
-                raise UpdateFailed("Provider returned an unexpected favourite")
+                await self._log_update_unavailable(
+                    "UnexpectedFavourite", "provider_update_failed"
+                )
+                raise UpdateFailed(
+                    "Provider returned an unexpected favourite",
+                    translation_domain=DOMAIN,
+                    translation_key="provider_update_failed",
+                )
             current[station.provider_id] = station
 
         missing_refreshes: dict[str, int] = {}
@@ -294,15 +319,21 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         """Return successful refreshes since a station last appeared."""
         return self._missing_refreshes.get(station_id, 0)
 
-    def _update_search_location(self) -> None:
+    async def _update_search_location(self) -> None:
         """Resolve and accept a tracked location before each provider refresh."""
         if self.location_resolver is None:
             return
 
         location = self.location_resolver()
         if location is None:
-            self._log_update_unavailable("LocationUnavailable")
-            raise UpdateFailed("Configured charging search location is unavailable")
+            await self._log_update_unavailable(
+                "LocationUnavailable", "location_not_configured"
+            )
+            raise UpdateFailed(
+                "Configured charging search location is unavailable",
+                translation_domain=DOMAIN,
+                translation_key="location_not_configured",
+            )
 
         if (
             self.location_movement_threshold_m == 0
@@ -358,12 +389,34 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
             data
         )
 
-    def _log_update_unavailable(self, error_type: str) -> None:
+    async def _log_update_unavailable(
+        self, error_type: str, translation_key: str
+    ) -> None:
         """Log only the transition to an unavailable provider."""
-        if self._update_unavailable:
-            return
-        _LOGGER.warning("CurbCharge data update failed (%s)", error_type)
-        self._update_unavailable = True
+        is_transition = not self._update_unavailable
+        if is_transition:
+            _LOGGER.warning("CurbCharge data update failed (%s)", error_type)
+            self._update_unavailable = True
+        self._last_update_error_key = translation_key
+        if is_transition and self.notify_on_error and self.entry_id is not None:
+            await async_create_error_notification(
+                self.hass, self.entry_id, "provider", translation_key
+            )
+
+    async def async_notify_current_update_failure(self) -> None:
+        """Create a notification if notifications were enabled during an outage."""
+        if (
+            self.notify_on_error
+            and self._update_unavailable
+            and self._last_update_error_key is not None
+            and self.entry_id is not None
+        ):
+            await async_create_error_notification(
+                self.hass,
+                self.entry_id,
+                "provider",
+                self._last_update_error_key,
+            )
 
     def _set_recommendation_results(
         self, stations: Mapping[str, ChargingStation]

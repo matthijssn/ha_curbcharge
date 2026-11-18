@@ -28,6 +28,7 @@ from .const import (
     CONF_LOCATION_MOVEMENT_THRESHOLD,
     CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
+    CONF_NOTIFY_ON_ERROR,
     CONF_PERSONALIZATION,
     CONF_PROVIDER,
     CONF_SCAN_INTERVAL,
@@ -37,6 +38,7 @@ from .const import (
     DEFAULT_INCLUDE_UNKNOWN,
     DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
     DEFAULT_MAX_STATIONS,
+    DEFAULT_NOTIFY_ON_ERROR,
     DEFAULT_SCAN_INTERVAL_MINUTES,
     DEFAULT_SEARCH_RADIUS_M,
     LOCATION_ENTITY,
@@ -61,6 +63,10 @@ from .models import (
     EVEstimateSettings,
     PersonalizationProfile,
     parse_favourite_references,
+)
+from .notifications import (
+    async_create_error_notification,
+    async_dismiss_error_notifications,
 )
 from .providers import create_provider
 from .providers.base import ChargingProviderError
@@ -127,10 +133,20 @@ async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry[Any]) -> b
     return True
 
 
+async def _async_notify_setup_error(
+    hass: HomeAssistant, entry: CurbChargeConfigEntry, translation_key: str
+) -> None:
+    if entry.options.get(CONF_NOTIFY_ON_ERROR) is True:
+        await async_create_error_notification(
+            hass, entry.entry_id, "setup", translation_key
+        )
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -> bool:
     """Set up CurbCharge from a config entry."""
     location = _entry_location(hass, entry.data)
     if location is None:
+        await _async_notify_setup_error(hass, entry, "location_not_configured")
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN,
             translation_key="location_not_configured",
@@ -142,6 +158,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
     max_stations = options.get(CONF_MAX_STATIONS, DEFAULT_MAX_STATIONS)
     scan_interval = options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_MINUTES)
     include_unknown = options.get(CONF_INCLUDE_UNKNOWN, DEFAULT_INCLUDE_UNKNOWN)
+    notify_on_error = options.get(CONF_NOTIFY_ON_ERROR, DEFAULT_NOTIFY_ON_ERROR)
     device_trackers = options.get(CONF_DEVICE_TRACKERS, DEFAULT_DEVICE_TRACKERS)
     location_movement_threshold_m = _location_movement_threshold(
         options, entry.data.get(CONF_LOCATION_SOURCE)
@@ -151,6 +168,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
         try:
             discovery_filters = DiscoveryFilterSettings.from_config(options)
         except ValueError as err:
+            await _async_notify_setup_error(hass, entry, "invalid_config")
             raise ConfigEntryNotReady(
                 translation_domain=DOMAIN,
                 translation_key="invalid_config",
@@ -163,6 +181,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
             options.get(CONF_EV_ESTIMATES)
         )
     except ValueError as err:
+        await _async_notify_setup_error(hass, entry, "invalid_config")
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN,
             translation_key="invalid_config",
@@ -173,6 +192,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
             options.get(CONF_FAVOURITES, []), provider_id
         )
     except ValueError as err:
+        await _async_notify_setup_error(hass, entry, "invalid_config")
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN,
             translation_key="invalid_config",
@@ -190,9 +210,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
         or not isinstance(scan_interval, int)
         or scan_interval < MIN_SCAN_INTERVAL_MINUTES
         or not isinstance(include_unknown, bool)
+        or not isinstance(notify_on_error, bool)
         or not isinstance(device_trackers, bool)
         or location_movement_threshold_m is None
     ):
+        await _async_notify_setup_error(hass, entry, "invalid_config")
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN,
             translation_key="invalid_config",
@@ -203,11 +225,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
             provider_id, async_get_clientsession(hass), hass, api_token
         )
     except ValueError as err:
+        await _async_notify_setup_error(hass, entry, "invalid_config")
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN,
             translation_key="invalid_config",
         ) from err
     except ChargingProviderError as err:
+        await _async_notify_setup_error(hass, entry, "unsupported_provider")
         raise ConfigEntryNotReady(
             translation_domain=DOMAIN,
             translation_key="unsupported_provider",
@@ -238,6 +262,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
         personalization_profile=personalization_profile,
         ev_estimate_settings=ev_estimate_settings,
         device_trackers_enabled=device_trackers,
+        notify_on_error=notify_on_error,
     )
     entry.runtime_data = coordinator
     if provider.defers_initial_refresh:
@@ -266,7 +291,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
                 ) from err
             raise
     platforms = PLATFORMS + OPTIONAL_PLATFORMS if device_trackers else PLATFORMS
-    await hass.config_entries.async_forward_entry_setups(entry, platforms)
+    try:
+        await hass.config_entries.async_forward_entry_setups(entry, platforms)
+    except HomeAssistantError:
+        await _async_notify_setup_error(hass, entry, "setup_failed")
+        raise
     entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     return True
 
@@ -283,9 +312,21 @@ async def async_unload_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) 
     return await hass.config_entries.async_unload_platforms(entry, platforms)
 
 
+async def async_remove_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -> None:
+    """Dismiss notifications after a CurbCharge entry is removed."""
+    async_dismiss_error_notifications(hass, entry.entry_id)
+
+
 async def _async_options_updated(
     hass: HomeAssistant, entry: CurbChargeConfigEntry
 ) -> None:
+    notify_on_error = entry.options.get(CONF_NOTIFY_ON_ERROR, DEFAULT_NOTIFY_ON_ERROR)
+    if not isinstance(notify_on_error, bool):
+        await hass.config_entries.async_reload(entry.entry_id)
+        return
+    if not notify_on_error:
+        async_dismiss_error_notifications(hass, entry.entry_id)
+
     coordinator = getattr(entry, "runtime_data", None)
     if not isinstance(coordinator, CurbChargeCoordinator):
         await hass.config_entries.async_reload(entry.entry_id)
@@ -349,6 +390,12 @@ async def _async_options_updated(
         await hass.config_entries.async_reload(entry.entry_id)
         return
 
+    notify_on_error_changed = notify_on_error != coordinator.notify_on_error
+    if notify_on_error_changed:
+        coordinator.notify_on_error = notify_on_error
+        if notify_on_error:
+            await coordinator.async_notify_current_update_failure()
+
     if device_trackers_changed:
         try:
             if device_trackers:
@@ -395,6 +442,13 @@ async def _async_options_updated(
         and not favourites_changed
         and not personalization_changed
     )
+    notification_only_changed = (
+        notify_on_error_changed
+        and refresh_options_unchanged
+        and not favourites_changed
+        and not personalization_changed
+        and not device_trackers_changed
+    )
     coordinator.update_options(
         radius_m=radius_m,
         max_stations=max_stations,
@@ -413,6 +467,8 @@ async def _async_options_updated(
     if favourites_only_changed:
         return
     if tracker_only_changed:
+        return
+    if notification_only_changed:
         return
     await coordinator.async_request_refresh()
 

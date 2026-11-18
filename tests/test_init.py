@@ -6,17 +6,19 @@ from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.exceptions import ConfigEntryNotReady, HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 import custom_components.curbcharge as curbcharge
 import custom_components.curbcharge.config_flow as config_flow
+import custom_components.curbcharge.coordinator as coordinator_module
 import custom_components.curbcharge.entity as curbcharge_entity
 from custom_components.curbcharge.const import (
     CONF_API_TOKEN,
@@ -29,6 +31,7 @@ from custom_components.curbcharge.const import (
     CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
     CONF_MIN_POWER_KW,
+    CONF_NOTIFY_ON_ERROR,
     CONF_PERSONALIZATION,
     CONF_PROVIDER,
     CONF_REQUIRE_AVAILABLE,
@@ -2239,6 +2242,132 @@ async def test_setup_translates_provider_initialization_error(hass, monkeypatch)
         await curbcharge.async_setup_entry(hass, entry)
 
     assert error.value.translation_key == "unsupported_provider"
+
+
+@pytest.mark.asyncio
+async def test_setup_error_notification_preserves_config_entry_error(hass, monkeypatch):
+    entry = _entry(
+        {CONF_LOCATION_SOURCE: LOCATION_ENTITY},
+        options={CONF_NOTIFY_ON_ERROR: True},
+    )
+    create_notification = AsyncMock()
+    monkeypatch.setattr(
+        curbcharge, "async_create_error_notification", create_notification
+    )
+
+    with pytest.raises(ConfigEntryNotReady) as error:
+        await curbcharge.async_setup_entry(hass, entry)
+
+    assert error.value.translation_key == "location_not_configured"
+    create_notification.assert_awaited_once_with(
+        hass, entry.entry_id, "setup", "location_not_configured"
+    )
+
+
+@pytest.mark.asyncio
+async def test_platform_setup_error_creates_notification_and_propagates(
+    hass, monkeypatch
+):
+    entry = _entry(options={CONF_NOTIFY_ON_ERROR: True})
+    entry.add_to_hass(hass)
+    monkeypatch.setattr(
+        curbcharge, "create_provider", lambda *_args: FakeProvider([()])
+    )
+    create_notification = AsyncMock()
+    monkeypatch.setattr(
+        curbcharge, "async_create_error_notification", create_notification
+    )
+    monkeypatch.setattr(
+        hass.config_entries,
+        "async_forward_entry_setups",
+        AsyncMock(side_effect=HomeAssistantError("platform setup failed")),
+    )
+
+    with pytest.raises(HomeAssistantError, match="platform setup failed"):
+        await curbcharge.async_setup_entry(hass, entry)
+
+    create_notification.assert_awaited_once_with(
+        hass, entry.entry_id, "setup", "setup_failed"
+    )
+
+
+@pytest.mark.asyncio
+async def test_remove_entry_dismisses_its_notifications(hass, monkeypatch):
+    entry = _entry()
+    dismiss_notifications = Mock()
+    monkeypatch.setattr(
+        curbcharge, "async_dismiss_error_notifications", dismiss_notifications
+    )
+
+    await curbcharge.async_remove_entry(hass, entry)
+
+    dismiss_notifications.assert_called_once_with(hass, entry.entry_id)
+
+
+@pytest.mark.asyncio
+async def test_disabling_error_notifications_dismisses_without_refreshing(
+    hass, monkeypatch
+):
+    entry = _entry(options={CONF_NOTIFY_ON_ERROR: False})
+    entry.add_to_hass(hass)
+    provider = FakeProvider([()])
+    coordinator = CurbChargeCoordinator(
+        hass,
+        provider,
+        52.0,
+        5.0,
+        500,
+        10,
+        5,
+        True,
+        config_entry=entry,
+        notify_on_error=True,
+    )
+    entry.runtime_data = coordinator
+    dismiss_notifications = Mock()
+    monkeypatch.setattr(
+        curbcharge, "async_dismiss_error_notifications", dismiss_notifications
+    )
+
+    await curbcharge._async_options_updated(hass, entry)
+
+    assert not coordinator.notify_on_error
+    assert provider.station_calls == []
+    dismiss_notifications.assert_called_once_with(hass, entry.entry_id)
+
+
+@pytest.mark.asyncio
+async def test_enabling_error_notifications_during_outage_notifies_without_refreshing(
+    hass, monkeypatch
+):
+    entry = _entry(options={CONF_NOTIFY_ON_ERROR: True})
+    entry.add_to_hass(hass)
+    provider = FakeProvider([()])
+    coordinator = CurbChargeCoordinator(
+        hass,
+        provider,
+        52.0,
+        5.0,
+        500,
+        10,
+        5,
+        True,
+        config_entry=entry,
+    )
+    await coordinator._log_update_unavailable("ProviderRateLimitError", "rate_limited")
+    entry.runtime_data = coordinator
+    create_notification = AsyncMock()
+    monkeypatch.setattr(
+        coordinator_module, "async_create_error_notification", create_notification
+    )
+
+    await curbcharge._async_options_updated(hass, entry)
+
+    assert coordinator.notify_on_error
+    assert provider.station_calls == []
+    create_notification.assert_awaited_once_with(
+        hass, entry.entry_id, "provider", "rate_limited"
+    )
 
 
 @pytest.mark.asyncio
