@@ -97,7 +97,7 @@
       },
       "belgium_credentials": {
         "title": "Savienot ar Eco-Movement Belgium",
-        "description": "Ievadiet Eco-Movement jums izsniegto API pilnvaru. Tā tiek saglabāta šajā konfigurācijas ierakstā un paslēpta diagnostikas datos.",
+        "description": "Ievadiet Eco-Movement jums izsniegto API pilnvaru. Tā tiek saglabāta šajā konfigurācijas ierakstā un paslēpta diagnostikas datos. Pēc iestatīšanas pirmie dati par Beļģijas stacijām tiek ielādēti fonā. Var paiet vairākas minūtes, līdz pirmās staciju ierīces kļūst pieejamas.",
         "data": {
           "api_token": "Eco-Movement API piekļuves marķieris"
         },
