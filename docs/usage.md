@@ -382,6 +382,18 @@ Choose one of three location sources:
 Use **Reconfigure** on an existing entry to change its location source or to
 select a replacement if an Entity source was renamed or removed.
 
+### Config-entry titles
+
+The default title follows `CurbCharge - {provider} ({location})`. Its location
+label is `Home` for the Home source; the entity's friendly name, or its ID if
+no friendly name exists, for Entity; and `Manual location` for Manual.
+Generated titles use these labels only; coordinates are not shown.
+
+Set **Custom entry name** during setup or later under **Options → General
+settings** to choose a different title. Clear the field to restore the
+generated title. On upgrade, entries with the generic title `CurbCharge` are
+renamed automatically; existing custom titles are preserved.
+
 Choose a polling interval in minutes (default 5; minimum 1), a search radius
 from 100 to 10,000 metres, and a maximum of 1 to 50 stations (default 10), then
 select NDW DOT-NL, the Belgium preview, NOBIL Norway, NOBIL Sweden, AFDC
