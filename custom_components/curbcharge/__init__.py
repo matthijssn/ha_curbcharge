@@ -158,6 +158,23 @@ async def _async_notify_setup_error(
         )
 
 
+def _update_entry_title(
+    hass: HomeAssistant,
+    entry: CurbChargeConfigEntry,
+    coordinator: CurbChargeCoordinator,
+    title: str,
+) -> None:
+    if (
+        entry.title == title
+        or hass.config_entries.async_get_entry(entry.entry_id) is None
+    ):
+        return
+    coordinator._entry_title_update_pending = (
+        _async_options_updated in entry.update_listeners
+    )
+    hass.config_entries.async_update_entry(entry, title=title)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -> bool:
     """Set up CurbCharge from a config entry."""
     options = {**entry.data, **entry.options}
@@ -169,11 +186,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
             translation_key="invalid_config",
         )
     title = entry_title(hass, options)
-    if (
-        entry.title != title
-        and hass.config_entries.async_get_entry(entry.entry_id) is not None
-    ):
-        hass.config_entries.async_update_entry(entry, title=title)
 
     location = _entry_location(hass, entry.data)
     if location is None:
@@ -295,6 +307,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
         notify_on_error=notify_on_error,
     )
     entry.runtime_data = coordinator
+    _update_entry_title(hass, entry, coordinator, title)
     if provider.defers_initial_refresh:
         # The first refresh can take longer than Home Assistant allows for
         # setup during startup, which would leave the entry in a permanent
@@ -350,6 +363,14 @@ async def async_remove_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) 
 async def _async_options_updated(
     hass: HomeAssistant, entry: CurbChargeConfigEntry
 ) -> None:
+    coordinator = getattr(entry, "runtime_data", None)
+    if (
+        isinstance(coordinator, CurbChargeCoordinator)
+        and coordinator._entry_title_update_pending
+    ):
+        coordinator._entry_title_update_pending = False
+        return
+
     notify_on_error = entry.options.get(CONF_NOTIFY_ON_ERROR, DEFAULT_NOTIFY_ON_ERROR)
     if not isinstance(notify_on_error, bool):
         await hass.config_entries.async_reload(entry.entry_id)
@@ -357,12 +378,7 @@ async def _async_options_updated(
     if not notify_on_error:
         async_dismiss_error_notifications(hass, entry.entry_id)
 
-    coordinator = getattr(entry, "runtime_data", None)
     if not isinstance(coordinator, CurbChargeCoordinator):
-        await hass.config_entries.async_reload(entry.entry_id)
-        return
-
-    if coordinator.entry_data_changed(entry.data):
         await hass.config_entries.async_reload(entry.entry_id)
         return
 
@@ -371,6 +387,13 @@ async def _async_options_updated(
     if not isinstance(entry_name, str):
         await hass.config_entries.async_reload(entry.entry_id)
         return
+    title = entry_title(hass, options)
+    _update_entry_title(hass, entry, coordinator, title)
+
+    if coordinator.entry_data_changed(entry.data):
+        await hass.config_entries.async_reload(entry.entry_id)
+        return
+
     provider_id = options.get(CONF_PROVIDER, PROVIDER_NDW_DOT_NL)
     radius_m = options.get(CONF_SEARCH_RADIUS, DEFAULT_SEARCH_RADIUS_M)
     max_stations = options.get(CONF_MAX_STATIONS, DEFAULT_MAX_STATIONS)
@@ -424,7 +447,6 @@ async def _async_options_updated(
         await hass.config_entries.async_reload(entry.entry_id)
         return
 
-    title = entry_title(hass, options)
     notify_on_error_changed = notify_on_error != coordinator.notify_on_error
     if notify_on_error_changed:
         coordinator.notify_on_error = notify_on_error
@@ -494,8 +516,6 @@ async def _async_options_updated(
         discovery_filters=discovery_filters,
         personalization_profile=personalization_profile,
     )
-    if entry.title != title:
-        hass.config_entries.async_update_entry(entry, title=title)
     if favourites_changed:
         coordinator.async_update_listeners()
     if personalization_only_changed:

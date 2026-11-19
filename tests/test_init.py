@@ -376,6 +376,9 @@ async def test_setup_assigns_generated_title_without_changing_unique_id(
     entry = _entry()
     entry.add_to_hass(hass)
     hass.config_entries.async_update_entry(entry, title="CurbCharge")
+    remove_update_listener = entry.add_update_listener(
+        curbcharge._async_options_updated
+    )
     entry._async_set_state(  # noqa: SLF001
         hass, ConfigEntryState.SETUP_IN_PROGRESS, None
     )
@@ -385,8 +388,11 @@ async def test_setup_assigns_generated_title_without_changing_unique_id(
     unique_id = entry.unique_id
 
     assert await curbcharge.async_setup_entry(hass, entry)
+    await hass.async_block_till_done()
 
     assert entry.title == "CurbCharge - NDW DOT-NL (Manual location)"
+    assert len(provider.station_calls) == 1
+    remove_update_listener()
     assert entry.unique_id == unique_id
     assert entry.data[CONF_LATITUDE] == 52.0
     assert entry.data[CONF_LONGITUDE] == 5.0
@@ -401,6 +407,12 @@ async def test_setup_reconfiguration_updates_generated_title(hass, monkeypatch):
         "home",
         {CONF_LATITUDE: 52.0, CONF_LONGITUDE: 5.0, "friendly_name": "Work"},
     )
+    coordinator = CurbChargeCoordinator(
+        hass, FakeProvider([()]), 52.0, 5.0, 500, 10, 5, True, config_entry=entry
+    )
+    entry.runtime_data = coordinator
+    reloaded = AsyncMock()
+    monkeypatch.setattr(hass.config_entries, "async_reload", reloaded)
     hass.config_entries.async_update_entry(
         entry,
         data={
@@ -410,17 +422,11 @@ async def test_setup_reconfiguration_updates_generated_title(hass, monkeypatch):
         },
         title="CurbCharge - NDW DOT-NL (Manual location)",
     )
-    entry._async_set_state(  # noqa: SLF001
-        hass, ConfigEntryState.SETUP_IN_PROGRESS, None
-    )
-    monkeypatch.setattr(
-        curbcharge, "create_provider", lambda *_args: FakeProvider([()])
-    )
-    monkeypatch.setattr(hass.config_entries, "async_forward_entry_setups", AsyncMock())
 
-    assert await curbcharge.async_setup_entry(hass, entry)
+    await curbcharge._async_options_updated(hass, entry)
 
     assert entry.title == "CurbCharge - NDW DOT-NL (Work)"
+    reloaded.assert_awaited_once_with(entry.entry_id)
 
 
 @pytest.mark.asyncio
