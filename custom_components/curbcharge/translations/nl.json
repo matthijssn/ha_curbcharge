@@ -224,7 +224,8 @@
           "min_power_kw": "Minimaal vermogen (kW)",
           "require_available": "Een beschikbare connector vereisen",
           "favourites": "Favoriete laadpunten",
-          "location_movement_threshold": "Verplaatsingsdrempel locatie (m)"
+          "location_movement_threshold": "Verplaatsingsdrempel locatie (m)",
+          "notify_on_error": "Meldingen bij fouten"
         },
         "data_description": {
           "scan_interval": "Hoe vaak Home Assistant de laadpuntgegevens vernieuwt.",
@@ -237,7 +238,8 @@
           "min_power_kw": "Optioneel. Een passende connectorgroep moet minstens dit vermogen rapporteren.",
           "require_available": "Neem alleen laadpunten op waarvan een passende connectorgroep beschikbare connectoren rapporteert.",
           "favourites": "Selecteer laadpunten op naam. Favorieten blijven beschikbaar buiten de zoekradius en worden toegevoegd boven op de limiet voor laadpunten in de buurt.",
-          "location_movement_threshold": "Minimale afstand die de geselecteerde entiteit moet afleggen voordat de zoeklocatie wordt bijgewerkt. Stel in op 0 om de drempel uit te schakelen."
+          "location_movement_threshold": "Minimale afstand die de geselecteerde entiteit moet afleggen voordat de zoeklocatie wordt bijgewerkt. Stel in op 0 om de drempel uit te schakelen.",
+          "notify_on_error": "Toon blijvende Home Assistant-meldingen bij fouten van de provider, installatie en services. Providermeldingen worden gesloten na herstel; installatie- en servicemeldingen blijven staan totdat ze handmatig worden gesloten."
         }
       },
       "ev_estimates": {
@@ -354,6 +356,18 @@
     },
     "invalid_station_id": {
       "message": "Voer een niet-lege laadpunt-ID in."
+    },
+    "notification_error": {
+      "message": "Er is een CurbCharge-fout opgetreden. Bekijk de Home Assistant-logboeken voor details."
+    },
+    "provider_update_failed": {
+      "message": "CurbCharge kon de laadstationgegevens niet bijwerken."
+    },
+    "service_call_failed": {
+      "message": "Een CurbCharge-serviceaanroep is mislukt."
+    },
+    "setup_failed": {
+      "message": "CurbCharge kon niet worden ingesteld. Controleer de configuratie en de Home Assistant-logboeken."
     },
     "station_not_discovered": {
       "message": "Dit laadpunt moet eerst recent door dit configuratie-item zijn gevonden voordat het als favoriet kan worden toegevoegd."

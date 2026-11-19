@@ -224,7 +224,8 @@
           "min_power_kw": "Puissance minimale (kW)",
           "require_available": "Exiger un connecteur disponible",
           "favourites": "Bornes favorites",
-          "location_movement_threshold": "Seuil de déplacement de la position (m)"
+          "location_movement_threshold": "Seuil de déplacement de la position (m)",
+          "notify_on_error": "Notifier en cas d’erreur"
         },
         "data_description": {
           "scan_interval": "Fréquence d'actualisation des données des bornes par Home Assistant.",
@@ -237,7 +238,8 @@
           "min_power_kw": "Facultatif. Un groupe de connecteurs correspondant doit déclarer au moins cette puissance.",
           "require_available": "N'inclure que les bornes dont un groupe correspondant signale des connecteurs disponibles.",
           "favourites": "Sélectionnez les bornes par leur nom. Les bornes favorites restent disponibles hors du rayon de recherche et s'ajoutent à la limite des bornes à proximité.",
-          "location_movement_threshold": "Distance minimale que l'entité sélectionnée doit parcourir avant la mise à jour de la position de recherche. Saisissez 0 pour désactiver ce seuil."
+          "location_movement_threshold": "Distance minimale que l'entité sélectionnée doit parcourir avant la mise à jour de la position de recherche. Saisissez 0 pour désactiver ce seuil.",
+          "notify_on_error": "Afficher des notifications persistantes de Home Assistant pour les erreurs du fournisseur, de configuration et de service. Les notifications du fournisseur sont supprimées après le rétablissement ; celles de configuration et de service restent jusqu’à leur fermeture."
         }
       },
       "ev_estimates": {
@@ -354,6 +356,18 @@
     },
     "invalid_station_id": {
       "message": "Saisissez un ID de borne non vide."
+    },
+    "notification_error": {
+      "message": "Une erreur CurbCharge s’est produite. Consultez les journaux de Home Assistant."
+    },
+    "provider_update_failed": {
+      "message": "CurbCharge n’a pas pu actualiser les données des bornes de recharge."
+    },
+    "service_call_failed": {
+      "message": "Un appel de service CurbCharge a échoué."
+    },
+    "setup_failed": {
+      "message": "CurbCharge n’a pas pu être configuré. Vérifiez la configuration et les journaux de Home Assistant."
     },
     "station_not_discovered": {
       "message": "La borne doit avoir été récemment découverte par cette entrée avant de pouvoir être ajoutée aux favoris."

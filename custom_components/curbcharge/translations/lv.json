@@ -224,7 +224,8 @@
           "min_power_kw": "Minimālā jauda (kW)",
           "require_available": "Pieprasīt pieejamu savienotāju",
           "favourites": "Iecienītie uzlādes punkti",
-          "location_movement_threshold": "Atrašanās vietas pārvietošanās slieksnis (m)"
+          "location_movement_threshold": "Atrašanās vietas pārvietošanās slieksnis (m)",
+          "notify_on_error": "Paziņot par kļūdām"
         },
         "data_description": {
           "scan_interval": "Cik bieži Home Assistant atjaunina uzlādes staciju datus.",
@@ -237,7 +238,8 @@
           "min_power_kw": "Neobligāti. Atbilstošajai savienotāju grupai jānorāda vismaz šāda jauda.",
           "require_available": "Iekļaujiet stacijas tikai tad, ja atbilstošajā savienotāju grupā ir pieejami savienotāji.",
           "favourites": "Atlasiet uzlādes punktus pēc nosaukuma. Izlase ir pieejama arī ārpus meklēšanas rādiusa un tiek pievienota papildus tuvumā esošo staciju ierobežojumam.",
-          "location_movement_threshold": "Minimālais attālums, par kādu atlasītajai entītijai jāpārvietojas, lai atjauninātu meklēšanas atrašanās vietu. Iestatiet 0, lai izslēgtu slieksni."
+          "location_movement_threshold": "Minimālais attālums, par kādu atlasītajai entītijai jāpārvietojas, lai atjauninātu meklēšanas atrašanās vietu. Iestatiet 0, lai izslēgtu slieksni.",
+          "notify_on_error": "Rādīt Home Assistant pastāvīgos paziņojumus par datu nodrošinātāja, konfigurācijas un pakalpojumu kļūdām. Nodrošinātāja paziņojums tiek aizvērts pēc atkopšanās; konfigurācijas un pakalpojumu paziņojumi paliek līdz manuālai aizvēršanai."
         }
       },
       "ev_estimates": {
@@ -354,6 +356,18 @@
     },
     "invalid_station_id": {
       "message": "Ievadiet netukšu stacijas ID."
+    },
+    "notification_error": {
+      "message": "Radās CurbCharge kļūda. Detalizētu informāciju skatiet Home Assistant žurnālā."
+    },
+    "provider_update_failed": {
+      "message": "CurbCharge neizdevās atjaunināt uzlādes staciju datus."
+    },
+    "service_call_failed": {
+      "message": "CurbCharge pakalpojuma izsaukums neizdevās."
+    },
+    "setup_failed": {
+      "message": "CurbCharge neizdevās iestatīt. Pārbaudiet konfigurāciju un Home Assistant žurnālus."
     },
     "station_not_discovered": {
       "message": "Pirms pievienošanas izlasei stacijai jābūt nesen atrastai šajā konfigurācijas ierakstā."

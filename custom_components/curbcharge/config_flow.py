@@ -44,6 +44,7 @@ from .const import (
     CONF_MAXIMUM_PRICE,
     CONF_MAXIMUM_PRICE_CURRENCY,
     CONF_MIN_POWER_KW,
+    CONF_NOTIFY_ON_ERROR,
     CONF_PERSONALIZATION,
     CONF_PERSONALIZATION_ENABLED,
     CONF_PERSONALIZATION_MIN_POWER_KW,
@@ -61,6 +62,7 @@ from .const import (
     DEFAULT_INCLUDE_UNKNOWN,
     DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
     DEFAULT_MAX_STATIONS,
+    DEFAULT_NOTIFY_ON_ERROR,
     DEFAULT_SCAN_INTERVAL_MINUTES,
     DEFAULT_SEARCH_RADIUS_M,
     DOMAIN,
@@ -103,6 +105,7 @@ from .models import (
     parse_favourite_references,
     parse_operator_reference_lines,
 )
+from .notifications import async_dismiss_error_notifications
 from .providers import create_provider
 from .providers.afdc import is_valid_afdc_api_key
 from .providers.base import (
@@ -395,6 +398,10 @@ def options_schema(
         vol.Required(
             CONF_DEVICE_TRACKERS,
             default=defaults.get(CONF_DEVICE_TRACKERS, DEFAULT_DEVICE_TRACKERS),
+        ): selector.BooleanSelector(),
+        vol.Required(
+            CONF_NOTIFY_ON_ERROR,
+            default=defaults.get(CONF_NOTIFY_ON_ERROR, DEFAULT_NOTIFY_ON_ERROR),
         ): selector.BooleanSelector(),
         vol.Required(
             CONF_FAVOURITES,
@@ -1570,6 +1577,10 @@ class CurbChargeOptionsFlow(config_entries.OptionsFlow):
                 CONF_DEVICE_TRACKERS: user_input.get(
                     CONF_DEVICE_TRACKERS, DEFAULT_DEVICE_TRACKERS
                 ),
+                CONF_NOTIFY_ON_ERROR: user_input.get(
+                    CONF_NOTIFY_ON_ERROR,
+                    defaults.get(CONF_NOTIFY_ON_ERROR, DEFAULT_NOTIFY_ON_ERROR),
+                ),
                 CONF_FAVOURITES: [favourite.as_config() for favourite in favourites],
             }
             if CONF_PERSONALIZATION in self.config_entry.options:
@@ -1588,6 +1599,8 @@ class CurbChargeOptionsFlow(config_entries.OptionsFlow):
                         ),
                     )
                 )
+            if not data[CONF_NOTIFY_ON_ERROR]:
+                async_dismiss_error_notifications(self.hass, self.config_entry.entry_id)
             return self.async_create_entry(title="", data=data)
 
         return _show_form(

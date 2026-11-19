@@ -3,13 +3,16 @@
 import logging
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, Mock, call
 
 import pytest
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import UpdateFailed
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.curbcharge import coordinator as coordinator_module
 from custom_components.curbcharge.const import (
+    CONF_NOTIFY_ON_ERROR,
     DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
     DOMAIN,
 )
@@ -42,6 +45,8 @@ def _coordinator(
     location_movement_threshold_m=DEFAULT_LOCATION_MOVEMENT_THRESHOLD_M,
     discovery_filters=None,
     personalization_profile=None,
+    config_entry=None,
+    notify_on_error=False,
 ):
     return CurbChargeCoordinator(
         hass,
@@ -57,6 +62,8 @@ def _coordinator(
         location_movement_threshold_m=location_movement_threshold_m,
         discovery_filters=discovery_filters,
         personalization_profile=personalization_profile,
+        config_entry=config_entry,
+        notify_on_error=notify_on_error,
     )
 
 
@@ -663,3 +670,50 @@ async def test_update_failure_logs_once_until_provider_recovers(
     assert [
         record.message for record in caplog.records if record.levelno == logging.INFO
     ] == ["CurbCharge data updates have recovered"]
+
+
+@pytest.mark.asyncio
+async def test_provider_error_notifications_follow_outage_transitions(
+    hass, sample_stations, monkeypatch
+):
+    create_notification = AsyncMock()
+    dismiss_notification = Mock()
+    monkeypatch.setattr(
+        coordinator_module, "async_create_error_notification", create_notification
+    )
+    monkeypatch.setattr(
+        coordinator_module, "async_dismiss_error_notification", dismiss_notification
+    )
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="provider-notification",
+        options={CONF_NOTIFY_ON_ERROR: False},
+    )
+    entry.add_to_hass(hass)
+    provider = FakeProvider(
+        [
+            ProviderConnectionError("offline"),
+            ProviderConnectionError("offline"),
+            (sample_stations[0],),
+            ProviderConnectionError("offline"),
+        ]
+    )
+    coordinator = _coordinator(hass, provider, config_entry=entry)
+
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+    coordinator.notify_on_error = True
+    await coordinator.async_notify_current_update_failure()
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+    await coordinator._async_update_data()
+    with pytest.raises(UpdateFailed):
+        await coordinator._async_update_data()
+
+    assert create_notification.await_args_list == [
+        call(hass, entry.entry_id, "provider", "provider_update_failed"),
+        call(hass, entry.entry_id, "provider", "provider_update_failed"),
+    ]
+    assert dismiss_notification.call_args_list == [
+        call(hass, entry.entry_id, "provider")
+    ]

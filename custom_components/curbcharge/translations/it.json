@@ -224,7 +224,8 @@
           "min_power_kw": "Potenza minima (kW)",
           "require_available": "Richiedi un connettore disponibile",
           "favourites": "Punti di ricarica preferiti",
-          "location_movement_threshold": "Soglia di spostamento della posizione (m)"
+          "location_movement_threshold": "Soglia di spostamento della posizione (m)",
+          "notify_on_error": "Notifica in caso di errori"
         },
         "data_description": {
           "scan_interval": "Con quale frequenza Home Assistant aggiorna i dati delle stazioni di ricarica.",
@@ -237,7 +238,8 @@
           "min_power_kw": "Facoltativo. Un gruppo di connettori corrispondente deve riportare almeno questa potenza.",
           "require_available": "Includi le stazioni solo quando un gruppo di connettori corrispondente riporta connettori disponibili.",
           "favourites": "Seleziona i punti di ricarica per nome. I preferiti restano disponibili fuori dal raggio di ricerca e vengono aggiunti oltre il limite di stazioni vicine.",
-          "location_movement_threshold": "Distanza minima che l'entità selezionata deve percorrere prima che la posizione di ricerca venga aggiornata. Imposta 0 per disattivare la soglia."
+          "location_movement_threshold": "Distanza minima che l'entità selezionata deve percorrere prima che la posizione di ricerca venga aggiornata. Imposta 0 per disattivare la soglia.",
+          "notify_on_error": "Mostra notifiche persistenti di Home Assistant per errori del provider, di configurazione e dei servizi. Le notifiche del provider vengono chiuse al ripristino; quelle di configurazione e dei servizi restano fino alla chiusura manuale."
         }
       },
       "ev_estimates": {
@@ -354,6 +356,18 @@
     },
     "invalid_station_id": {
       "message": "Inserisci un ID stazione non vuoto."
+    },
+    "notification_error": {
+      "message": "Si è verificato un errore di CurbCharge. Controlla i registri di Home Assistant."
+    },
+    "provider_update_failed": {
+      "message": "CurbCharge non è riuscito ad aggiornare i dati delle stazioni di ricarica."
+    },
+    "service_call_failed": {
+      "message": "Una chiamata di servizio CurbCharge non è riuscita."
+    },
+    "setup_failed": {
+      "message": "Non è stato possibile configurare CurbCharge. Controlla la configurazione e i registri di Home Assistant."
     },
     "station_not_discovered": {
       "message": "La stazione deve essere appena individuata da questa voce di configurazione prima di poter essere aggiunta ai preferiti."

@@ -4,6 +4,7 @@ from dataclasses import replace
 from decimal import Decimal
 from importlib import import_module
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
@@ -37,6 +38,7 @@ from custom_components.curbcharge.const import (
     CONF_MAXIMUM_PRICE,
     CONF_MAXIMUM_PRICE_CURRENCY,
     CONF_MIN_POWER_KW,
+    CONF_NOTIFY_ON_ERROR,
     CONF_PERSONALIZATION,
     CONF_PERSONALIZATION_ENABLED,
     CONF_PERSONALIZATION_MIN_POWER_KW,
@@ -1762,9 +1764,11 @@ def test_ndw_discovery_filter_options_default_and_validate():
     assert defaults[CONF_MIN_POWER_KW] is None
     assert defaults[CONF_REQUIRE_AVAILABLE] is False
     assert defaults[CONF_DEVICE_TRACKERS] is True
+    assert defaults[CONF_NOTIFY_ON_ERROR] is False
     assert (
         schema({**values, CONF_DEVICE_TRACKERS: False})[CONF_DEVICE_TRACKERS] is False
     )
+    assert schema({**values, CONF_NOTIFY_ON_ERROR: True})[CONF_NOTIFY_ON_ERROR] is True
 
     restored_schema = config_flow.options_schema(
         {
@@ -2178,6 +2182,7 @@ async def test_options_flow_saves_integer_intervals_and_search_limits(hass):
             CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
             CONF_INCLUDE_UNKNOWN: False,
             CONF_DEVICE_TRACKERS: False,
+            CONF_NOTIFY_ON_ERROR: True,
             **_discovery_filters(["IEC_62196_T2"], 11.0, True),
         },
     )
@@ -2190,11 +2195,47 @@ async def test_options_flow_saves_integer_intervals_and_search_limits(hass):
         CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
         CONF_INCLUDE_UNKNOWN: False,
         CONF_DEVICE_TRACKERS: False,
+        CONF_NOTIFY_ON_ERROR: True,
         CONF_CONNECTOR_TYPES: ["IEC_62196_T2"],
         CONF_MIN_POWER_KW: 11.0,
         CONF_REQUIRE_AVAILABLE: True,
         CONF_FAVOURITES: [],
     }
+
+
+@pytest.mark.asyncio
+async def test_general_options_clear_notifications_when_disabled(hass, monkeypatch):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="disable-error-notifications",
+        data=_station_options(),
+        options={CONF_NOTIFY_ON_ERROR: True},
+    )
+    entry.add_to_hass(hass)
+    dismiss_notifications = Mock()
+    monkeypatch.setattr(
+        config_flow, "async_dismiss_error_notifications", dismiss_notifications
+    )
+
+    result = await _open_options_step(hass, entry, "general")
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_SCAN_INTERVAL: 5.0,
+            CONF_SEARCH_RADIUS: 500.0,
+            CONF_MAX_STATIONS: 10.0,
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+            CONF_INCLUDE_UNKNOWN: True,
+            CONF_DEVICE_TRACKERS: True,
+            CONF_NOTIFY_ON_ERROR: False,
+            CONF_FAVOURITES: [],
+            **_discovery_filters(["IEC_62196_T2"], 11.0, True),
+        },
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options[CONF_NOTIFY_ON_ERROR] is False
+    dismiss_notifications.assert_called_once_with(hass, entry.entry_id)
 
 
 @pytest.mark.asyncio

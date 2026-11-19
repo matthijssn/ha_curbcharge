@@ -224,7 +224,8 @@
           "min_power_kw": "Minste effekt (kW)",
           "require_available": "Krev en ledig ladekontakt",
           "favourites": "Favorittladepunkter",
-          "location_movement_threshold": "Bevegelsesterskel for posisjon (m)"
+          "location_movement_threshold": "Bevegelsesterskel for posisjon (m)",
+          "notify_on_error": "Varsle ved feil"
         },
         "data_description": {
           "scan_interval": "Hvor ofte Home Assistant oppdaterer ladestasjonsdata.",
@@ -237,7 +238,8 @@
           "min_power_kw": "Valgfritt. En passende kontaktgruppe må rapportere minst denne effekten.",
           "require_available": "Ta bare med stasjoner der en passende kontaktgruppe rapporterer ledige ladekontakter.",
           "favourites": "Velg ladepunkter etter navn. Favoritter beholdes også utenfor søkeradiusen og legges til utover grensen for stasjoner i nærheten.",
-          "location_movement_threshold": "Minste avstand den valgte entiteten må flytte seg før søkeposisjonen oppdateres. Sett til 0 for å deaktivere terskelen."
+          "location_movement_threshold": "Minste avstand den valgte entiteten må flytte seg før søkeposisjonen oppdateres. Sett til 0 for å deaktivere terskelen.",
+          "notify_on_error": "Vis varige Home Assistant-varsler for feil fra dataleverandør, oppsett og tjenester. Varsler om leverandørfeil lukkes når dataene er tilbake; oppsetts- og tjenestevarsler blir stående til de lukkes manuelt."
         }
       },
       "ev_estimates": {
@@ -354,6 +356,18 @@
     },
     "invalid_station_id": {
       "message": "Skriv inn en stasjons-ID som ikke er tom."
+    },
+    "notification_error": {
+      "message": "Det oppstod en CurbCharge-feil. Se Home Assistant-loggene for detaljer."
+    },
+    "provider_update_failed": {
+      "message": "CurbCharge kunne ikke oppdatere ladestasjonsdata."
+    },
+    "service_call_failed": {
+      "message": "Et CurbCharge-tjenestekall mislyktes."
+    },
+    "setup_failed": {
+      "message": "CurbCharge kunne ikke settes opp. Kontroller konfigurasjonen og Home Assistant-loggene."
     },
     "station_not_discovered": {
       "message": "Stasjonen må være nylig funnet av denne konfigurasjonsoppføringen før den kan legges til som favoritt."
