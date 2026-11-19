@@ -19,6 +19,7 @@ from custom_components.curbcharge.const import (
     CONF_CONNECTOR_TYPE_IDS,
     CONF_CONNECTOR_TYPES,
     CONF_DEVICE_TRACKERS,
+    CONF_ENTRY_NAME,
     CONF_EV_ASSUMED_POWER_KW,
     CONF_EV_CAPACITY_ATTRIBUTE,
     CONF_EV_CAPACITY_ENTITY,
@@ -400,6 +401,32 @@ async def test_config_flow_uses_home_coordinates(hass, monkeypatch):
     assert "latitude" not in result["data"]
     assert "longitude" not in result["data"]
     assert "52.1" not in result["result"].unique_id
+    assert result["result"].title == "CurbCharge - NDW DOT-NL (Home)"
+
+
+@pytest.mark.asyncio
+async def test_config_flow_uses_custom_entry_name(hass, monkeypatch):
+    hass.config.latitude = 52.1
+    hass.config.longitude = 5.1
+    provider = FakeProvider()
+    monkeypatch.setattr(config_flow, "create_provider", lambda *_args: provider)
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": "user"}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_LOCATION_SOURCE: LOCATION_HOME}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {**_station_options(), CONF_ENTRY_NAME: "  Work chargers  "},
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], _discovery_filters()
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["result"].title == "Work chargers"
+    assert result["result"].options[CONF_ENTRY_NAME] == "Work chargers"
 
 
 @pytest.mark.asyncio
@@ -453,6 +480,9 @@ async def test_config_flow_uses_manual_coordinates(hass, monkeypatch):
     assert result["data"][CONF_CONNECTOR_TYPES] == ["IEC_62196_T2"]
     assert result["data"][CONF_MIN_POWER_KW] == 7.2
     assert result["data"][CONF_REQUIRE_AVAILABLE] is True
+    assert result["result"].title == "CurbCharge - NDW DOT-NL (Manual location)"
+    assert "52.123456" not in result["result"].title
+    assert "5.654321" not in result["result"].title
     assert "52.123456" not in result["result"].unique_id
     assert "5.654321" not in result["result"].unique_id
 
@@ -485,6 +515,7 @@ async def test_config_flow_uses_entity_location_without_storing_coordinates(
         {
             CONF_LATITUDE: location[0],
             CONF_LONGITUDE: location[1],
+            "friendly_name": "Vehicle location",
             **extra_attributes,
         },
     )
@@ -517,6 +548,7 @@ async def test_config_flow_uses_entity_location_without_storing_coordinates(
     assert result["data"][CONF_LOCATION_ENTITY] == entity_id
     assert CONF_LATITUDE not in result["data"]
     assert CONF_LONGITUDE not in result["data"]
+    assert result["result"].title == "CurbCharge - NDW DOT-NL (Vehicle location)"
     assert result["result"].unique_id == config_flow._config_unique_id_entity(
         PROVIDER_NDW_DOT_NL, entity_id, 500
     )
@@ -1764,6 +1796,7 @@ def test_ndw_discovery_filter_options_default_and_validate():
     assert defaults[CONF_MIN_POWER_KW] is None
     assert defaults[CONF_REQUIRE_AVAILABLE] is False
     assert defaults[CONF_DEVICE_TRACKERS] is True
+    assert defaults[CONF_ENTRY_NAME] == ""
     assert defaults[CONF_NOTIFY_ON_ERROR] is False
     assert (
         schema({**values, CONF_DEVICE_TRACKERS: False})[CONF_DEVICE_TRACKERS] is False
@@ -2180,6 +2213,7 @@ async def test_options_flow_saves_integer_intervals_and_search_limits(hass):
             CONF_SEARCH_RADIUS: 100.0,
             CONF_MAX_STATIONS: 5.0,
             CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+            CONF_ENTRY_NAME: "Work chargers",
             CONF_INCLUDE_UNKNOWN: False,
             CONF_DEVICE_TRACKERS: False,
             CONF_NOTIFY_ON_ERROR: True,
@@ -2193,6 +2227,7 @@ async def test_options_flow_saves_integer_intervals_and_search_limits(hass):
         CONF_SEARCH_RADIUS: 100,
         CONF_MAX_STATIONS: 5,
         CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+        CONF_ENTRY_NAME: "Work chargers",
         CONF_INCLUDE_UNKNOWN: False,
         CONF_DEVICE_TRACKERS: False,
         CONF_NOTIFY_ON_ERROR: True,
@@ -2201,6 +2236,36 @@ async def test_options_flow_saves_integer_intervals_and_search_limits(hass):
         CONF_REQUIRE_AVAILABLE: True,
         CONF_FAVOURITES: [],
     }
+
+
+@pytest.mark.asyncio
+async def test_options_flow_clears_custom_entry_name(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="clear-entry-name",
+        data=_station_options(),
+        options={CONF_ENTRY_NAME: "Work chargers"},
+    )
+    entry.add_to_hass(hass)
+    result = await _open_options_step(hass, entry, "general")
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_SCAN_INTERVAL: 5,
+            CONF_SEARCH_RADIUS: 500,
+            CONF_MAX_STATIONS: 10,
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+            CONF_ENTRY_NAME: "",
+            CONF_INCLUDE_UNKNOWN: True,
+            CONF_DEVICE_TRACKERS: True,
+            CONF_NOTIFY_ON_ERROR: False,
+            CONF_FAVOURITES: [],
+            **_discovery_filters(),
+        },
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert entry.options[CONF_ENTRY_NAME] == ""
 
 
 @pytest.mark.asyncio

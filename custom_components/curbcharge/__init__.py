@@ -22,6 +22,7 @@ else:
 from .const import (
     CONF_API_TOKEN,
     CONF_DEVICE_TRACKERS,
+    CONF_ENTRY_NAME,
     CONF_EV_ESTIMATES,
     CONF_FAVOURITES,
     CONF_INCLUDE_UNKNOWN,
@@ -57,6 +58,7 @@ from .const import (
     DOMAIN as DOMAIN,
 )
 from .coordinator import CurbChargeCoordinator
+from .entry_title import entry_title, normalize_entry_name
 from .location import resolve_location
 from .models import (
     DiscoveryFilterSettings,
@@ -96,38 +98,52 @@ async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry[Any]) -> bool:
-    """Normalize saved favorites while migrating config-entry options."""
+    """Normalize saved favorites and initialize entry titles."""
     if entry.version == CONFIG_ENTRY_VERSION:
         return True
-    if entry.version != 1:
+    if entry.version not in (1, 2):
         _LOGGER.error(
             "Cannot migrate CurbCharge config entry from version %s", entry.version
         )
         return False
 
-    provider_id = entry.options.get(
-        CONF_PROVIDER, entry.data.get(CONF_PROVIDER, PROVIDER_NDW_DOT_NL)
-    )
-    if not isinstance(provider_id, str):
-        _LOGGER.error("Cannot migrate CurbCharge favorite references: invalid provider")
-        return False
-    try:
-        favourites = parse_favourite_references(
-            entry.options.get(CONF_FAVOURITES, []), provider_id
+    options = dict(entry.options)
+    if entry.version == 1:
+        provider_id = options.get(
+            CONF_PROVIDER, entry.data.get(CONF_PROVIDER, PROVIDER_NDW_DOT_NL)
         )
-    except ValueError:
-        _LOGGER.error(
-            "Cannot migrate CurbCharge favorite references: invalid saved data"
-        )
-        return False
+        if not isinstance(provider_id, str):
+            _LOGGER.error(
+                "Cannot migrate CurbCharge favorite references: invalid provider"
+            )
+            return False
+        try:
+            favourites = parse_favourite_references(
+                options.get(CONF_FAVOURITES, []), provider_id
+            )
+        except ValueError:
+            _LOGGER.error(
+                "Cannot migrate CurbCharge favorite references: invalid saved data"
+            )
+            return False
+        options[CONF_FAVOURITES] = [favourite.as_config() for favourite in favourites]
 
-    options = {
-        **entry.options,
-        CONF_FAVOURITES: [favourite.as_config() for favourite in favourites],
-    }
+    entry_name = normalize_entry_name(
+        options.get(CONF_ENTRY_NAME, entry.data.get(CONF_ENTRY_NAME, ""))
+    )
+    if entry_name:
+        options[CONF_ENTRY_NAME] = entry_name
+        title = entry_name
+    elif entry.title == "CurbCharge":
+        title = entry_title(hass, {**entry.data, **options})
+    else:
+        title = entry.title
+        options[CONF_ENTRY_NAME] = title
+
     hass.config_entries.async_update_entry(
         entry,
         options=options,
+        title=title,
         version=CONFIG_ENTRY_VERSION,
     )
     return True
@@ -142,8 +158,35 @@ async def _async_notify_setup_error(
         )
 
 
+def _update_entry_title(
+    hass: HomeAssistant,
+    entry: CurbChargeConfigEntry,
+    coordinator: CurbChargeCoordinator,
+    title: str,
+) -> None:
+    if (
+        entry.title == title
+        or hass.config_entries.async_get_entry(entry.entry_id) is None
+    ):
+        return
+    coordinator._entry_title_update_pending = (
+        _async_options_updated in entry.update_listeners
+    )
+    hass.config_entries.async_update_entry(entry, title=title)
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -> bool:
     """Set up CurbCharge from a config entry."""
+    options = {**entry.data, **entry.options}
+    entry_name = options.get(CONF_ENTRY_NAME, "")
+    if not isinstance(entry_name, str):
+        await _async_notify_setup_error(hass, entry, "invalid_config")
+        raise ConfigEntryNotReady(
+            translation_domain=DOMAIN,
+            translation_key="invalid_config",
+        )
+    title = entry_title(hass, options)
+
     location = _entry_location(hass, entry.data)
     if location is None:
         await _async_notify_setup_error(hass, entry, "location_not_configured")
@@ -152,7 +195,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
             translation_key="location_not_configured",
         )
 
-    options = {**entry.data, **entry.options}
     provider_id = options.get(CONF_PROVIDER, PROVIDER_NDW_DOT_NL)
     radius_m = options.get(CONF_SEARCH_RADIUS, DEFAULT_SEARCH_RADIUS_M)
     max_stations = options.get(CONF_MAX_STATIONS, DEFAULT_MAX_STATIONS)
@@ -265,6 +307,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
         notify_on_error=notify_on_error,
     )
     entry.runtime_data = coordinator
+    _update_entry_title(hass, entry, coordinator, title)
     if provider.defers_initial_refresh:
         # The first refresh can take longer than Home Assistant allows for
         # setup during startup, which would leave the entry in a permanent
@@ -320,6 +363,14 @@ async def async_remove_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) 
 async def _async_options_updated(
     hass: HomeAssistant, entry: CurbChargeConfigEntry
 ) -> None:
+    coordinator = getattr(entry, "runtime_data", None)
+    if (
+        isinstance(coordinator, CurbChargeCoordinator)
+        and coordinator._entry_title_update_pending
+    ):
+        coordinator._entry_title_update_pending = False
+        return
+
     notify_on_error = entry.options.get(CONF_NOTIFY_ON_ERROR, DEFAULT_NOTIFY_ON_ERROR)
     if not isinstance(notify_on_error, bool):
         await hass.config_entries.async_reload(entry.entry_id)
@@ -327,16 +378,22 @@ async def _async_options_updated(
     if not notify_on_error:
         async_dismiss_error_notifications(hass, entry.entry_id)
 
-    coordinator = getattr(entry, "runtime_data", None)
     if not isinstance(coordinator, CurbChargeCoordinator):
         await hass.config_entries.async_reload(entry.entry_id)
         return
+
+    options = {**entry.data, **entry.options}
+    entry_name = options.get(CONF_ENTRY_NAME, "")
+    if not isinstance(entry_name, str):
+        await hass.config_entries.async_reload(entry.entry_id)
+        return
+    title = entry_title(hass, options)
+    _update_entry_title(hass, entry, coordinator, title)
 
     if coordinator.entry_data_changed(entry.data):
         await hass.config_entries.async_reload(entry.entry_id)
         return
 
-    options = {**entry.data, **entry.options}
     provider_id = options.get(CONF_PROVIDER, PROVIDER_NDW_DOT_NL)
     radius_m = options.get(CONF_SEARCH_RADIUS, DEFAULT_SEARCH_RADIUS_M)
     max_stations = options.get(CONF_MAX_STATIONS, DEFAULT_MAX_STATIONS)

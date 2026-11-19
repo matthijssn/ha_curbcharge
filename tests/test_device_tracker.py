@@ -33,6 +33,7 @@ pytestmark = pytest.mark.usefixtures("enable_custom_integrations")
 def _entry(*, options: dict[str, object] | None = None) -> MockConfigEntry:
     return MockConfigEntry(
         domain=DOMAIN,
+        title="CurbCharge",
         unique_id="device-tracker-search-area",
         data={
             CONF_LOCATION_SOURCE: LOCATION_MANUAL,

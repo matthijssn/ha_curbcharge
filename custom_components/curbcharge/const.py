@@ -5,13 +5,14 @@ from datetime import timedelta
 from homeassistant.const import Platform
 
 DOMAIN = "curbcharge"
-CONFIG_ENTRY_VERSION = 2
+CONFIG_ENTRY_VERSION = 3
 PLATFORMS = (Platform.BINARY_SENSOR, Platform.SENSOR)
 OPTIONAL_PLATFORMS = (Platform.DEVICE_TRACKER,)
 
 CONF_LOCATION_SOURCE = "location_source"
 CONF_LOCATION_ENTITY = "location_entity"
 CONF_LOCATION_MOVEMENT_THRESHOLD = "location_movement_threshold"
+CONF_ENTRY_NAME = "entry_name"
 CONF_PROVIDER = "provider"
 CONF_API_TOKEN = "api_token"
 CONF_SEARCH_RADIUS = "search_radius"

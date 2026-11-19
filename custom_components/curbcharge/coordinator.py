@@ -181,6 +181,7 @@ class CurbChargeCoordinator(DataUpdateCoordinator[dict[str, ChargingStation]]):
         self.statistics_snapshot: StatisticsSnapshot | None = None
         self._update_unavailable = False
         self._last_update_error_key: str | None = None
+        self._entry_title_update_pending = False
         super().__init__(
             hass,
             _LOGGER,

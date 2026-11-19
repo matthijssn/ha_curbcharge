@@ -72,13 +72,15 @@
           "search_radius": "Sökradie (m)",
           "max_stations": "Högsta antal stationer",
           "scan_interval": "Uppdateringsintervall (minuter)",
-          "provider": "Leverantör"
+          "provider": "Leverantör",
+          "entry_name": "Anpassat namn på konfigurationsposten"
         },
         "data_description": {
           "search_radius": "Endast offentliga laddstationer inom detta avstånd tas med.",
           "max_stations": "Begränsa antalet stationer och tillhörande entiteter.",
           "scan_interval": "Hur ofta Home Assistant uppdaterar laddstationsdata.",
-          "provider": "Dataleverantören som används för att hitta stationer och tillgänglighet."
+          "provider": "Dataleverantören som används för att hitta stationer och tillgänglighet.",
+          "entry_name": "Valfritt. Lämna tomt för att använda leverantör och plats i namnet."
         }
       },
       "discovery_filters": {
@@ -218,6 +220,7 @@
           "search_radius": "Sökradie (m)",
           "max_stations": "Högsta antal stationer",
           "provider": "Leverantör",
+          "entry_name": "Anpassat namn på konfigurationsposten",
           "include_unknown": "Ta med stationer utan tillgänglighetsdata",
           "device_trackers": "Visa laddstationer på Home Assistant-kartan",
           "connector_types": "Kontakttyper",
@@ -232,6 +235,7 @@
           "search_radius": "Endast offentliga laddstationer inom detta avstånd tas med.",
           "max_stations": "Begränsa antalet stationer och tillhörande entiteter.",
           "provider": "Dataleverantören som används för att hitta stationer och tillgänglighet.",
+          "entry_name": "Valfri ersättning för det genererade namnet. Rensa fältet för att återställa leverantörs-/platsnamnet.",
           "include_unknown": "Ta med stationer när leverantören inte rapporterar laddkontakternas tillgänglighet.",
           "device_trackers": "Skapa en device_tracker-entitet för varje upptäckt laddstation.",
           "connector_types": "Lämna tomt för alla typer. En kontaktgrupp med någon av de valda typerna måste också uppfylla de övriga filtren.",

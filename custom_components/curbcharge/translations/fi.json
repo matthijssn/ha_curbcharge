@@ -72,13 +72,15 @@
           "search_radius": "Hakusäde (m)",
           "max_stations": "Asemien enimmäismäärä",
           "scan_interval": "Päivitysväli (minuuttia)",
-          "provider": "Palveluntarjoaja"
+          "provider": "Palveluntarjoaja",
+          "entry_name": "Mukautettu asetuskohteen nimi"
         },
         "data_description": {
           "search_radius": "Mukaan otetaan vain tämän etäisyyden sisällä olevat julkiset latauspisteet.",
           "max_stations": "Rajoita asemien ja niiden entiteettien määrää.",
           "scan_interval": "Kuinka usein Home Assistant päivittää latauspisteiden tiedot.",
-          "provider": "Asemien ja saatavuuden selvittämiseen käytetty tietolähde."
+          "provider": "Asemien ja saatavuuden selvittämiseen käytetty tietolähde.",
+          "entry_name": "Valinnainen. Jätä tyhjäksi, niin nimi muodostetaan palveluntarjoajasta ja sijainnista."
         }
       },
       "discovery_filters": {
@@ -218,6 +220,7 @@
           "search_radius": "Hakusäde (m)",
           "max_stations": "Asemien enimmäismäärä",
           "provider": "Palveluntarjoaja",
+          "entry_name": "Mukautettu asetuskohteen nimi",
           "include_unknown": "Sisällytä asemat ilman saatavuustietoa",
           "device_trackers": "Näytä latausasemat Home Assistantin kartalla",
           "connector_types": "Liitintyypit",
@@ -232,6 +235,7 @@
           "search_radius": "Mukaan otetaan vain tämän etäisyyden sisällä olevat julkiset latauspisteet.",
           "max_stations": "Rajoita asemien ja niiden entiteettien määrää.",
           "provider": "Asemien ja saatavuuden selvittämiseen käytetty tietolähde.",
+          "entry_name": "Valinnainen luodun nimen korvaus. Tyhjennä kenttä palauttaaksesi palveluntarjoaja-/sijaintinimen.",
           "include_unknown": "Sisällytä asemat, kun palveluntarjoaja ei ilmoita liitinsaatavuutta.",
           "device_trackers": "Luo device_tracker-entiteetti jokaiselle löydetylle latausasemalle.",
           "connector_types": "Jätä tyhjäksi, jos mikä tahansa tyyppi kelpaa. Täsmäävän liitinryhmän, jolla on jokin valituista tyypeistä, on täytettävä myös muut suodattimet.",

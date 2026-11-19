@@ -72,13 +72,15 @@
           "search_radius": "Søkeradius (m)",
           "max_stations": "Maksimalt antall stasjoner",
           "scan_interval": "Oppdateringsintervall (minutter)",
-          "provider": "Leverandør"
+          "provider": "Leverandør",
+          "entry_name": "Egendefinert navn på oppføringen"
         },
         "data_description": {
           "search_radius": "Bare offentlige ladestasjoner innenfor denne avstanden tas med.",
           "max_stations": "Begrens antall stasjoner og tilhørende entiteter.",
           "scan_interval": "Hvor ofte Home Assistant oppdaterer ladestasjonsdata.",
-          "provider": "Dataleverandøren som brukes til å finne stasjoner og tilgjengelighet."
+          "provider": "Dataleverandøren som brukes til å finne stasjoner og tilgjengelighet.",
+          "entry_name": "Valgfritt. La feltet stå tomt for å bruke leverandør og posisjon i navnet."
         }
       },
       "discovery_filters": {
@@ -218,6 +220,7 @@
           "search_radius": "Søkeradius (m)",
           "max_stations": "Maksimalt antall stasjoner",
           "provider": "Leverandør",
+          "entry_name": "Egendefinert navn på oppføringen",
           "include_unknown": "Ta med stasjoner uten tilgjengelighetsdata",
           "device_trackers": "Vis ladestasjoner på Home Assistant-kartet",
           "connector_types": "Kontakttyper",
@@ -232,6 +235,7 @@
           "search_radius": "Bare offentlige ladestasjoner innenfor denne avstanden tas med.",
           "max_stations": "Begrens antall stasjoner og tilhørende entiteter.",
           "provider": "Dataleverandøren som brukes til å finne stasjoner og tilgjengelighet.",
+          "entry_name": "Valgfri overstyring av det genererte navnet. Tøm feltet for å gjenopprette leverandør-/posisjonsnavnet.",
           "include_unknown": "Ta med stasjoner når leverandøren ikke rapporterer tilgjengelighet for ladekontaktene.",
           "device_trackers": "Opprett en device_tracker-enhet for hver oppdagede ladestasjon.",
           "connector_types": "La feltet stå tomt for alle typer. En kontaktgruppe med en av de valgte typene må også oppfylle de andre filtrene.",

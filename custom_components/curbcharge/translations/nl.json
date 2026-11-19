@@ -72,13 +72,15 @@
           "search_radius": "Zoekradius (m)",
           "max_stations": "Maximumaantal laadpunten",
           "scan_interval": "Bijwerkinterval (minuten)",
-          "provider": "Provider"
+          "provider": "Provider",
+          "entry_name": "Aangepaste naam van configuratie-item"
         },
         "data_description": {
           "search_radius": "Neem alleen openbare laadpunten binnen deze afstand op.",
           "max_stations": "Beperk het aantal laadpunten en bijbehorende entiteiten.",
           "scan_interval": "Hoe vaak Home Assistant de laadpuntgegevens vernieuwt.",
-          "provider": "De gegevensprovider voor het vinden van laadpunten en beschikbaarheid."
+          "provider": "De gegevensprovider voor het vinden van laadpunten en beschikbaarheid.",
+          "entry_name": "Optioneel. Laat leeg om de provider en locatie in de itemnaam te gebruiken."
         }
       },
       "discovery_filters": {
@@ -218,6 +220,7 @@
           "search_radius": "Zoekradius (m)",
           "max_stations": "Maximumaantal laadpunten",
           "provider": "Provider",
+          "entry_name": "Aangepaste naam van configuratie-item",
           "include_unknown": "Laadpunten zonder beschikbaarheidsgegevens opnemen",
           "device_trackers": "Laadpunten tonen op de Home Assistant-kaart",
           "connector_types": "Connectortypen",
@@ -232,6 +235,7 @@
           "search_radius": "Neem alleen openbare laadpunten binnen deze afstand op.",
           "max_stations": "Beperk het aantal laadpunten en bijbehorende entiteiten.",
           "provider": "De gegevensprovider voor het vinden van laadpunten en beschikbaarheid.",
+          "entry_name": "Optionele vervanging van de gegenereerde naam. Wis dit veld om de provider-/locatienaam te herstellen.",
           "include_unknown": "Neem laadpunten op als de provider geen connectorbeschikbaarheid meldt.",
           "device_trackers": "Maak een device_tracker-entiteit aan voor elk gevonden laadpunt.",
           "connector_types": "Laat leeg voor elk type. Een connectorgroep met een geselecteerd type moet ook aan de overige filters voldoen.",
