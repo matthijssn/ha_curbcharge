@@ -1,9 +1,10 @@
 """Tests for favorite management services."""
 
 from dataclasses import replace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
+from homeassistant.components import persistent_notification
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE
 from homeassistant.core import Context
@@ -193,9 +194,11 @@ async def test_service_validation_error_creates_notification_when_enabled(
     hass, monkeypatch, sample_stations
 ):
     create_notification = AsyncMock()
+    dismiss_notification = Mock()
     monkeypatch.setattr(
         services, "async_create_error_notification", create_notification
     )
+    monkeypatch.setattr(persistent_notification, "async_dismiss", dismiss_notification)
     entry, _provider = await _setup_entry(
         hass,
         monkeypatch,
@@ -212,6 +215,29 @@ async def test_service_validation_error_creates_notification_when_enabled(
     create_notification.assert_awaited_once_with(
         hass, entry.entry_id, "service", "favorite_not_found"
     )
+    await _call_service(
+        hass, SERVICE_ADD_FAVORITE, entry.entry_id, sample_stations[0].provider_id
+    )
+    await hass.async_block_till_done()
+    dismiss_notification.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_service_validation_error_is_notified_only_when_enabled(
+    hass, monkeypatch, sample_stations
+):
+    create_notification = AsyncMock()
+    monkeypatch.setattr(
+        services, "async_create_error_notification", create_notification
+    )
+    entry, _provider = await _setup_entry(hass, monkeypatch, [(sample_stations[0],)])
+
+    with pytest.raises(ServiceValidationError):
+        await _call_service(
+            hass, SERVICE_REMOVE_FAVORITE, entry.entry_id, "not-a-favorite"
+        )
+
+    create_notification.assert_not_awaited()
 
 
 @pytest.mark.asyncio

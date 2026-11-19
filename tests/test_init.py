@@ -2265,6 +2265,64 @@ async def test_setup_error_notification_preserves_config_entry_error(hass, monke
 
 
 @pytest.mark.asyncio
+async def test_setup_error_notifications_are_opt_in(hass, monkeypatch):
+    entry = _entry({CONF_LOCATION_SOURCE: LOCATION_ENTITY})
+    create_notification = AsyncMock()
+    monkeypatch.setattr(
+        curbcharge, "async_create_error_notification", create_notification
+    )
+
+    with pytest.raises(ConfigEntryNotReady):
+        await curbcharge.async_setup_entry(hass, entry)
+
+    create_notification.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_setup_error_notification_remains_after_setup_recovers(hass, monkeypatch):
+    entry = _entry(
+        {CONF_LOCATION_SOURCE: LOCATION_ENTITY},
+        options={CONF_NOTIFY_ON_ERROR: True},
+    )
+    entry.add_to_hass(hass)
+    create_notification = AsyncMock()
+    dismiss_notification = Mock()
+    dismiss_notifications = Mock()
+    monkeypatch.setattr(
+        curbcharge, "async_create_error_notification", create_notification
+    )
+    monkeypatch.setattr(
+        coordinator_module, "async_dismiss_error_notification", dismiss_notification
+    )
+    monkeypatch.setattr(
+        curbcharge, "async_dismiss_error_notifications", dismiss_notifications
+    )
+
+    with pytest.raises(ConfigEntryNotReady):
+        await curbcharge.async_setup_entry(hass, entry)
+
+    hass.config_entries.async_update_entry(
+        entry,
+        data={**entry.data, CONF_LOCATION_SOURCE: LOCATION_MANUAL},
+    )
+    entry._async_set_state(  # noqa: SLF001
+        hass, ConfigEntryState.SETUP_IN_PROGRESS, None
+    )
+    monkeypatch.setattr(
+        curbcharge, "create_provider", lambda *_args: FakeProvider([()])
+    )
+    monkeypatch.setattr(hass.config_entries, "async_forward_entry_setups", AsyncMock())
+
+    assert await curbcharge.async_setup_entry(hass, entry)
+
+    create_notification.assert_awaited_once_with(
+        hass, entry.entry_id, "setup", "location_not_configured"
+    )
+    dismiss_notification.assert_not_called()
+    dismiss_notifications.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_platform_setup_error_creates_notification_and_propagates(
     hass, monkeypatch
 ):
