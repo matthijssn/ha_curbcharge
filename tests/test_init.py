@@ -93,6 +93,7 @@ def _entry(
         data.update(overrides)
     return MockConfigEntry(
         domain=DOMAIN,
+        title="CurbCharge",
         entry_id=entry_id,
         unique_id=unique_id,
         data=data,
@@ -107,6 +108,7 @@ def _entity_entry(
 ) -> MockConfigEntry:
     return MockConfigEntry(
         domain=DOMAIN,
+        title="CurbCharge",
         unique_id="test-entity-search-area",
         data={
             CONF_LOCATION_SOURCE: LOCATION_ENTITY,
@@ -439,7 +441,7 @@ async def test_setup_rejects_non_string_entry_name(hass, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_options_update_applies_and_clears_custom_title(hass):
+async def test_options_update_applies_and_clears_custom_title(hass, monkeypatch):
     entry = _entry(options={CONF_ENTRY_NAME: "Garage chargers"})
     entry.add_to_hass(hass)
     provider = FakeProvider([()])
@@ -447,20 +449,22 @@ async def test_options_update_applies_and_clears_custom_title(hass):
         hass, provider, 52.0, 5.0, 500, 10, 5, True, config_entry=entry
     )
     entry.runtime_data = coordinator
+    request_refresh = AsyncMock()
+    monkeypatch.setattr(coordinator, "async_request_refresh", request_refresh)
     data = dict(entry.data)
 
     await curbcharge._async_options_updated(hass, entry)
 
     assert entry.title == "Garage chargers"
     assert dict(entry.data) == data
-    assert len(provider.station_calls) == 1
+    request_refresh.assert_awaited_once()
 
     hass.config_entries.async_update_entry(entry, options={CONF_ENTRY_NAME: ""})
     await curbcharge._async_options_updated(hass, entry)
 
     assert entry.title == "CurbCharge - NDW DOT-NL (Manual location)"
     assert entry.unique_id == "test-search-area"
-    assert len(provider.station_calls) == 2
+    assert request_refresh.await_count == 2
 
 
 @pytest.mark.asyncio
@@ -643,6 +647,7 @@ async def test_unfavouriting_uses_existing_device_removal_grace(
     monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
     entry = MockConfigEntry(
         domain=DOMAIN,
+        title="CurbCharge",
         unique_id="favorite-removal",
         data={
             CONF_LOCATION_SOURCE: LOCATION_MANUAL,
