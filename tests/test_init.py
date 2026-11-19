@@ -439,7 +439,7 @@ async def test_setup_rejects_non_string_entry_name(hass, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_options_update_applies_and_clears_custom_title_without_refreshing(hass):
+async def test_options_update_applies_and_clears_custom_title(hass):
     entry = _entry(options={CONF_ENTRY_NAME: "Garage chargers"})
     entry.add_to_hass(hass)
     provider = FakeProvider([()])
@@ -453,14 +453,14 @@ async def test_options_update_applies_and_clears_custom_title_without_refreshing
 
     assert entry.title == "Garage chargers"
     assert dict(entry.data) == data
-    assert provider.station_calls == []
+    assert len(provider.station_calls) == 1
 
     hass.config_entries.async_update_entry(entry, options={CONF_ENTRY_NAME: ""})
     await curbcharge._async_options_updated(hass, entry)
 
     assert entry.title == "CurbCharge - NDW DOT-NL (Manual location)"
     assert entry.unique_id == "test-search-area"
-    assert provider.station_calls == []
+    assert len(provider.station_calls) == 2
 
 
 @pytest.mark.asyncio

@@ -507,14 +507,6 @@ async def _async_options_updated(
         return
     if notification_only_changed:
         return
-    if (
-        refresh_options_unchanged
-        and not favourites_changed
-        and not personalization_changed
-        and not device_trackers_changed
-        and not notify_on_error_changed
-    ):
-        return
     await coordinator.async_request_refresh()
 
 
