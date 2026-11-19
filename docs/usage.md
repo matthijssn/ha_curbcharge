@@ -948,9 +948,18 @@ unloaded/wrong entries, and invalid calls produce visible validation errors.
 Favourite membership is persisted in that config entry's options. A
 membership-only change updates the favourite sensors without an immediate
 provider request; normal coordinator polling supplies future provider data.
-CurbCharge does not call notification services or provide device triggers or
-conditions. Notification actions in the Blueprint and automation examples are
-chosen by the user. See the
+Enable **Notify on errors** in the entry's **Options → General settings** to
+show Home Assistant persistent notifications for provider refresh failures,
+saved-entry setup/configuration failures, and validation errors from the
+favourite management services. The option is off by default. Provider notifications are
+created once per outage and dismissed after a successful refresh; setup and
+service-error notifications remain until manually dismissed. Disabling the
+option or removing the entry clears its notifications. Inline config-flow
+validation errors continue to appear in the form. These are in-app notifications
+only: CurbCharge does not send mobile push notifications or call a user-selected
+`notify` service. CurbCharge also does not provide device triggers or
+conditions; Blueprint and automation notification actions remain user-selected.
+See the
 [favorite services and automation examples](dashboards-and-automations.md#favorite-services-and-automations).
 
 ## Troubleshooting
@@ -964,6 +973,12 @@ chosen by the user. See the
   **Reconfigure** to select its replacement.
 - **Setup cannot connect:** Check Home Assistant internet access and retry
   after a provider rate limit expires.
+- **A CurbCharge error notification is missing or remains visible:** Confirm
+  **Notify on errors** is enabled in the entry's **Options → General settings**.
+  Provider notifications clear after a successful refresh; setup and service
+  notifications must be dismissed manually. Turning the option off clears
+  CurbCharge notifications. These notifications do not send mobile push; use a
+  separate automation if you need that.
 - **Belgium token rejected:** Confirm Eco-Movement issued the token for your
   account and that it has not expired or been revoked. Use the reauthentication
   flow for a replacement; do not include the token in a support request.
