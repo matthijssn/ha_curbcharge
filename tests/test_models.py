@@ -79,7 +79,7 @@ def _personalization_config(**overrides):
 def test_missing_personalization_profile_defaults_disabled_without_entry_migration():
     profile = PersonalizationProfile.from_config(None)
 
-    assert CONFIG_ENTRY_VERSION == 2
+    assert CONFIG_ENTRY_VERSION == 3
     assert not profile.enabled
     assert profile.as_config() == _personalization_config()
 

@@ -22,6 +22,7 @@ else:
 from .const import (
     CONF_API_TOKEN,
     CONF_DEVICE_TRACKERS,
+    CONF_ENTRY_NAME,
     CONF_EV_ESTIMATES,
     CONF_FAVOURITES,
     CONF_INCLUDE_UNKNOWN,
@@ -57,6 +58,7 @@ from .const import (
     DOMAIN as DOMAIN,
 )
 from .coordinator import CurbChargeCoordinator
+from .entry_title import entry_title, normalize_entry_name
 from .location import resolve_location
 from .models import (
     DiscoveryFilterSettings,
@@ -96,38 +98,52 @@ async def async_setup(hass: HomeAssistant, _config: ConfigType) -> bool:
 
 
 async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry[Any]) -> bool:
-    """Normalize saved favorites while migrating config-entry options."""
+    """Normalize saved favorites and initialize entry titles."""
     if entry.version == CONFIG_ENTRY_VERSION:
         return True
-    if entry.version != 1:
+    if entry.version not in (1, 2):
         _LOGGER.error(
             "Cannot migrate CurbCharge config entry from version %s", entry.version
         )
         return False
 
-    provider_id = entry.options.get(
-        CONF_PROVIDER, entry.data.get(CONF_PROVIDER, PROVIDER_NDW_DOT_NL)
-    )
-    if not isinstance(provider_id, str):
-        _LOGGER.error("Cannot migrate CurbCharge favorite references: invalid provider")
-        return False
-    try:
-        favourites = parse_favourite_references(
-            entry.options.get(CONF_FAVOURITES, []), provider_id
+    options = dict(entry.options)
+    if entry.version == 1:
+        provider_id = options.get(
+            CONF_PROVIDER, entry.data.get(CONF_PROVIDER, PROVIDER_NDW_DOT_NL)
         )
-    except ValueError:
-        _LOGGER.error(
-            "Cannot migrate CurbCharge favorite references: invalid saved data"
-        )
-        return False
+        if not isinstance(provider_id, str):
+            _LOGGER.error(
+                "Cannot migrate CurbCharge favorite references: invalid provider"
+            )
+            return False
+        try:
+            favourites = parse_favourite_references(
+                options.get(CONF_FAVOURITES, []), provider_id
+            )
+        except ValueError:
+            _LOGGER.error(
+                "Cannot migrate CurbCharge favorite references: invalid saved data"
+            )
+            return False
+        options[CONF_FAVOURITES] = [favourite.as_config() for favourite in favourites]
 
-    options = {
-        **entry.options,
-        CONF_FAVOURITES: [favourite.as_config() for favourite in favourites],
-    }
+    entry_name = normalize_entry_name(
+        options.get(CONF_ENTRY_NAME, entry.data.get(CONF_ENTRY_NAME, ""))
+    )
+    if entry_name:
+        options[CONF_ENTRY_NAME] = entry_name
+        title = entry_name
+    elif entry.title == "CurbCharge":
+        title = entry_title(hass, {**entry.data, **options})
+    else:
+        title = entry.title
+        options[CONF_ENTRY_NAME] = title
+
     hass.config_entries.async_update_entry(
         entry,
         options=options,
+        title=title,
         version=CONFIG_ENTRY_VERSION,
     )
     return True
@@ -144,6 +160,21 @@ async def _async_notify_setup_error(
 
 async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -> bool:
     """Set up CurbCharge from a config entry."""
+    options = {**entry.data, **entry.options}
+    entry_name = options.get(CONF_ENTRY_NAME, "")
+    if not isinstance(entry_name, str):
+        await _async_notify_setup_error(hass, entry, "invalid_config")
+        raise ConfigEntryNotReady(
+            translation_domain=DOMAIN,
+            translation_key="invalid_config",
+        )
+    title = entry_title(hass, options)
+    if (
+        entry.title != title
+        and hass.config_entries.async_get_entry(entry.entry_id) is not None
+    ):
+        hass.config_entries.async_update_entry(entry, title=title)
+
     location = _entry_location(hass, entry.data)
     if location is None:
         await _async_notify_setup_error(hass, entry, "location_not_configured")
@@ -152,7 +183,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: CurbChargeConfigEntry) -
             translation_key="location_not_configured",
         )
 
-    options = {**entry.data, **entry.options}
     provider_id = options.get(CONF_PROVIDER, PROVIDER_NDW_DOT_NL)
     radius_m = options.get(CONF_SEARCH_RADIUS, DEFAULT_SEARCH_RADIUS_M)
     max_stations = options.get(CONF_MAX_STATIONS, DEFAULT_MAX_STATIONS)
@@ -337,6 +367,10 @@ async def _async_options_updated(
         return
 
     options = {**entry.data, **entry.options}
+    entry_name = options.get(CONF_ENTRY_NAME, "")
+    if not isinstance(entry_name, str):
+        await hass.config_entries.async_reload(entry.entry_id)
+        return
     provider_id = options.get(CONF_PROVIDER, PROVIDER_NDW_DOT_NL)
     radius_m = options.get(CONF_SEARCH_RADIUS, DEFAULT_SEARCH_RADIUS_M)
     max_stations = options.get(CONF_MAX_STATIONS, DEFAULT_MAX_STATIONS)
@@ -390,6 +424,7 @@ async def _async_options_updated(
         await hass.config_entries.async_reload(entry.entry_id)
         return
 
+    title = entry_title(hass, options)
     notify_on_error_changed = notify_on_error != coordinator.notify_on_error
     if notify_on_error_changed:
         coordinator.notify_on_error = notify_on_error
@@ -459,6 +494,8 @@ async def _async_options_updated(
         discovery_filters=discovery_filters,
         personalization_profile=personalization_profile,
     )
+    if entry.title != title:
+        hass.config_entries.async_update_entry(entry, title=title)
     if favourites_changed:
         coordinator.async_update_listeners()
     if personalization_only_changed:
@@ -469,6 +506,14 @@ async def _async_options_updated(
     if tracker_only_changed:
         return
     if notification_only_changed:
+        return
+    if (
+        refresh_options_unchanged
+        and not favourites_changed
+        and not personalization_changed
+        and not device_trackers_changed
+        and not notify_on_error_changed
+    ):
         return
     await coordinator.async_request_refresh()
 

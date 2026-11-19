@@ -72,13 +72,15 @@
           "search_radius": "Search radius (m)",
           "max_stations": "Maximum stations",
           "scan_interval": "Polling interval (minutes)",
-          "provider": "Provider"
+          "provider": "Provider",
+          "entry_name": "Custom entry name"
         },
         "data_description": {
           "search_radius": "Only public charging stations within this distance are included.",
           "max_stations": "Limit the number of stations and their entities.",
           "scan_interval": "How often Home Assistant refreshes charging station data.",
-          "provider": "The data provider used to discover stations and availability."
+          "provider": "The data provider used to discover stations and availability.",
+          "entry_name": "Optional. Leave blank to use the provider and location for the entry title."
         }
       },
       "discovery_filters": {
@@ -218,6 +220,7 @@
           "search_radius": "Search radius (m)",
           "max_stations": "Maximum stations",
           "provider": "Provider",
+          "entry_name": "Custom entry name",
           "include_unknown": "Include stations without availability data",
           "device_trackers": "Show chargers on the Home Assistant map",
           "connector_types": "Connector types",
@@ -232,6 +235,7 @@
           "search_radius": "Only public charging stations within this distance are included.",
           "max_stations": "Limit the number of stations and their entities.",
           "provider": "The data provider used to discover stations and availability.",
+          "entry_name": "Optional override for the generated entry name. Clear this field to restore the provider/location name.",
           "include_unknown": "Include stations when the provider reports no connector availability.",
           "device_trackers": "Create a device tracker for each discovered charger.",
           "connector_types": "Leave empty for any type. A matching connector group with any selected type must also meet the other filters.",

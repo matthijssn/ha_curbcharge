@@ -23,6 +23,7 @@ import custom_components.curbcharge.entity as curbcharge_entity
 from custom_components.curbcharge.const import (
     CONF_API_TOKEN,
     CONF_CONNECTOR_TYPES,
+    CONF_ENTRY_NAME,
     CONF_EV_ESTIMATES,
     CONF_FAVOURITES,
     CONF_INCLUDE_UNKNOWN,
@@ -172,6 +173,7 @@ async def test_migrate_v1_favorites_to_stable_references(hass):
         domain=DOMAIN,
         unique_id="favorite-migration",
         version=1,
+        title="CurbCharge",
         data={CONF_PROVIDER: PROVIDER_NDW_DOT_NL},
         options={
             CONF_FAVOURITES: [legacy_favorite],
@@ -182,7 +184,8 @@ async def test_migrate_v1_favorites_to_stable_references(hass):
 
     assert await curbcharge.async_migrate_entry(hass, entry)
 
-    assert entry.version == 2
+    assert entry.version == 3
+    assert entry.title == "CurbCharge - NDW DOT-NL (Manual location)"
     assert entry.options == {
         CONF_FAVOURITES: [
             {
@@ -204,13 +207,15 @@ async def test_migrate_v1_without_favorites_defaults_to_empty(hass):
         domain=DOMAIN,
         unique_id="empty-favorite-migration",
         version=1,
+        title="CurbCharge",
         data={CONF_PROVIDER: PROVIDER_NDW_DOT_NL},
     )
     entry.add_to_hass(hass)
 
     assert await curbcharge.async_migrate_entry(hass, entry)
 
-    assert entry.version == 2
+    assert entry.version == 3
+    assert entry.title == "CurbCharge - NDW DOT-NL (Manual location)"
     assert entry.options[CONF_FAVOURITES] == []
 
 
@@ -249,7 +254,7 @@ async def test_migration_accepts_current_version(hass):
     entry = MockConfigEntry(
         domain=DOMAIN,
         unique_id="current-favorite-version",
-        version=2,
+        version=3,
         data={CONF_PROVIDER: PROVIDER_NDW_DOT_NL},
     )
     entry.add_to_hass(hass)
@@ -259,11 +264,80 @@ async def test_migration_accepts_current_version(hass):
 
 
 @pytest.mark.asyncio
+async def test_migrate_v2_generates_title_without_coordinates(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="generic-title-migration",
+        version=2,
+        title="CurbCharge",
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_HOME,
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+            CONF_LATITUDE: 52.1,
+            CONF_LONGITUDE: 5.1,
+        },
+        options={CONF_SCAN_INTERVAL: 5},
+    )
+    entry.add_to_hass(hass)
+
+    assert await curbcharge.async_migrate_entry(hass, entry)
+
+    assert entry.version == 3
+    assert entry.title == "CurbCharge - NDW DOT-NL (Home)"
+    assert "52.1" not in entry.title
+    assert "5.1" not in entry.title
+    assert entry.options == {CONF_SCAN_INTERVAL: 5}
+
+
+@pytest.mark.asyncio
+async def test_migrate_v2_preserves_custom_title_as_override(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="custom-title-migration",
+        version=2,
+        title="Garage chargers",
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_HOME,
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+        },
+    )
+    entry.add_to_hass(hass)
+
+    assert await curbcharge.async_migrate_entry(hass, entry)
+
+    assert entry.version == 3
+    assert entry.title == "Garage chargers"
+    assert entry.options[CONF_ENTRY_NAME] == "Garage chargers"
+
+
+@pytest.mark.asyncio
+async def test_migrate_v2_applies_saved_title_override(hass):
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="saved-custom-title-migration",
+        version=2,
+        title="CurbCharge",
+        data={
+            CONF_LOCATION_SOURCE: LOCATION_HOME,
+            CONF_PROVIDER: PROVIDER_NDW_DOT_NL,
+        },
+        options={CONF_ENTRY_NAME: "Garage chargers"},
+    )
+    entry.add_to_hass(hass)
+
+    assert await curbcharge.async_migrate_entry(hass, entry)
+
+    assert entry.version == 3
+    assert entry.title == "Garage chargers"
+    assert entry.options[CONF_ENTRY_NAME] == "Garage chargers"
+
+
+@pytest.mark.asyncio
 async def test_migration_rejects_unknown_version(hass, caplog):
     entry = MockConfigEntry(
         domain=DOMAIN,
         unique_id="unknown-favorite-version",
-        version=3,
+        version=4,
         data={CONF_PROVIDER: PROVIDER_NDW_DOT_NL},
     )
     entry.add_to_hass(hass)
@@ -271,8 +345,8 @@ async def test_migration_rejects_unknown_version(hass, caplog):
     with caplog.at_level(logging.ERROR):
         assert not await curbcharge.async_migrate_entry(hass, entry)
 
-    assert entry.version == 3
-    assert "version 3" in caplog.text
+    assert entry.version == 4
+    assert "version 4" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -291,6 +365,118 @@ async def test_migration_rejects_invalid_provider(hass, caplog):
 
     assert entry.version == 1
     assert "invalid provider" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_setup_assigns_generated_title_without_changing_unique_id(
+    hass, monkeypatch
+):
+    entry = _entry()
+    entry.add_to_hass(hass)
+    hass.config_entries.async_update_entry(entry, title="CurbCharge")
+    entry._async_set_state(  # noqa: SLF001
+        hass, ConfigEntryState.SETUP_IN_PROGRESS, None
+    )
+    provider = FakeProvider([()])
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    monkeypatch.setattr(hass.config_entries, "async_forward_entry_setups", AsyncMock())
+    unique_id = entry.unique_id
+
+    assert await curbcharge.async_setup_entry(hass, entry)
+
+    assert entry.title == "CurbCharge - NDW DOT-NL (Manual location)"
+    assert entry.unique_id == unique_id
+    assert entry.data[CONF_LATITUDE] == 52.0
+    assert entry.data[CONF_LONGITUDE] == 5.0
+
+
+@pytest.mark.asyncio
+async def test_setup_reconfiguration_updates_generated_title(hass, monkeypatch):
+    entry = _entry()
+    entry.add_to_hass(hass)
+    hass.states.async_set(
+        "sensor.vehicle_location",
+        "home",
+        {CONF_LATITUDE: 52.0, CONF_LONGITUDE: 5.0, "friendly_name": "Work"},
+    )
+    hass.config_entries.async_update_entry(
+        entry,
+        data={
+            **entry.data,
+            CONF_LOCATION_SOURCE: LOCATION_ENTITY,
+            CONF_LOCATION_ENTITY: "sensor.vehicle_location",
+        },
+        title="CurbCharge - NDW DOT-NL (Manual location)",
+    )
+    entry._async_set_state(  # noqa: SLF001
+        hass, ConfigEntryState.SETUP_IN_PROGRESS, None
+    )
+    monkeypatch.setattr(
+        curbcharge, "create_provider", lambda *_args: FakeProvider([()])
+    )
+    monkeypatch.setattr(hass.config_entries, "async_forward_entry_setups", AsyncMock())
+
+    assert await curbcharge.async_setup_entry(hass, entry)
+
+    assert entry.title == "CurbCharge - NDW DOT-NL (Work)"
+
+
+@pytest.mark.asyncio
+async def test_setup_rejects_non_string_entry_name(hass, monkeypatch):
+    entry = _entry(options={CONF_ENTRY_NAME: 123, CONF_NOTIFY_ON_ERROR: True})
+    create_notification = AsyncMock()
+    monkeypatch.setattr(
+        curbcharge, "async_create_error_notification", create_notification
+    )
+
+    with pytest.raises(ConfigEntryNotReady) as error:
+        await curbcharge.async_setup_entry(hass, entry)
+
+    assert error.value.translation_key == "invalid_config"
+    create_notification.assert_awaited_once_with(
+        hass, entry.entry_id, "setup", "invalid_config"
+    )
+
+
+@pytest.mark.asyncio
+async def test_options_update_applies_and_clears_custom_title_without_refreshing(hass):
+    entry = _entry(options={CONF_ENTRY_NAME: "Garage chargers"})
+    entry.add_to_hass(hass)
+    provider = FakeProvider([()])
+    coordinator = CurbChargeCoordinator(
+        hass, provider, 52.0, 5.0, 500, 10, 5, True, config_entry=entry
+    )
+    entry.runtime_data = coordinator
+    data = dict(entry.data)
+
+    await curbcharge._async_options_updated(hass, entry)
+
+    assert entry.title == "Garage chargers"
+    assert dict(entry.data) == data
+    assert provider.station_calls == []
+
+    hass.config_entries.async_update_entry(entry, options={CONF_ENTRY_NAME: ""})
+    await curbcharge._async_options_updated(hass, entry)
+
+    assert entry.title == "CurbCharge - NDW DOT-NL (Manual location)"
+    assert entry.unique_id == "test-search-area"
+    assert provider.station_calls == []
+
+
+@pytest.mark.asyncio
+async def test_options_update_reloads_for_non_string_entry_name(hass, monkeypatch):
+    entry = _entry(options={CONF_ENTRY_NAME: 123})
+    entry.add_to_hass(hass)
+    coordinator = CurbChargeCoordinator(
+        hass, FakeProvider([()]), 52.0, 5.0, 500, 10, 5, True, config_entry=entry
+    )
+    entry.runtime_data = coordinator
+    reload_entry = AsyncMock()
+    monkeypatch.setattr(hass.config_entries, "async_reload", reload_entry)
+
+    await curbcharge._async_options_updated(hass, entry)
+
+    reload_entry.assert_awaited_once_with(entry.entry_id)
 
 
 @pytest.mark.asyncio

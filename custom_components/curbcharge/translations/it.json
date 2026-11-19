@@ -72,13 +72,15 @@
           "search_radius": "Raggio di ricerca (m)",
           "max_stations": "Numero massimo di stazioni",
           "scan_interval": "Intervallo di aggiornamento (minuti)",
-          "provider": "Fornitore"
+          "provider": "Fornitore",
+          "entry_name": "Nome personalizzato della voce"
         },
         "data_description": {
           "search_radius": "Vengono incluse solo le stazioni di ricarica pubbliche entro questa distanza.",
           "max_stations": "Limita il numero di stazioni e delle relative entità.",
           "scan_interval": "Con quale frequenza Home Assistant aggiorna i dati delle stazioni di ricarica.",
-          "provider": "Il fornitore di dati usato per individuare stazioni e disponibilità."
+          "provider": "Il fornitore di dati usato per individuare stazioni e disponibilità.",
+          "entry_name": "Facoltativo. Lascia vuoto per usare provider e posizione nel titolo della voce."
         }
       },
       "discovery_filters": {
@@ -218,6 +220,7 @@
           "search_radius": "Raggio di ricerca (m)",
           "max_stations": "Numero massimo di stazioni",
           "provider": "Fornitore",
+          "entry_name": "Nome personalizzato della voce",
           "include_unknown": "Includi stazioni senza dati di disponibilità",
           "device_trackers": "Mostra le stazioni di ricarica sulla mappa di Home Assistant",
           "connector_types": "Tipi di connettore",
@@ -232,6 +235,7 @@
           "search_radius": "Vengono incluse solo le stazioni di ricarica pubbliche entro questa distanza.",
           "max_stations": "Limita il numero di stazioni e delle relative entità.",
           "provider": "Il fornitore di dati usato per individuare stazioni e disponibilità.",
+          "entry_name": "Sostituzione facoltativa del nome generato. Svuota il campo per ripristinare il nome di provider e posizione.",
           "include_unknown": "Includi le stazioni quando il fornitore non riporta la disponibilità dei connettori.",
           "device_trackers": "Crea un'entità device_tracker per ogni stazione di ricarica rilevata.",
           "connector_types": "Lascia vuoto per qualsiasi tipo. Un gruppo di connettori corrispondente con uno dei tipi selezionati deve soddisfare anche gli altri filtri.",

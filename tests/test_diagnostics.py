@@ -12,6 +12,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.curbcharge.const import (
     CONF_API_TOKEN,
+    CONF_ENTRY_NAME,
     CONF_FAVOURITES,
     CONF_LOCATION_ENTITY,
     CONF_LOCATION_SOURCE,
@@ -115,12 +116,14 @@ async def test_diagnostics_redact_coordinates_and_addresses(
             CONF_LATITUDE: 52.123456,
             CONF_LONGITUDE: 5.654321,
             CONF_API_TOKEN: "diagnostic-secret-token",
+            CONF_ENTRY_NAME: "Private entry name in data",
             "provider_credentials": {
                 CONF_API_TOKEN: "nested-data-secret-token",
             },
         },
         options={
             CONF_API_TOKEN: "options-secret-token",
+            CONF_ENTRY_NAME: "Private entry name in options",
             "provider_credentials": {
                 CONF_API_TOKEN: "nested-options-secret-token",
             },
@@ -148,6 +151,8 @@ async def test_diagnostics_redact_coordinates_and_addresses(
     assert "nested-data-secret-token" not in serialized
     assert "options-secret-token" not in serialized
     assert "nested-options-secret-token" not in serialized
+    assert "Private entry name in data" not in serialized
+    assert "Private entry name in options" not in serialized
     assert diagnostics["provider"] == "NDW DOT-NL"
     assert diagnostics["provider_id"] == "ndw_dot_nl"
     assert diagnostics["country_code"] == "NL"

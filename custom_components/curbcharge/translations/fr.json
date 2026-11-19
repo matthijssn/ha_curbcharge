@@ -72,13 +72,15 @@
           "search_radius": "Rayon de recherche (m)",
           "max_stations": "Nombre maximal de bornes",
           "scan_interval": "Intervalle d’actualisation (minutes)",
-          "provider": "Fournisseur"
+          "provider": "Fournisseur",
+          "entry_name": "Nom personnalisé de l’entrée"
         },
         "data_description": {
           "search_radius": "Inclure uniquement les bornes publiques dans ce rayon.",
           "max_stations": "Limiter le nombre de bornes et d'entités associées.",
           "scan_interval": "Fréquence d’actualisation des données des bornes par Home Assistant.",
-          "provider": "Fournisseur de données utilisé pour découvrir les bornes et leur disponibilité."
+          "provider": "Fournisseur de données utilisé pour découvrir les bornes et leur disponibilité.",
+          "entry_name": "Facultatif. Laissez vide pour utiliser le fournisseur et la position dans le nom de l’entrée."
         }
       },
       "discovery_filters": {
@@ -218,6 +220,7 @@
           "search_radius": "Rayon de recherche (m)",
           "max_stations": "Nombre maximal de bornes",
           "provider": "Fournisseur",
+          "entry_name": "Nom personnalisé de l’entrée",
           "include_unknown": "Inclure les bornes sans données de disponibilité",
           "device_trackers": "Afficher les bornes sur la carte Home Assistant",
           "connector_types": "Types de connecteur",
@@ -232,6 +235,7 @@
           "search_radius": "Inclure uniquement les bornes publiques dans ce rayon.",
           "max_stations": "Limiter le nombre de bornes et d'entités associées.",
           "provider": "Fournisseur de données utilisé pour découvrir les bornes et leur disponibilité.",
+          "entry_name": "Remplacement facultatif du nom généré. Effacez ce champ pour rétablir le nom du fournisseur et de la position.",
           "include_unknown": "Inclure les bornes lorsque le fournisseur ne communique pas leur disponibilité.",
           "device_trackers": "Créer une entité device_tracker pour chaque borne détectée.",
           "connector_types": "Laissez vide pour tous les types. Un groupe de connecteurs correspondant à l'un des types sélectionnés doit aussi respecter les autres filtres.",

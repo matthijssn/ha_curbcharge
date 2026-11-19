@@ -72,13 +72,15 @@
           "search_radius": "Suchradius (m)",
           "max_stations": "Maximale Anzahl Ladestationen",
           "scan_interval": "Aktualisierungsintervall (Minuten)",
-          "provider": "Anbieter"
+          "provider": "Anbieter",
+          "entry_name": "Benutzerdefinierter Eintragsname"
         },
         "data_description": {
           "search_radius": "Nur öffentliche Ladestationen innerhalb dieses Radius einschließen.",
           "max_stations": "Die Anzahl der Ladestationen und zugehörigen Entitäten begrenzen.",
           "scan_interval": "Wie oft Home Assistant die Ladestationsdaten aktualisiert.",
-          "provider": "Datenanbieter zum Ermitteln von Ladestationen und ihrer Verfügbarkeit."
+          "provider": "Datenanbieter zum Ermitteln von Ladestationen und ihrer Verfügbarkeit.",
+          "entry_name": "Optional. Leer lassen, um Anbieter und Standort für den Eintragstitel zu verwenden."
         }
       },
       "discovery_filters": {
@@ -218,6 +220,7 @@
           "search_radius": "Suchradius (m)",
           "max_stations": "Maximale Anzahl Ladestationen",
           "provider": "Anbieter",
+          "entry_name": "Benutzerdefinierter Eintragsname",
           "include_unknown": "Ladestationen ohne Verfügbarkeitsdaten einschließen",
           "device_trackers": "Ladestationen auf der Home-Assistant-Karte anzeigen",
           "connector_types": "Anschlusstypen",
@@ -232,6 +235,7 @@
           "search_radius": "Nur öffentliche Ladestationen innerhalb dieses Radius einschließen.",
           "max_stations": "Die Anzahl der Ladestationen und zugehörigen Entitäten begrenzen.",
           "provider": "Datenanbieter zum Ermitteln von Ladestationen und ihrer Verfügbarkeit.",
+          "entry_name": "Optionale Überschreibung des generierten Eintragsnamens. Leer lassen, um den Anbieter-/Standortnamen wiederherzustellen.",
           "include_unknown": "Ladestationen einschließen, wenn der Anbieter keine Verfügbarkeit meldet.",
           "device_trackers": "Für jede entdeckte Ladestation eine device_tracker-Entität erstellen.",
           "connector_types": "Leer lassen, um alle Typen einzuschließen. Eine Anschlussgruppe mit einem ausgewählten Typ muss auch die übrigen Filter erfüllen.",

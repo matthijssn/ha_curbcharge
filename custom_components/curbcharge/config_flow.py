@@ -25,6 +25,7 @@ from .const import (
     CONF_CONNECTOR_TYPE_IDS,
     CONF_CONNECTOR_TYPES,
     CONF_DEVICE_TRACKERS,
+    CONF_ENTRY_NAME,
     CONF_EV_ASSUMED_POWER_KW,
     CONF_EV_CAPACITY_ATTRIBUTE,
     CONF_EV_CAPACITY_ENTITY,
@@ -92,6 +93,7 @@ from .const import (
     SUPPORTED_PROVIDER_IDS,
 )
 from .coordinator import CurbChargeCoordinator
+from .entry_title import entry_title, normalize_entry_name
 from .location import resolve_location, valid_coordinates
 from .models import (
     ChargingStation,
@@ -236,6 +238,7 @@ def station_options_schema(
     max_stations: int = DEFAULT_MAX_STATIONS,
     scan_interval_minutes: int = DEFAULT_SCAN_INTERVAL_MINUTES,
     provider_id: str = PROVIDER_NDW_DOT_NL,
+    entry_name: str = "",
 ) -> FlowSchema:
     """Return the initial provider and station-search schema."""
     scan_interval_key, scan_interval_selector = _scan_interval_field(
@@ -280,6 +283,7 @@ def station_options_schema(
                     translation_key="provider",
                 )
             ),
+            vol.Optional(CONF_ENTRY_NAME, default=entry_name): selector.TextSelector(),
         }
     )
 
@@ -399,6 +403,10 @@ def options_schema(
             CONF_DEVICE_TRACKERS,
             default=defaults.get(CONF_DEVICE_TRACKERS, DEFAULT_DEVICE_TRACKERS),
         ): selector.BooleanSelector(),
+        vol.Required(
+            CONF_ENTRY_NAME,
+            default=defaults.get(CONF_ENTRY_NAME, ""),
+        ): selector.TextSelector(),
         vol.Required(
             CONF_NOTIFY_ON_ERROR,
             default=defaults.get(CONF_NOTIFY_ON_ERROR, DEFAULT_NOTIFY_ON_ERROR),
@@ -694,6 +702,7 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._max_stations = DEFAULT_MAX_STATIONS
         self._scan_interval = DEFAULT_SCAN_INTERVAL_MINUTES
         self._discovery_filters = DiscoveryFilterSettings()
+        self._entry_name = ""
 
     def _update_entry_and_abort(
         self,
@@ -1235,6 +1244,7 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             radius = int(user_input[CONF_SEARCH_RADIUS])
             max_stations = int(user_input[CONF_MAX_STATIONS])
             self._scan_interval = int(user_input[CONF_SCAN_INTERVAL])
+            self._entry_name = normalize_entry_name(user_input.get(CONF_ENTRY_NAME, ""))
             self._provider_id = provider_id
             self._search_radius = radius
             self._max_stations = max_stations
@@ -1270,6 +1280,7 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 radius=self._search_radius,
                 max_stations=self._max_stations,
                 provider_id=self._provider_id,
+                entry_name=self._entry_name,
             ),
         )
 
@@ -1457,6 +1468,7 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     radius=self._search_radius,
                     max_stations=self._max_stations,
                     provider_id=self._provider_id,
+                    entry_name=self._entry_name,
                 ),
                 errors={"base": _flow_error(err)},
             )
@@ -1478,7 +1490,12 @@ class CurbChargeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data.update(self._discovery_filters.as_config())
         if token is not None:
             data[CONF_API_TOKEN] = token
-        return self.async_create_entry(title="CurbCharge", data=data)
+        entry_data = {**data, CONF_ENTRY_NAME: self._entry_name}
+        return self.async_create_entry(
+            title=entry_title(self.hass, entry_data),
+            data=data,
+            options={CONF_ENTRY_NAME: self._entry_name},
+        )
 
     @staticmethod
     @callback
@@ -1573,6 +1590,9 @@ class CurbChargeOptionsFlow(config_entries.OptionsFlow):
                 CONF_SEARCH_RADIUS: int(user_input[CONF_SEARCH_RADIUS]),
                 CONF_MAX_STATIONS: int(user_input[CONF_MAX_STATIONS]),
                 CONF_PROVIDER: user_input[CONF_PROVIDER],
+                CONF_ENTRY_NAME: normalize_entry_name(
+                    user_input.get(CONF_ENTRY_NAME, "")
+                ),
                 CONF_INCLUDE_UNKNOWN: user_input[CONF_INCLUDE_UNKNOWN],
                 CONF_DEVICE_TRACKERS: user_input.get(
                     CONF_DEVICE_TRACKERS, DEFAULT_DEVICE_TRACKERS

@@ -11,6 +11,7 @@ from homeassistant.util import dt as dt_util
 from . import CurbChargeConfigEntry
 from .const import (
     CONF_API_TOKEN,
+    CONF_ENTRY_NAME,
     CONF_FAVOURITES,
     CONF_INCLUDE_UNKNOWN,
     CONF_LOCATION_ENTITY,
@@ -29,6 +30,7 @@ TO_REDACT = [
     CONF_LOCATION_ENTITY,
     CONF_API_TOKEN,
     CONF_FAVOURITES,
+    CONF_ENTRY_NAME,
     CONF_PERSONALIZATION,
 ]
 

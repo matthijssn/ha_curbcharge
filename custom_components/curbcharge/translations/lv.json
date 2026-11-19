@@ -72,13 +72,15 @@
           "search_radius": "Meklēšanas rādiuss (m)",
           "max_stations": "Maksimālais staciju skaits",
           "scan_interval": "Atjaunināšanas intervāls (minūtes)",
-          "provider": "Pakalpojumu sniedzējs"
+          "provider": "Pakalpojumu sniedzējs",
+          "entry_name": "Pielāgots ieraksta nosaukums"
         },
         "data_description": {
           "search_radius": "Tiek iekļautas tikai publiskās uzlādes stacijas šajā attālumā.",
           "max_stations": "Ierobežojiet staciju un to entītiju skaitu.",
           "scan_interval": "Cik bieži Home Assistant atjaunina uzlādes staciju datus.",
-          "provider": "Datu avots, ko izmanto staciju un pieejamības atrašanai."
+          "provider": "Datu avots, ko izmanto staciju un pieejamības atrašanai.",
+          "entry_name": "Neobligāti. Atstājiet tukšu, lai nosaukumā izmantotu datu avotu un atrašanās vietu."
         }
       },
       "discovery_filters": {
@@ -218,6 +220,7 @@
           "search_radius": "Meklēšanas rādiuss (m)",
           "max_stations": "Maksimālais staciju skaits",
           "provider": "Pakalpojumu sniedzējs",
+          "entry_name": "Pielāgots ieraksta nosaukums",
           "include_unknown": "Iekļaut stacijas bez pieejamības datiem",
           "device_trackers": "Rādīt uzlādes stacijas Home Assistant kartē",
           "connector_types": "Savienotāju veidi",
@@ -232,6 +235,7 @@
           "search_radius": "Tiek iekļautas tikai publiskās uzlādes stacijas šajā attālumā.",
           "max_stations": "Ierobežojiet staciju un to entītiju skaitu.",
           "provider": "Datu avots, ko izmanto staciju un pieejamības atrašanai.",
+          "entry_name": "Neobligāti aizstāj ģenerēto nosaukumu. Notīriet lauku, lai atjaunotu datu avota un atrašanās vietas nosaukumu.",
           "include_unknown": "Iekļaut stacijas, ja pakalpojumu sniedzējs nav norādījis savienotāju pieejamību.",
           "device_trackers": "Izveidot device_tracker entītiju katrai atrastajai uzlādes stacijai.",
           "connector_types": "Atstājiet tukšu, lai pieņemtu jebkuru veidu. Savienotāju grupai ar atlasīto veidu jāatbilst arī pārējiem filtriem.",
