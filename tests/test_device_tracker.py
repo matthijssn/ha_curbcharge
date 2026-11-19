@@ -7,6 +7,7 @@ from dataclasses import replace
 import pytest
 from homeassistant.const import CONF_LATITUDE, CONF_LONGITUDE, STATE_UNAVAILABLE
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -14,6 +15,7 @@ from custom_components import curbcharge
 from custom_components.curbcharge import device_tracker
 from custom_components.curbcharge.const import (
     CONF_DEVICE_TRACKERS,
+    CONF_ENTRY_NAME,
     CONF_LOCATION_SOURCE,
     CONF_MAX_STATIONS,
     CONF_PROVIDER,
@@ -65,6 +67,53 @@ def _station_entity_ids(hass, entry):
         )
         if registry_entry.domain in ("sensor", "binary_sensor")
     }
+
+
+@pytest.mark.asyncio
+async def test_custom_entry_name_preserves_entity_and_device_ids(
+    hass, monkeypatch, sample_stations
+):
+    station = sample_stations[0]
+    provider = FakeProvider([(station,), (station,)])
+    monkeypatch.setattr(curbcharge, "create_provider", lambda *_args: provider)
+    entry = _entry()
+    entry.add_to_hass(hass)
+
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+
+    entity_registry = er.async_get(hass)
+    entity_ids = {
+        (entity.entity_id, entity.unique_id)
+        for entity in er.async_entries_for_config_entry(entity_registry, entry.entry_id)
+    }
+    device_registry = dr.async_get(hass)
+    device_ids = {
+        device.id: frozenset(device.identifiers)
+        for device in dr.async_entries_for_config_entry(device_registry, entry.entry_id)
+    }
+    assert entity_ids
+    assert device_ids
+
+    entry_id = entry.entry_id
+    unique_id = entry.unique_id
+    hass.config_entries.async_update_entry(
+        entry, options={CONF_ENTRY_NAME: "Work chargers"}
+    )
+    await hass.async_block_till_done()
+
+    assert entry.title == "Work chargers"
+    assert entry.entry_id == entry_id
+    assert entry.unique_id == unique_id
+    assert {
+        (entity.entity_id, entity.unique_id)
+        for entity in er.async_entries_for_config_entry(entity_registry, entry.entry_id)
+    } == entity_ids
+    assert {
+        device.id: frozenset(device.identifiers)
+        for device in dr.async_entries_for_config_entry(device_registry, entry.entry_id)
+    } == device_ids
+    assert await hass.config_entries.async_unload(entry.entry_id)
 
 
 @pytest.mark.asyncio
