@@ -11,15 +11,21 @@ Python 3.12, `pytest-homeassistant-custom-component` 0.13.190, and Core's
 2024.12.0 package constraints. It pins `pycares==4.8.0` because newer resolver
 versions start a shutdown-loop thread that this older test plugin reports as a
 teardown leak. The current-version job runs Home Assistant 2026.10.4 on
-Python 3.14.2; Dependabot keeps that pin reviewable. The current-version test
-run exposes `DeprecationWarning` messages.
+Python 3.14.2. Test plugin 0.13.375 pins `pytest==9.0.3` and
+`homeassistant==2026.10.4`, so Dependabot ignores pytest,
+pytest-homeassistant-custom-component, and Home Assistant updates until a
+compatible set can be upgraded together. Independent tools such as Ruff remain
+in the weekly group. The current-version test run exposes `DeprecationWarning`
+messages.
 
 Treat the `pytest`, `pytest-homeassistant-custom-component`, and current
 Home Assistant pins as a tested set: the test plugin may pin exact pytest and
 Home Assistant versions. Before updating any member, verify that
 `pip install -r requirements-dev.txt` resolves and run the minimum and current
 Home Assistant test environments. The minimum environment has its own plugin
-and constraints; keep those separate unless that matrix is tested too.
+and constraints; keep those separate unless that matrix is tested too. Remove
+the Dependabot ignores only after the compatible set passes both test
+environments.
 
 The supported development environments are Linux:
 
